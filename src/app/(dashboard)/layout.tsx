@@ -15,9 +15,30 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const { user, isLoading } = useAuth();
   const { activeProperty, setActiveProperty } = useProperty();
   const router = useRouter();
+
+  // Persisted desktop icon-rail preference.
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem("upscale_sidebar_collapsed") === "1");
+    } catch {
+      /* private mode / blocked storage — default expanded */
+    }
+  }, []);
+
+  const toggleCollapse = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("upscale_sidebar_collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   // Guard: no authenticated session -> send to /login. Wait for the localStorage
   // session check to finish first so we don't bounce a valid session.
@@ -56,9 +77,18 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink text-ice">
-      <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapse}
+      />
 
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-56">
+      <div
+        className={`flex min-w-0 flex-1 flex-col transition-[padding] duration-base ease-out ${
+          collapsed ? "lg:pl-16" : "lg:pl-56"
+        }`}
+      >
         <TopBar onMenuClick={() => setIsSidebarOpen(true)} />
         <main className="upx-scroll flex-1 overflow-y-auto p-6">{children}</main>
       </div>

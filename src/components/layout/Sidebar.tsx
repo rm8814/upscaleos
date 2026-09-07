@@ -27,6 +27,7 @@ import {
   PanelLeftOpen,
   ChevronsUpDown,
   LogOut,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -102,9 +103,17 @@ const NAV_GROUPS: NavGroup[] = [
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  /** Desktop-only icon-rail state. Ignored on mobile (drawer is always full). */
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
-export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
+export default function Sidebar({
+  isOpen,
+  setIsOpen,
+  collapsed,
+  onToggleCollapse,
+}: SidebarProps) {
   const pathname = usePathname();
   const { logout } = useAuth();
   const { activeProperty } = useProperty();
@@ -116,6 +125,9 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/")
     )
     .sort((a, b) => b.length - a.length)[0];
+
+  // These classes only bite at >=lg; on mobile the drawer always shows labels.
+  const hideWhenRail = collapsed ? "lg:hidden" : "";
 
   return (
     <>
@@ -130,37 +142,60 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         className={`
           upx-scroll fixed top-0 left-0 bottom-0 z-50 flex w-56 flex-col gap-1 overflow-y-auto
           border-r border-line bg-deep p-[18px]
-          transition-transform duration-slow ease-out
+          transition-[width,transform] duration-base ease-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0
+          ${collapsed ? "lg:w-16 lg:px-2" : "lg:w-56"}
         `}
       >
-        {/* Brand + collapse */}
-        <div className="flex items-center justify-between">
-          <div className="px-2 font-brand text-[17px] font-bold text-ice">
+        {/* Brand + toggles */}
+        <div
+          className={`flex items-center justify-between ${
+            collapsed ? "lg:flex-col lg:gap-2" : ""
+          }`}
+        >
+          <div
+            className={`px-2 font-brand text-[17px] font-bold text-ice ${hideWhenRail}`}
+          >
             upscale<span className="text-accent-violet-hi">.</span>
           </div>
+
+          {/* mobile: close drawer */}
           <button
             onClick={() => setIsOpen(false)}
             className="p-1 text-fg-3 transition-colors hover:text-ice lg:hidden"
             aria-label="Close menu"
           >
-            <PanelLeftClose className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
-          <span className="hidden p-1 text-fg-4 lg:block">
-            <PanelLeftOpen className="h-4 w-4" />
-          </span>
+
+          {/* desktop: collapse / expand rail */}
+          <button
+            onClick={onToggleCollapse}
+            className="hidden p-1 text-fg-3 transition-colors hover:text-ice lg:block"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
         {/* Property switcher */}
         <button
-          className="mt-1 flex w-full items-center gap-[9px] rounded-sm border border-line bg-elevated px-[10px] py-[9px] text-left transition-colors hover:border-line-strong"
           type="button"
+          title={collapsed ? activeProperty?.name ?? "No property" : undefined}
+          className={`mt-1 flex w-full items-center gap-[9px] rounded-sm border border-line bg-elevated px-[10px] py-[9px] text-left transition-colors hover:border-line-strong ${
+            collapsed ? "lg:justify-center lg:border-transparent lg:bg-transparent lg:px-0" : ""
+          }`}
         >
           <span className="flex h-6 w-6 flex-none items-center justify-center rounded-[6px] bg-accent-violet text-[11px] font-bold text-ice">
             {activeProperty?.initials ?? "—"}
           </span>
-          <span className="flex-1 overflow-hidden">
+          <span className={`flex-1 overflow-hidden ${hideWhenRail}`}>
             <span className="block truncate text-[12.5px] font-semibold text-ice">
               {activeProperty?.name ?? "No property"}
             </span>
@@ -168,15 +203,23 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               {activeProperty?.location ?? "Select a property"}
             </span>
           </span>
-          <ChevronsUpDown className="h-3.5 w-3.5 flex-none text-fg-3" />
+          <ChevronsUpDown className={`h-3.5 w-3.5 flex-none text-fg-3 ${hideWhenRail}`} />
         </button>
 
         {/* Nav groups */}
         {NAV_GROUPS.map((group, i) => (
           <React.Fragment key={group.label}>
-            {i > 0 && <div className="mx-[10px] my-2 h-px flex-none bg-line-strong" />}
+            {i > 0 && (
+              <div
+                className={`my-2 h-px flex-none bg-line-strong ${
+                  collapsed ? "lg:mx-1" : "mx-[10px]"
+                }`}
+              />
+            )}
             <div className="flex flex-col gap-px">
-              <div className="px-[10px] pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-eyebrow text-fg-3">
+              <div
+                className={`px-[10px] pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-eyebrow text-fg-3 ${hideWhenRail}`}
+              >
                 {group.label}
               </div>
               {group.items.map((item) => {
@@ -186,8 +229,10 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                     key={item.label}
                     href={item.href}
                     onClick={() => setIsOpen(false)}
+                    title={collapsed ? item.label : undefined}
                     className={`
                       flex items-center gap-[10px] rounded-sm px-[10px] py-2 text-[13px] font-medium transition-colors duration-fast ease-out
+                      ${collapsed ? "lg:justify-center lg:px-0" : ""}
                       ${
                         active
                           ? "bg-violet-wash text-ice"
@@ -196,9 +241,11 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                     `}
                   >
                     <item.icon
-                      className={`h-[17px] w-[17px] ${active ? "text-accent-violet-hi" : ""}`}
+                      className={`h-[17px] w-[17px] flex-none ${
+                        active ? "text-accent-violet-hi" : ""
+                      }`}
                     />
-                    {item.label}
+                    <span className={hideWhenRail}>{item.label}</span>
                   </Link>
                 );
               })}
@@ -207,11 +254,18 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         ))}
 
         {/* User footer */}
-        <div className="mt-auto flex items-center gap-[10px] border-t border-line p-[10px]">
-          <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-pill bg-accent-violet text-[13px] font-semibold text-ice">
+        <div
+          className={`mt-auto flex items-center gap-[10px] border-t border-line p-[10px] ${
+            collapsed ? "lg:flex-col lg:gap-2 lg:px-0" : ""
+          }`}
+        >
+          <span
+            title={collapsed ? "Amira K. · Front office" : undefined}
+            className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-pill bg-accent-violet text-[13px] font-semibold text-ice"
+          >
             A
           </span>
-          <span className="flex-1 overflow-hidden">
+          <span className={`flex-1 overflow-hidden ${hideWhenRail}`}>
             <span className="block truncate text-[13px] font-medium text-ice">Amira K.</span>
             <span className="block text-[11px] text-fg-3">Front office</span>
           </span>
@@ -219,6 +273,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             onClick={logout}
             className="p-1 text-fg-3 transition-colors hover:text-ice"
             aria-label="Sign out"
+            title="Sign out"
           >
             <LogOut className="h-4 w-4" />
           </button>

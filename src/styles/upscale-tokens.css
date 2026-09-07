@@ -1,0 +1,235 @@
+/* =========================================================================
+   UPSCALE — Design Tokens
+   Source: "Option E — Color System" palette (4 backgrounds + 4 accents)
+   ========================================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Montserrat:wght@700&display=swap");
+
+:root {
+  /* ---------- Color · Backgrounds (canonical, from screenshot) ---------- */
+  --bg-ink:           #081428;  /* primary bg                              */
+  --bg-deep:          #061020;  /* panels (deeper than primary, recedes)   */
+  --bg-elevated:      #0D1E38;  /* cards, popovers, raised surfaces        */
+  --bg-border:        #162444;  /* the "border" swatch — also tonal step   */
+
+  /* ---------- Color · Accents (canonical) ---------- */
+  --accent-violet:    #7C5CFC;  /* electric violet — primary brand         */
+  --accent-violet-hi: #9B80FF;  /* violet light — hover                    */
+  --accent-cyan:      #00D4FF;  /* cyan — positive data / live state       */
+  --fg-ice:           #EEF4FF;  /* ice white — primary text                */
+
+  /* ---------- Color · Derived neutrals (tonal extensions of the ramp) ---- */
+  --bg-deepest:       #03060F;  /* black-of-the-system (drop-shadow base)  */
+  --line-soft:        rgba(238, 244, 255, 0.06);  /* dividers              */
+  --line:             rgba(238, 244, 255, 0.10);  /* default border        */
+  --line-strong:      rgba(238, 244, 255, 0.16);  /* hover/active border   */
+
+  /* ---------- Color · Foreground (text on dark) ---------- */
+  --fg-1:             #EEF4FF;             /* primary text                  */
+  --fg-2:             rgba(238,244,255,.72); /* secondary text              */
+  --fg-3:             rgba(238,244,255,.48); /* tertiary / placeholder      */
+  --fg-4:             rgba(238,244,255,.28); /* disabled                    */
+  --fg-on-accent:     #EEF4FF;             /* text on violet buttons         */
+
+  /* ---------- Color · Semantic ---------- */
+  --positive:         #00D4FF;   /* gain / up / live                       */
+  --positive-soft:    rgba(0, 212, 255, .14);
+  --negative:         #FF5A7A;   /* loss / down (derived to match palette) */
+  --negative-soft:    rgba(255, 90, 122, .14);
+  --warning:          #FFB23F;   /* caution (derived)                      */
+  --info:             #9B80FF;   /* informational                          */
+
+  /* ---------- Color · Accent washes ---------- */
+  --violet-wash:      rgba(124, 92, 252, .14);
+  --violet-wash-hi:   rgba(124, 92, 252, .24);
+  --cyan-wash:        rgba(0, 212, 255, .14);
+
+  /* ---------- Color · Room status (Hospitality) -------------------------- */
+  /* Used by the housekeeping board, room maps, and the tape chart. Each
+     status has a solid color, a 14% wash for backgrounds, and a 28% wash
+     for capsule borders / cell strokes.                                    */
+  --room-vacant-clean:    #00D4FF;  /* ready to sell                        */
+  --room-vacant-clean-w:  rgba(0, 212, 255, .14);
+  --room-vacant-dirty:    #FFB23F;  /* needs housekeeping                   */
+  --room-vacant-dirty-w:  rgba(255, 178, 63, .14);
+  --room-occupied:        #7C5CFC;  /* in-house guest                       */
+  --room-occupied-w:      rgba(124, 92, 252, .18);
+  --room-inspected:       #9B80FF;  /* clean + inspector-approved           */
+  --room-inspected-w:     rgba(155, 128, 255, .14);
+  --room-ooo:             #FF5A7A;  /* out of order — maintenance           */
+  --room-ooo-w:           rgba(255, 90, 122, .14);
+  --room-oos:             rgba(238,244,255,.32);  /* out of service · deep clean */
+  --room-oos-w:           rgba(238,244,255,.06);
+
+  /* ---------- Color · Reservation status -------------------------------- */
+  --res-tentative:   #FFB23F;  /* hold, not yet confirmed                  */
+  --res-confirmed:   #7C5CFC;  /* confirmed booking                        */
+  --res-inhouse:     #00D4FF;  /* currently staying                        */
+  --res-departed:    rgba(238,244,255,.32);
+  --res-cancelled:   #FF5A7A;
+  --res-noshow:      #FF5A7A;
+
+  /* ---------- AI · The "AI suggestion" surface --------------------------- */
+  /* A consistent visual treatment for anything produced by the AI: rate
+     recommendations, demand forecasts, copilot answers, anomaly callouts.  */
+  --ai-tint:     rgba(124, 92, 252, .12);   /* fill behind AI content      */
+  --ai-tint-hi:  rgba(124, 92, 252, .20);   /* hover                       */
+  --ai-edge:     rgba(124, 92, 252, .50);   /* hairline border             */
+  --ai-glow:     0 0 0 1px rgba(124,92,252,.45),
+                 0 12px 32px -8px rgba(124,92,252,.45);  /* aura around hero AI cards */
+  --ai-fg:       #9B80FF;                   /* AI label color              */
+
+  /* ---------- Type · Families ---------- */
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-brand:   "Montserrat", ui-sans-serif, system-ui, sans-serif; /* wordmark only */
+
+  /* ---------- Type · Scale (1.250 major-third, anchored at 16px) -------- */
+  --fs-12: 0.75rem;    /* meta, labels                                     */
+  --fs-13: 0.8125rem;  /* table cells, mono data                           */
+  --fs-14: 0.875rem;   /* body small                                       */
+  --fs-16: 1rem;       /* body                                             */
+  --fs-18: 1.125rem;   /* body large / h5                                  */
+  --fs-22: 1.375rem;   /* h4                                               */
+  --fs-28: 1.75rem;    /* h3                                               */
+  --fs-36: 2.25rem;    /* h2                                               */
+  --fs-48: 3rem;       /* h1                                               */
+  --fs-64: 4rem;       /* display                                          */
+
+  /* ---------- Type · Weights ---------- */
+  --fw-regular: 400; /* @kind font */
+  --fw-medium:  500; /* @kind font */
+  --fw-semi:    600; /* @kind font */
+  --fw-bold:    700; /* @kind font */
+
+  /* ---------- Type · Line heights ---------- */
+  --lh-tight:   1.05; /* @kind font */
+  --lh-snug:    1.2; /* @kind font */
+  --lh-base:    1.5; /* @kind font */
+  --lh-loose:   1.65; /* @kind font */
+
+  /* ---------- Type · Tracking ---------- */
+  --ls-display: -0.02em;
+  --ls-tight:   -0.01em;
+  --ls-base:     0; /* @kind font */
+  --ls-wide:     0.04em;
+  --ls-eyebrow:  0.14em;
+
+  /* ---------- Spacing (4-pt scale) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-20: 80px;
+  --sp-24: 96px;
+
+  /* ---------- Radii ---------- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-2xl: 28px;
+  --r-pill: 999px;
+
+  /* ---------- Shadows (designed for dark canvas) ---------- */
+  --shadow-1: 0 1px 0 rgba(238, 244, 255, 0.04) inset,
+              0 1px 2px rgba(3, 6, 15, 0.6);
+  --shadow-2: 0 1px 0 rgba(238, 244, 255, 0.05) inset,
+              0 6px 24px -8px rgba(3, 6, 15, 0.7);
+  --shadow-3: 0 1px 0 rgba(238, 244, 255, 0.06) inset,
+              0 24px 60px -16px rgba(3, 6, 15, 0.8);
+  --glow-violet: 0 0 0 1px rgba(124, 92, 252, 0.55),
+                 0 8px 32px -4px rgba(124, 92, 252, 0.55);
+  --glow-cyan:   0 0 0 1px rgba(0, 212, 255, 0.45),
+                 0 8px 32px -4px rgba(0, 212, 255, 0.45);
+
+  /* ---------- Motion ---------- */
+  --ease-out:    cubic-bezier(.2, .8, .2, 1); /* @kind other */
+  --ease-in:     cubic-bezier(.6, .04, .98, .34); /* @kind other */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1); /* @kind other */
+  --dur-fast:    140ms; /* @kind other */
+  --dur-base:    220ms; /* @kind other */
+  --dur-slow:    420ms; /* @kind other */
+}
+
+/* =========================================================================
+   Semantic role mixins  (apply via class)
+   ========================================================================= */
+
+.upx-body {
+  font-family: var(--font-body);
+  font-size: var(--fs-16);
+  line-height: var(--lh-base);
+  color: var(--fg-1);
+  background: var(--bg-ink);
+}
+
+.upx-display {
+  font-family: var(--font-display);
+  font-size: var(--fs-64);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-display);
+  font-weight: var(--fw-bold);
+  color: var(--fg-1);
+}
+.upx-h1 { font-family: var(--font-display); font-size: var(--fs-48); line-height: var(--lh-tight); letter-spacing: var(--ls-display); font-weight: var(--fw-bold); color: var(--fg-1); }
+.upx-h2 { font-family: var(--font-display); font-size: var(--fs-36); line-height: var(--lh-snug);  letter-spacing: var(--ls-tight);   font-weight: var(--fw-semi); color: var(--fg-1); }
+.upx-h3 { font-family: var(--font-display); font-size: var(--fs-28); line-height: var(--lh-snug);  letter-spacing: var(--ls-tight);   font-weight: var(--fw-semi); color: var(--fg-1); }
+.upx-h4 { font-family: var(--font-body);    font-size: var(--fs-22); line-height: var(--lh-snug);  font-weight: var(--fw-semi); color: var(--fg-1); }
+.upx-h5 { font-family: var(--font-body);    font-size: var(--fs-18); line-height: var(--lh-base);  font-weight: var(--fw-semi); color: var(--fg-1); }
+.upx-p  { font-family: var(--font-body);    font-size: var(--fs-16); line-height: var(--lh-loose); color: var(--fg-2); }
+.upx-small { font-family: var(--font-body); font-size: var(--fs-14); line-height: var(--lh-base);  color: var(--fg-2); }
+.upx-meta  { font-family: var(--font-body); font-size: var(--fs-12); line-height: var(--lh-base);  color: var(--fg-3); }
+
+/* Eyebrow / kicker — used heavily by UPSCALE for section labels */
+.upx-eyebrow {
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  font-weight: var(--fw-medium);
+  color: var(--fg-3);
+}
+
+/* Data / numeric — always tabular */
+.upx-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.upx-num-display {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-48);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-display);
+  color: var(--fg-1);
+}
+
+/* Code */
+.upx-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+  color: var(--fg-1);
+}
+
+/* Link */
+.upx-link {
+  color: var(--accent-violet-hi);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.upx-link:hover { border-bottom-color: currentColor; }

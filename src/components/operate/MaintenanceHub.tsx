@@ -1,0 +1,262 @@
+"use client";
+
+import React, { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import { X } from "lucide-react";
+import type { Doc } from "@/convex/_generated/dataModel";
+import { Card, Eyebrow } from "@/components/upx/primitives";
+
+const PRIORITY_COLOR: Record<string, string> = {
+  High: "var(--room-ooo)",
+  Medium: "var(--warning)",
+  Low: "var(--fg-3)",
+};
+const STATUS_COLOR: Record<string, string> = {
+  Open: "var(--accent-cyan)",
+  "In progress": "var(--accent-violet-hi)",
+  Scheduled: "var(--info)",
+  Resolved: "var(--fg-3)",
+};
+const SLA_COLOR = (sla: string) =>
+  sla === "Overdue" ? "var(--room-ooo)" : sla === "Done" ? "var(--fg-3)" : "var(--fg-2)";
+
+const rupiah = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
+const fmtRp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+
+export default function MaintenanceHub() {
+  const { activeProperty } = useProperty();
+  const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
+  const tickets = useQuery(api.operate.getMaintenanceTickets, arg);
+  const resolveTicket = useMutation(api.maintenance.resolveTicket);
+
+  const [priority, setPriority] = useState("All");
+  const [status, setStatus] = useState("All");
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const rows = (tickets ?? []).filter((t) => {
+    if (priority !== "All" && t.priority !== priority) return false;
+    if (status !== "All" && t.status !== status) return false;
+    return true;
+  });
+
+  const openCount = (tickets ?? []).filter((t) => t.status !== "Resolved").length;
+  const oooCount = (tickets ?? []).filter((t) => t.oooLinked).length;
+  const spend = (tickets ?? []).reduce((sum, t) => sum + rupiah(t.cost), 0);
+
+  const active = (tickets ?? []).find((t) => t._id === activeId) ?? null;
+
+  const GRID = "grid grid-cols-[0.7fr_1.5fr_0.9fr_0.7fr_1fr_0.9fr_0.8fr_0.9fr] gap-2.5";
+
+  return (
+    <div>
+      {/* Stat cards */}
+      <div className="mb-3.5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="px-3.5 py-3">
+          <div className="text-[11px] text-fg-3">Open tickets</div>
+          <div className="mt-0.5 font-mono text-18 font-semibold text-ice">
+            {tickets ? openCount : "—"}
+          </div>
+        </Card>
+        <Card className="px-3.5 py-3">
+          <div className="text-[11px] text-fg-3">Rooms out of order</div>
+          <div className="mt-0.5 font-mono text-18 font-semibold text-room-ooo">
+            {tickets ? oooCount : "—"}
+          </div>
+        </Card>
+        <Card className="px-3.5 py-3">
+          <div className="text-[11px] text-fg-3">Spend this month</div>
+          <div className="mt-0.5 font-mono text-18 font-semibold text-ice">
+            {tickets ? fmtRp(spend) : "—"}
+          </div>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-3.5 flex flex-wrap items-center gap-2">
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          className="rounded-sm border border-line bg-elevated px-2.5 py-2 text-[12.5px] text-fg-2"
+        >
+          <option value="All">All priorities</option>
+          <option>High</option>
+          <option>Medium</option>
+          <option>Low</option>
+        </select>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="rounded-sm border border-line bg-elevated px-2.5 py-2 text-[12.5px] text-fg-2"
+        >
+          <option value="All">All statuses</option>
+          <option>Open</option>
+          <option>In progress</option>
+          <option>Scheduled</option>
+          <option>Resolved</option>
+        </select>
+        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice transition-colors hover:bg-accent-violet-hi">
+          + New ticket
+        </button>
+      </div>
+
+      {/* Table */}
+      <Card className="overflow-hidden p-0">
+        <div
+          className={`${GRID} border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3`}
+        >
+          <div>ID</div>
+          <div>Issue</div>
+          <div>Location</div>
+          <div>Priority</div>
+          <div>Assignee</div>
+          <div>SLA</div>
+          <div>Status</div>
+          <div>Created</div>
+        </div>
+        {!tickets && <div className="px-4 py-4 text-13 text-fg-3">Loading tickets…</div>}
+        {tickets && rows.length === 0 && (
+          <div className="px-4 py-4 text-13 text-fg-3">No tickets match these filters.</div>
+        )}
+        {rows.map((t) => (
+          <button
+            key={t._id}
+            onClick={() => setActiveId(t._id)}
+            className={`${GRID} w-full items-center border-b border-line-soft px-4 py-3 text-left text-13 transition-colors last:border-0 hover:bg-elevated`}
+          >
+            <div className="font-mono text-fg-3">{t.ticketCode ?? "—"}</div>
+            <div className="flex items-center gap-1.5 font-semibold">
+              <span className="truncate">{t.title}</span>
+              {t.oooLinked && (
+                <span className="flex-none rounded-[3px] border border-room-ooo px-1 text-[9.5px] font-bold text-room-ooo">
+                  OOO
+                </span>
+              )}
+            </div>
+            <div className="text-12 text-fg-2">{t.location}</div>
+            <div
+              className="text-[11.5px] font-semibold"
+              style={{ color: PRIORITY_COLOR[t.priority] ?? "var(--fg-2)" }}
+            >
+              {t.priority}
+            </div>
+            <div className="truncate text-12">{t.assignee}</div>
+            <div
+              className="font-mono text-[11.5px]"
+              style={{ color: SLA_COLOR(t.slaText ?? "") }}
+            >
+              {t.slaText ?? "—"}
+            </div>
+            <div
+              className="text-[11.5px]"
+              style={{ color: STATUS_COLOR[t.status] ?? "var(--fg-2)" }}
+            >
+              {t.status}
+            </div>
+            <div className="text-12 text-fg-3">{t.created}</div>
+          </button>
+        ))}
+      </Card>
+
+      {/* Drawer */}
+      {active && (
+        <>
+          <div
+            onClick={() => setActiveId(null)}
+            className="fixed inset-0 z-20 bg-deepest/70 backdrop-blur-[6px]"
+          />
+          <div className="upx-scroll fixed right-0 top-0 bottom-0 z-30 flex w-[440px] max-w-[92vw] flex-col gap-4 overflow-y-auto border-l border-line bg-deep p-[22px] shadow-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-display text-17 font-bold text-ice">{active.title}</div>
+                <div className="mt-0.5 text-12 text-fg-3">
+                  {active.ticketCode} · {active.location}
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveId(null)}
+                className="text-fg-3 hover:text-ice"
+                aria-label="Close"
+              >
+                <X className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <Card className="p-3">
+                <div className="text-[11px] text-fg-3">Assignee / vendor</div>
+                <div className="mt-0.5 text-13 font-semibold">{active.assignee}</div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-[11px] text-fg-3">Cost (parts &amp; labor)</div>
+                <div className="mt-0.5 font-mono text-13 font-semibold">
+                  {fmtRp(rupiah(active.cost))}
+                </div>
+              </Card>
+            </div>
+
+            <div
+              className="flex h-[100px] items-center justify-center rounded-md text-[12px] text-fg-3"
+              style={{
+                background:
+                  "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 10px,var(--bg-deep) 10px,var(--bg-deep) 20px)",
+              }}
+            >
+              Photo attachment
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 text-[12.5px]">
+              <div>
+                <div className="text-[11px] text-fg-3">Priority</div>
+                <div
+                  className="mt-0.5 font-semibold"
+                  style={{ color: PRIORITY_COLOR[active.priority] ?? "var(--fg-2)" }}
+                >
+                  {active.priority}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-fg-3">SLA</div>
+                <div className="mt-0.5 font-mono">{active.slaText ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-fg-3">Status</div>
+                <div
+                  className="mt-0.5"
+                  style={{ color: STATUS_COLOR[active.status] ?? "var(--fg-2)" }}
+                >
+                  {active.status}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-fg-3">Created</div>
+                <div className="mt-0.5 font-mono">{active.created}</div>
+              </div>
+            </div>
+
+            <div className="mt-auto flex gap-2">
+              <button
+                onClick={() => setActiveId(null)}
+                className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] px-4 py-2.5 text-13 text-fg-1 transition-colors hover:border-line-strong"
+              >
+                Close
+              </button>
+              {active.status !== "Resolved" && (
+                <button
+                  onClick={async () => {
+                    await resolveTicket({ id: active._id, notes: "Resolved from hub" });
+                    setActiveId(null);
+                  }}
+                  className="flex-1 rounded-sm bg-accent-violet px-4 py-2.5 text-13 font-semibold text-ice transition-colors hover:bg-accent-violet-hi"
+                >
+                  Mark resolved
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

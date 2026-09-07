@@ -1,0 +1,72 @@
+@import "../styles/upscale-tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   UPSCALE OS — global base
+   Tokens + type roles come from ../styles/upscale-tokens.css (the vendored
+   design system). This file only wires them into the app shell.
+   ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-ink);
+  color: var(--fg-1);
+  font-family: var(--font-body);
+  font-size: var(--fs-16);
+  line-height: var(--lh-base);
+  /* Demand-heat scale used by the rate calendar / tape chart */
+  --demand-low: rgba(0, 212, 255, 0.1);
+  --demand-med: rgba(124, 92, 252, 0.2);
+  --demand-high: rgba(124, 92, 252, 0.42);
+}
+
+/* Live-data pulse — a 6px cyan dot that ripples. Never recolor icons cyan;
+   pair them with this instead (design system rule). */
+@keyframes upx-pulse {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Thin, on-brand scrollbars for scrolling panes */
+.upx-scroll {
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+.upx-scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.upx-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.upx-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 8px;
+  border: 2px solid var(--bg-ink);
+  background-clip: padding-box;
+}
+.upx-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-violet);
+}
+
+/* Focus ring — inner ink ring keeps the violet halo readable on any surface */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-ink), 0 0 0 4px var(--accent-violet);
+}

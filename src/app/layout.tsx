@@ -1,0 +1,31 @@
+import type { Metadata } from "next";
+import "./globals.css";
+import { ConvexClientProvider } from "@/components/providers/ConvexClientProvider";
+import { AuthProvider } from "@/components/providers/AuthProvider";
+import { PropertyProvider } from "@/components/providers/PropertyProvider";
+
+export const metadata: Metadata = {
+  title: "Upscale OS | Hotel Management System",
+  description: "High-end operational hub for luxury hotels",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full font-body bg-ink text-ice">
+        <AuthProvider>
+          <PropertyProvider>
+            <ConvexClientProvider>
+              {children}
+            </ConvexClientProvider>
+          </PropertyProvider>
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}
+

@@ -1,0 +1,212 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  DoorClosed,
+  Receipt,
+  CreditCard,
+  FileSpreadsheet,
+} from "lucide-react";
+import { Card, Eyebrow } from "@/components/upx/primitives";
+
+const STEPS = [
+  { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", done: true },
+  { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", done: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380.000 unmatched — posted to house account" }] },
+  { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", done: true },
+  { icon: RefreshCw, label: "Roll business date", detail: "Advance system date from 4 Sep to 5 Sep 2026.", done: false },
+  { icon: FileSpreadsheet, label: "Generate revenue journal", detail: "Trial balance and revenue journal exported to accounting.", done: false },
+  { icon: Check, label: "Close audit & notify", detail: "Lock the day, email the manager report.", done: false },
+];
+
+const WARNINGS = [
+  "2 folios have a negative balance — review before rolling the date.",
+  "1 reservation marked in-house has no room assigned.",
+];
+const EXCEPTIONS = [
+  { text: "Room 312 — rate override below floor (Rp 980.000 vs. floor Rp 1.400.000)", resolved: false },
+  { text: "Guest folio RSV-8DZAAJ — deposit not applied", resolved: false },
+  { text: "OTA settlement Agoda — Rp 42.000 rounding difference", resolved: true },
+];
+const HISTORY = [
+  { date: "3 Sep 03:12", summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
+  { date: "2 Sep 03:08", summary: "Audit complete — 1 exception resolved", status: "OK", color: "var(--accent-cyan)" },
+  { date: "1 Sep 03:44", summary: "Manual re-run after POS outage", status: "Recovered", color: "var(--res-tentative)" },
+  { date: "31 Aug 03:05", summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
+];
+const PROPERTY_STATUS = [
+  { name: "Grand Samudra Bali", status: "In progress", color: "var(--res-tentative)" },
+  { name: "Samudra Ubud (sister)", status: "Complete", color: "var(--accent-cyan)" },
+  { name: "Samudra Canggu (sister)", status: "Scheduled 03:00", color: "var(--fg-3)" },
+];
+
+export default function NightAuditPage() {
+  const [expanded, setExpanded] = useState<string | null>("Reconcile POS postings");
+  const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
+
+  const doneCount = STEPS.filter((s) => s.done).length;
+
+  return (
+    <div className="mx-auto max-w-content">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="text-13 text-fg-3">Business date: 4 Sep 2026</div>
+        <div className="text-12 text-fg-3">
+          Scheduled auto-run in <span className="font-mono font-semibold text-ice">02:41:18</span>
+        </div>
+        <div className="ml-auto text-12 text-fg-3">
+          {doneCount} of {STEPS.length} steps complete
+        </div>
+        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+          Run remaining steps
+        </button>
+      </div>
+
+      <div className="mb-3.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
+        Only the Night Auditor role can run this audit. You are signed in as Front office — contact
+        Amira K. or a manager to execute.
+      </div>
+
+      <div className="mb-3.5 flex flex-col gap-2 rounded-lg border border-res-tentative bg-elevated p-3.5">
+        <Eyebrow>Pre-audit warnings</Eyebrow>
+        {WARNINGS.map((w) => (
+          <div key={w} className="flex items-center gap-2.5 text-13">
+            <AlertTriangle className="h-3.5 w-3.5 flex-none text-res-tentative" /> {w}
+          </div>
+        ))}
+      </div>
+
+      <Card className="mb-3.5 overflow-hidden p-0">
+        {STEPS.map((s) => {
+          const isOpen = expanded === s.label;
+          return (
+            <div key={s.label} className="border-b border-line-soft last:border-0">
+              <button
+                onClick={() => setExpanded(isOpen ? null : s.label)}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+              >
+                <s.icon
+                  className="h-[17px] w-[17px] flex-none"
+                  style={{ color: s.done ? "var(--accent-cyan)" : "var(--fg-3)" }}
+                />
+                <div className="flex-1">
+                  <div className="text-13 font-medium">{s.label}</div>
+                  <div className="mt-0.5 text-12 text-fg-3">{s.detail}</div>
+                </div>
+                <span
+                  className="text-[11px]"
+                  style={{ color: s.done ? "var(--accent-cyan)" : "var(--fg-3)" }}
+                >
+                  {s.done ? "Done" : "Pending"}
+                </span>
+                {s.done && (
+                  <span className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px] text-fg-1">
+                    Re-run
+                  </span>
+                )}
+                {isOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-fg-3" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-fg-3" />
+                )}
+              </button>
+              {isOpen && s.affected && (
+                <div className="flex flex-col gap-1.5 px-4 pb-3.5 pl-[45px]">
+                  {s.affected.map((a) => (
+                    <div key={a.room} className="flex gap-2 text-12 text-fg-2">
+                      <span className="font-mono text-fg-3">{a.room}</span>
+                      {a.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </Card>
+
+      <Eyebrow className="mb-2.5">Exceptions</Eyebrow>
+      <Card className="mb-5 overflow-hidden p-0">
+        {EXCEPTIONS.map((ex, i) => {
+          const isResolved = ex.resolved || resolved.has(i);
+          return (
+            <div
+              key={ex.text}
+              className="flex items-center gap-3 border-b border-line-soft px-4 py-3 text-13 last:border-0"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 flex-none text-room-ooo" />
+              <div className="flex-1">{ex.text}</div>
+              {isResolved ? (
+                <span className="text-[11.5px] text-accent-cyan">Resolved</span>
+              ) : (
+                <button
+                  onClick={() => setResolved((s) => new Set(s).add(i))}
+                  className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12"
+                >
+                  Resolve
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </Card>
+
+      <div className="mb-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+        {[
+          { label: "Room revenue posted", value: "Rp 42.600.000", tone: "" },
+          { label: "Exceptions flagged", value: String(EXCEPTIONS.filter((e, i) => !e.resolved && !resolved.has(i)).length), tone: "rose" },
+          { label: "Last successful audit", value: "3 Sep, 03:12", tone: "" },
+        ].map((m) => (
+          <Card key={m.label} className="p-3.5">
+            <Eyebrow>{m.label}</Eyebrow>
+            <div
+              className={`mt-1 font-mono text-18 font-semibold ${
+                m.tone === "rose" ? "text-room-ooo" : "text-ice"
+              }`}
+            >
+              {m.value}
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1.3fr_1fr]">
+        <div>
+          <Eyebrow className="mb-2.5">Run history</Eyebrow>
+          <Card className="overflow-hidden p-0">
+            {HISTORY.map((h) => (
+              <div
+                key={h.date}
+                className="flex items-center gap-3 border-b border-line-soft px-4 py-2.5 text-[12.5px] last:border-0"
+              >
+                <div className="w-[110px] font-mono text-fg-3">{h.date}</div>
+                <div className="flex-1">{h.summary}</div>
+                <span className="text-[11px]" style={{ color: h.color }}>
+                  {h.status}
+                </span>
+              </div>
+            ))}
+          </Card>
+        </div>
+        <div>
+          <Eyebrow className="mb-2.5">Multi-property status</Eyebrow>
+          <Card className="overflow-hidden p-0">
+            {PROPERTY_STATUS.map((p) => (
+              <div
+                key={p.name}
+                className="flex items-center gap-2.5 border-b border-line-soft px-4 py-2.5 text-[12.5px] last:border-0"
+              >
+                <span className="h-[7px] w-[7px] rounded-pill" style={{ background: p.color }} />
+                <div className="flex-1">{p.name}</div>
+                <span style={{ color: p.color }}>{p.status}</span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

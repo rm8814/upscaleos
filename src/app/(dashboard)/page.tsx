@@ -88,6 +88,10 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("today");
   const kpi = KPI_BY_PERIOD[period];
 
+  const arrivalsWithRoom = (arrivals ?? []).filter(
+    (a) => a.roomNumber && a.roomNumber !== "—"
+  ).length;
+
   const alerts = [
     stats && stats.ooo > 0
       ? `${stats.ooo} room${stats.ooo > 1 ? "s" : ""} out of order — maintenance in progress`
@@ -96,7 +100,7 @@ export default function DashboardPage() {
       ? `${stats.dirty} vacant-dirty rooms still to clean before 3 PM cut-off`
       : null,
     stats && stats.arrivalsToday > 0
-      ? `${stats.arrivalsToday} arrivals expected today — ${arrivals?.length ?? 0} with room assigned`
+      ? `${stats.arrivalsToday} arrivals expected today — ${arrivalsWithRoom} with a room assigned`
       : null,
   ].filter(Boolean) as string[];
 

@@ -192,6 +192,7 @@ export const seed = mutation({
           phone: `+62 81${(200000000 + i * 137731).toString().slice(0, 9)}`,
           loyaltyTier: tiers[i % tiers.length],
           preferences: i % 3 === 0 ? "High floor, quiet room" : undefined,
+          marketingOptOut: i % 4 === 0,
         })
       )
     );

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { ArrowLeft, FileDown, Sparkles, FileText } from "lucide-react";
 import {
@@ -37,7 +36,7 @@ export default function GuestProfilePage() {
   const profile = useQuery(
     api.guests.getGuestProfile,
     activeProperty
-      ? { guestId: params.guestId as Id<"guests">, propertyId: activeProperty._id }
+      ? { guestId: params.guestId, propertyId: activeProperty._id }
       : "skip"
   );
 

@@ -48,7 +48,7 @@ export const getGuestsForProperty = query({
           ltv: fmtRp(ltv),
           ltvValue: ltv,
           source,
-          marketingOptOut: (guest?._creationTime ?? 0) % 3 === 0,
+          marketingOptOut: guest?.marketingOptOut ?? false,
         };
       })
     );
@@ -58,9 +58,14 @@ export const getGuestsForProperty = query({
 });
 
 export const getGuestProfile = query({
-  args: { guestId: v.id("guests"), propertyId: v.id("properties") },
+  // Accept a raw string so a malformed id from the URL resolves to a graceful
+  // "not found" instead of throwing at the arg validator.
+  args: { guestId: v.string(), propertyId: v.id("properties") },
   handler: async (ctx, args) => {
-    const guest = await ctx.db.get(args.guestId);
+    const guestId = ctx.db.normalizeId("guests", args.guestId);
+    if (!guestId) return null;
+
+    const guest = await ctx.db.get(guestId);
     if (!guest) return null;
 
     const all = await ctx.db
@@ -68,7 +73,7 @@ export const getGuestProfile = query({
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect();
     const res = all
-      .filter((r) => r.guestId === args.guestId)
+      .filter((r) => r.guestId === guestId)
       .sort((a, b) => (a.checkIn < b.checkIn ? 1 : -1));
 
     const stays = await Promise.all(
@@ -94,7 +99,7 @@ export const getGuestProfile = query({
     const linked = current ?? upcoming ?? res[0];
 
     return {
-      guestId: args.guestId as unknown as string,
+      guestId: guestId as unknown as string,
       name: guest.name,
       email: guest.email,
       phone: guest.phone,

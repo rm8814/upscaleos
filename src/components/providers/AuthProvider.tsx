@@ -26,10 +26,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Simulate checking for a session in localStorage
-    const savedUser = localStorage.getItem("upscale_user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    // Simulate checking for a session in localStorage. Guard against a corrupt
+    // or stale value so a bad blob can't crash the whole shell.
+    try {
+      const savedUser = localStorage.getItem("upscale_user");
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser) as User;
+        if (parsed && typeof parsed.email === "string" && parsed.propertyId) {
+          setUser(parsed);
+        } else {
+          localStorage.removeItem("upscale_user");
+        }
+      }
+    } catch {
+      localStorage.removeItem("upscale_user");
     }
     setIsLoading(false);
   }, []);

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -14,8 +15,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const { activeProperty, setActiveProperty } = useProperty();
+  const router = useRouter();
+
+  // Guard: no authenticated session -> send to /login. Wait for the localStorage
+  // session check to finish first so we don't bounce a valid session.
+  useEffect(() => {
+    if (!isLoading && !user) router.replace("/login");
+  }, [isLoading, user, router]);
 
   // Resolve the real Convex property from the external ID the user signed in with.
   // Fall back to the first property so the prototype still works if the ID doesn't match.
@@ -37,6 +45,14 @@ export default function DashboardLayout({
       });
     }
   }, [resolvedProperty, activeProperty, setActiveProperty]);
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-ink text-13 text-fg-3">
+        {isLoading ? "Loading…" : "Redirecting to sign in…"}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-ink text-ice">

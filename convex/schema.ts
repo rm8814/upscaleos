@@ -44,6 +44,7 @@ export default defineSchema({
     phone: v.string(),
     loyaltyTier: v.string(), // 'Silver', 'Gold', 'Platinum'
     preferences: v.optional(v.string()),
+    marketingOptOut: v.optional(v.boolean()),
   }),
   reservations: defineTable({
     guestId: v.id("guests"),

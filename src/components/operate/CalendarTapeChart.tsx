@@ -44,6 +44,7 @@ const CHANNEL_COLOR: Record<string, string> = {
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`; // 8/9
+const dmIso = (s: string) => dm(new Date(s + "T00:00:00Z"));
 const addDays = (base: Date, n: number) => {
   const d = new Date(base);
   d.setUTCDate(d.getUTCDate() + n);
@@ -69,6 +70,9 @@ export default function CalendarTapeChart() {
   const setStatus = useMutation(api.reservations.setStatus);
   const createRes = useMutation(api.reservations.create);
   const removeWaitlist = useMutation(api.waitlist.remove);
+  const assignOne = useMutation(api.reservations.assignOne);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignFailId, setAssignFailId] = useState<string | null>(null);
 
   const [colorBy, setColorBy] = useState<"status" | "channel">("status");
   const [viewMode, setViewMode] = useState<"rooms" | "types">("rooms");
@@ -91,7 +95,24 @@ export default function CalendarTapeChart() {
     return Array.from({ length: DAYS }, (_, i) => addDays(t, i - LEAD));
   }, [todayIso]);
   const windowStartIso = iso(days[0]);
+  const windowEndIso = iso(days[DAYS - 1]);
   const dayCol = (isoDate: string) => diffDays(windowStartIso, isoDate);
+
+  // Bookings with no room yet — hidden from the tape rows, surfaced below it.
+  const unassignedRes = useMemo(
+    () =>
+      (reservations ?? [])
+        .filter(
+          (r) =>
+            !r.roomId &&
+            r.status !== "cancelled" &&
+            r.status !== "departed" &&
+            r.checkOut > todayIso &&
+            r.checkIn <= windowEndIso
+        )
+        .sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
+    [reservations, todayIso, windowEndIso]
+  );
 
   const roomTypeNames = useMemo(
     () => Array.from(new Set((rooms ?? []).map((r) => r.type))),
@@ -520,6 +541,60 @@ export default function CalendarTapeChart() {
           </div>
         </div>
       </Card>
+
+      {/* Unassigned bookings — confirmed/held reservations with no room */}
+      {unassignedRes.length > 0 && (
+        <div className="mt-4">
+          <Eyebrow className="mb-2.5">
+            Unassigned bookings · {unassignedRes.length} need a room
+          </Eyebrow>
+          <Card className="overflow-hidden p-0">
+            {unassignedRes.map((r) => (
+              <div
+                key={r._id}
+                className="flex flex-wrap items-center gap-3.5 border-b border-line-soft px-4 py-3 text-13 last:border-0"
+              >
+                <button
+                  onClick={() => setOpenResId(r._id)}
+                  className="min-w-[140px] flex-1 text-left font-medium hover:text-accent-violet-hi"
+                >
+                  {r.guestName}
+                </button>
+                <div className="w-[110px] text-12 text-fg-3">{r.roomType}</div>
+                <div className="w-[110px] font-mono text-12 text-fg-3">
+                  {dmIso(r.checkIn)} → {dmIso(r.checkOut)}
+                </div>
+                <div
+                  className="w-[80px] text-[11px] font-semibold"
+                  style={{ color: RES_STATUS_COLOR[r.status] ?? "var(--fg-2)" }}
+                >
+                  {RES_STATUS_LABEL[r.status] ?? r.status}
+                </div>
+                {r.channel && (
+                  <div className="w-[90px] text-12 text-fg-3">{r.channel}</div>
+                )}
+                {assignFailId === r._id ? (
+                  <span className="text-12 text-room-ooo">No room free</span>
+                ) : (
+                  <button
+                    disabled={assigningId === r._id}
+                    onClick={async () => {
+                      setAssigningId(r._id);
+                      setAssignFailId(null);
+                      const res = await assignOne({ id: r._id as Id<"reservations"> });
+                      if (!res.assigned) setAssignFailId(r._id);
+                      setAssigningId(null);
+                    }}
+                    className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong disabled:opacity-40"
+                  >
+                    {assigningId === r._id ? "Assigning…" : "Auto-assign room"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
 
       {/* Waitlist */}
       <div className="mt-4">

@@ -298,6 +298,33 @@ export const assignRooms = mutation({
   handler: (ctx, args) => assignPropertyRooms(ctx, args.propertyId),
 });
 
+/** Auto-assign a room to one reservation (calendar "Unassigned bookings" row). */
+export const assignOne = mutation({
+  args: { id: v.id("reservations") },
+  handler: async (ctx, args) => {
+    const res = await ctx.db.get(args.id);
+    if (!res) return { assigned: false as const };
+    if (res.roomId) return { assigned: true as const, roomNumber: res.roomNumber };
+    const roomId = await pickFreeRoom(
+      ctx,
+      res.propertyId,
+      res.roomType ?? "",
+      res.checkIn,
+      res.checkOut,
+      res._id
+    );
+    if (!roomId) return { assigned: false as const };
+    const room = await ctx.db.get(roomId);
+    await ctx.db.patch(args.id, {
+      roomId,
+      roomNumber: room?.roomNumber,
+      roomType: room?.type ?? res.roomType,
+      roomAutoAssigned: true,
+    });
+    return { assigned: true as const, roomNumber: room?.roomNumber };
+  },
+});
+
 /**
  * Cron entry point: sweep every property that has auto-assign switched on, so
  * OTA / channel-manager reservations that land without a room get one without

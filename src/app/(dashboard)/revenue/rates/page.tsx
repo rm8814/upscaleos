@@ -49,6 +49,20 @@ const QUEUE = [
 const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const money = (n: number) => Math.round(n).toLocaleString("en-US");
+
+// Mirrors convex/revenue.ts nightlyRateFor so the grid matches booking prices.
+function seasonMult(d: Date): number {
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  if ((m === 12 && day >= 20) || (m === 1 && day <= 5)) return 1.35;
+  if (m >= 7 && m <= 9) return 1.15;
+  if (m === 2 || m === 3) return 0.85;
+  if (m >= 4 && m <= 6) return 1.0;
+  return 1.05;
+}
+function rackRate(base: number, d: Date): number {
+  return Math.round(base * (DOW_MULT[d.getUTCDay()] ?? 1) * seasonMult(d));
+}
 const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const queueDate = (iso: string, offset: number) => {
@@ -207,7 +221,7 @@ export default function RatesPage() {
                   {days.map((d, i) => {
                     const dyn = dynamicDays.has(i);
                     const dow = d.getUTCDay();
-                    const rate = rt.base * DOW_MULT[dow] * (dyn ? 1.06 : 1);
+                    const rate = rackRate(rt.base, d) * (dyn ? 1.06 : 1);
                     const demand =
                       DOW_MULT[dow] >= 1.25 ? "high" : DOW_MULT[dow] <= 0.95 ? "low" : "mid";
                     const dayIso = iso(d);

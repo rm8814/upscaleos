@@ -862,6 +862,7 @@ export default function CalendarTapeChart() {
         <NewReservationModal
           init={newRes}
           today={todayIso}
+          propertyId={activeProperty._id}
           rooms={rooms ?? []}
           roomTypeNames={roomTypeNames}
           onClose={() => {
@@ -911,6 +912,7 @@ interface CreatePayload {
 function NewReservationModal({
   init,
   today,
+  propertyId,
   rooms,
   roomTypeNames,
   onClose,
@@ -918,6 +920,7 @@ function NewReservationModal({
 }: {
   init: Partial<NewResInit>;
   today: string;
+  propertyId: Id<"properties">;
   rooms: Rooms;
   roomTypeNames: string[];
   onClose: () => void;
@@ -943,12 +946,37 @@ function NewReservationModal({
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) =>
     setF((s) => ({ ...s, [k]: v }));
 
-  const roomOptions = rooms.filter((r) => r.type === f.roomType);
-  const nights = Math.max(1, diffDays(f.checkIn, f.checkOut));
-  const estimate =
-    (NIGHTLY[f.roomType] ?? 1_850_000) *
-    nights *
-    (DOW_MULT[new Date(f.checkIn + "T00:00:00Z").getUTCDay()] ?? 1);
+  const validRange = diffDays(f.checkIn, f.checkOut) > 0;
+
+  const quote = useQuery(
+    api.revenue.getStayQuote,
+    validRange
+      ? { roomType: f.roomType, checkIn: f.checkIn, checkOut: f.checkOut }
+      : "skip"
+  );
+  const available = useQuery(
+    api.operate.getAvailability,
+    validRange
+      ? {
+          propertyId,
+          checkIn: f.checkIn,
+          checkOut: f.checkOut,
+          roomType: f.roomType,
+        }
+      : "skip"
+  );
+
+  const roomOptions =
+    available ?? rooms.filter((r) => r.type === f.roomType);
+  const nights = quote?.nightCount ?? Math.max(1, diffDays(f.checkIn, f.checkOut));
+  const estimate = quote?.total ?? 0;
+
+  // Drop a chosen room once it's no longer offered for the picked dates/type.
+  useEffect(() => {
+    if (f.roomId && !roomOptions.some((r) => r._id === f.roomId)) {
+      setF((s) => ({ ...s, roomId: "" }));
+    }
+  }, [f.roomId, roomOptions]);
 
   const canSubmit =
     f.guestName.trim() && diffDays(f.checkIn, f.checkOut) > 0 && !busy;
@@ -1094,8 +1122,11 @@ function NewReservationModal({
 
         <div className="flex items-center justify-between border-t border-line pt-3.5">
           <div className="text-12 text-fg-3">
-            Rate estimate:{" "}
-            <span className="font-mono font-semibold text-ice">{rp(estimate)}</span>
+            {nights} night{nights === 1 ? "" : "s"} · est.{" "}
+            <span className="font-mono font-semibold text-ice">
+              {quote ? quote.totalLabel : rp(estimate)}
+            </span>{" "}
+            <span className="text-fg-4">incl. tax</span>
           </div>
           <div className="flex gap-2">
             <button

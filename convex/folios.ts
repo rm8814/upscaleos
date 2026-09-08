@@ -2,22 +2,10 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { nightlyRateFor } from "./revenue";
 
-const NIGHTLY: Record<string, number> = {
-  "Deluxe Twin": 1_450_000,
-  "Double Queen": 1_850_000,
-  "King Suite": 2_600_000,
-  "Presidential Suite": 6_900_000,
-};
 const TAX_RATE = 0.21; // 11% government + 10% service
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
-
-const parseRp = (s: string | undefined) => {
-  const n = Number((s ?? "").replace(/[^\d]/g, ""));
-  return Number.isFinite(n) && n > 0 ? n : 0;
-};
-const nightlyRate = (res: Doc<"reservations">) =>
-  parseRp(res.rate) || NIGHTLY[res.roomType ?? ""] || 1_850_000;
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -50,7 +38,7 @@ async function postNight(
     .collect();
   if (existing.some((l) => l.kind === "room" && l.date === date)) return;
 
-  const room = nightlyRate(res);
+  const room = nightlyRateFor(res.roomType ?? "", date);
   await ctx.db.insert("folio_lines", {
     folioId: folio._id,
     propertyId: folio.propertyId,

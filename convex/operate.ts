@@ -68,6 +68,55 @@ export const createTicket = mutation({
   },
 });
 
+/**
+ * Rooms that are bookable for the whole span [checkIn, checkOut): not
+ * OOO/OOS and with no overlapping live reservation. Optionally filtered
+ * to one room type.
+ */
+export const getAvailability = query({
+  args: {
+    propertyId: v.id("properties"),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    roomType: v.optional(v.string()),
+    ignoreReservationId: v.optional(v.id("reservations")),
+  },
+  handler: async (ctx, args) => {
+    const [rooms, reservations] = await Promise.all([
+      ctx.db
+        .query("rooms")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+    ]);
+    const taken = new Set(
+      reservations
+        .filter(
+          (r) =>
+            r._id !== args.ignoreReservationId &&
+            r.status !== "cancelled" &&
+            r.status !== "departed" &&
+            r.checkIn < args.checkOut &&
+            r.checkOut > args.checkIn
+        )
+        .map((r) => r.roomId)
+    );
+    return rooms
+      .filter(
+        (r) =>
+          r.status !== "OOO" &&
+          r.status !== "OOS" &&
+          !taken.has(r._id) &&
+          (!args.roomType || r.type === args.roomType)
+      )
+      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
+      .map((r) => ({ _id: r._id, roomNumber: r.roomNumber, type: r.type }));
+  },
+});
+
 export const getRoomStatusSummary = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {

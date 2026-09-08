@@ -4,12 +4,35 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
 const FALLBACK_TODAY = "2026-09-08";
-const NIGHTLY: Record<string, number> = {
+
+// Rate model: base per room type × day-of-week factor × season factor.
+const BASE: Record<string, number> = {
   "Deluxe Twin": 1_450_000,
   "Double Queen": 1_850_000,
   "King Suite": 2_600_000,
   "Presidential Suite": 6_900_000,
 };
+const NIGHTLY = BASE; // legacy alias used by the KPI code below
+const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
+const TAX_RATE = 0.21;
+
+function seasonMult(iso: string): number {
+  const [, mStr, dStr] = iso.split("-");
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if ((m === 12 && d >= 20) || (m === 1 && d <= 5)) return 1.35; // peak
+  if (m >= 7 && m <= 9) return 1.15; // high
+  if (m === 2 || m === 3) return 0.85; // low
+  if (m >= 4 && m <= 6) return 1.0; // shoulder
+  return 1.05;
+}
+
+/** The rack nightly rate for a room type on a given date. */
+export function nightlyRateFor(roomType: string, iso: string): number {
+  const base = BASE[roomType] ?? 1_850_000;
+  const dow = new Date(iso + "T00:00:00Z").getUTCDay();
+  return Math.round(base * (DOW_MULT[dow] ?? 1) * seasonMult(iso));
+}
 
 async function businessDate(ctx: QueryCtx, propertyId: Id<"properties">) {
   const p = await ctx.db.get(propertyId);
@@ -85,6 +108,43 @@ export const applyRateSuggestion = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.agreementId, { rate: args.newRate });
     return { success: true };
+  },
+});
+
+/** Nightly rack rates for a room type over [from, to). */
+export const getRates = query({
+  args: { roomType: v.string(), from: v.string(), to: v.string() },
+  handler: (_ctx, args) => {
+    const out: { date: string; rate: number }[] = [];
+    for (let d = args.from; d < args.to; d = addDaysIso(d, 1)) {
+      out.push({ date: d, rate: nightlyRateFor(args.roomType, d) });
+    }
+    return out;
+  },
+});
+
+/** Priced quote for a stay: per-night rates, subtotal, tax and total. */
+export const getStayQuote = query({
+  args: { roomType: v.string(), checkIn: v.string(), checkOut: v.string() },
+  handler: (_ctx, args) => {
+    const nights: { date: string; rate: number }[] = [];
+    for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
+      nights.push({ date: d, rate: nightlyRateFor(args.roomType, d) });
+    }
+    const subtotal = nights.reduce((s, n) => s + n.rate, 0);
+    const tax = Math.round(subtotal * TAX_RATE);
+    return {
+      nights,
+      nightCount: nights.length,
+      subtotal,
+      subtotalLabel: money(subtotal),
+      tax,
+      taxLabel: money(tax),
+      total: subtotal + tax,
+      totalLabel: money(subtotal + tax),
+      firstNight: nights[0]?.rate ?? 0,
+      firstNightLabel: money(nights[0]?.rate ?? 0),
+    };
   },
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -122,17 +123,19 @@ export default function DashboardPage() {
         : null;
 
   const alerts = [
-    dateDriftAlert,
+    dateDriftAlert
+      ? { text: dateDriftAlert, href: "/finance/night-audit" }
+      : null,
     stats && stats.ooo > 0
-      ? `${stats.ooo} room${stats.ooo > 1 ? "s" : ""} out of order — maintenance in progress`
+      ? { text: `${stats.ooo} room${stats.ooo > 1 ? "s" : ""} out of order — maintenance in progress` }
       : null,
     stats && stats.dirty > 0
-      ? `${stats.dirty} vacant-dirty rooms still to clean before 3 PM cut-off`
+      ? { text: `${stats.dirty} vacant-dirty rooms still to clean before 3 PM cut-off` }
       : null,
     stats && stats.arrivalsToday > 0
-      ? `${stats.arrivalsToday} arrivals expected today — ${arrivalsWithRoom} with a room assigned`
+      ? { text: `${stats.arrivalsToday} arrivals expected today — ${arrivalsWithRoom} with a room assigned` }
       : null,
-  ].filter(Boolean) as string[];
+  ].filter(Boolean) as { text: string; href?: string }[];
 
   return (
     <div className="mx-auto max-w-content">
@@ -167,12 +170,34 @@ export default function DashboardPage() {
       {alerts.length > 0 && (
         <div className="mb-3.5 flex flex-col gap-2 rounded-lg border border-room-ooo bg-elevated p-3.5">
           <Eyebrow>Alerts &amp; exceptions</Eyebrow>
-          {alerts.map((a) => (
-            <div key={a} className="flex items-start gap-2.5 text-13 text-ice">
-              <AlertTriangle className="mt-px h-[15px] w-[15px] flex-none text-room-ooo" />
-              {a}
-            </div>
-          ))}
+          {alerts.map((a) => {
+            const inner = (
+              <>
+                <AlertTriangle className="mt-px h-[15px] w-[15px] flex-none text-room-ooo" />
+                <span>
+                  {a.text}
+                  {a.href && (
+                    <span className="ml-1 whitespace-nowrap text-accent-violet-hi">
+                      Open night audit →
+                    </span>
+                  )}
+                </span>
+              </>
+            );
+            return a.href ? (
+              <Link
+                key={a.text}
+                href={a.href}
+                className="flex items-start gap-2.5 text-13 text-ice hover:text-accent-violet-hi"
+              >
+                {inner}
+              </Link>
+            ) : (
+              <div key={a.text} className="flex items-start gap-2.5 text-13 text-ice">
+                {inner}
+              </div>
+            );
+          })}
         </div>
       )}
 

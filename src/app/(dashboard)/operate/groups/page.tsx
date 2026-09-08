@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { X, Sparkles } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import PmsDateChip from "@/components/common/PmsDateChip";
 
 interface Group {
   id: string;
@@ -188,7 +189,8 @@ export default function GroupsBlocksPage() {
             <option key={s}>{s}</option>
           ))}
         </select>
-        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice hover:bg-accent-violet-hi">
+        <PmsDateChip className="ml-auto" />
+        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice hover:bg-accent-violet-hi">
           + New group block
         </button>
       </div>

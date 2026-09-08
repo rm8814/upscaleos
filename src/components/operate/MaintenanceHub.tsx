@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
 import { X } from "lucide-react";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { Card, Eyebrow } from "@/components/upx/primitives";
@@ -96,7 +97,8 @@ export default function MaintenanceHub() {
           <option>Scheduled</option>
           <option>Resolved</option>
         </select>
-        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice transition-colors hover:bg-accent-violet-hi">
+        <PmsDateChip className="ml-auto" />
+        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice transition-colors hover:bg-accent-violet-hi">
           + New ticket
         </button>
       </div>

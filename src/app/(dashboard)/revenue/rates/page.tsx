@@ -18,10 +18,10 @@ const ROOM_TYPES = [
 ];
 
 const SEASONS = [
-  { name: "Low", dates: "Feb 1 – Mar 31", color: "var(--accent-cyan)", standard: "Rp 1,150,000", deluxe: "Rp 1,480,000", suite: "Rp 2,100,000", flex: "Rp 1,650,000" },
-  { name: "Shoulder", dates: "Apr 1 – Jun 30", color: "var(--res-tentative)", standard: "Rp 1,350,000", deluxe: "Rp 1,750,000", suite: "Rp 2,500,000", flex: "Rp 1,950,000" },
-  { name: "High", dates: "Jul 1 – Sep 30", color: "var(--accent-violet)", standard: "Rp 1,650,000", deluxe: "Rp 2,150,000", suite: "Rp 3,100,000", flex: "Rp 2,400,000" },
-  { name: "Peak", dates: "Dec 20 – Jan 5", color: "var(--room-ooo)", standard: "Rp 2,400,000", deluxe: "Rp 3,200,000", suite: "Rp 4,900,000", flex: "Rp 3,600,000" },
+  { name: "Low", dates: "Feb 1 – Mar 31", color: "var(--accent-cyan)", standard: "1,150,000", deluxe: "1,480,000", suite: "2,100,000", flex: "1,650,000" },
+  { name: "Shoulder", dates: "Apr 1 – Jun 30", color: "var(--res-tentative)", standard: "1,350,000", deluxe: "1,750,000", suite: "2,500,000", flex: "1,950,000" },
+  { name: "High", dates: "Jul 1 – Sep 30", color: "var(--accent-violet)", standard: "1,650,000", deluxe: "2,150,000", suite: "3,100,000", flex: "2,400,000" },
+  { name: "Peak", dates: "Dec 20 – Jan 5", color: "var(--room-ooo)", standard: "2,400,000", deluxe: "3,200,000", suite: "4,900,000", flex: "3,600,000" },
 ];
 
 const RULES = [
@@ -31,18 +31,45 @@ const RULES = [
   { condition: "competitor drops rate > 10%", action: "match within guardrails", scope: "King Suite", status: "Active", ok: true },
 ];
 const GUARDRAILS = [
-  { name: "Deluxe Twin", floor: "Rp 1,100,000", ceiling: "Rp 2,400,000" },
-  { name: "Double Queen", floor: "Rp 1,400,000", ceiling: "Rp 3,100,000" },
-  { name: "King Suite", floor: "Rp 2,000,000", ceiling: "Rp 4,600,000" },
-  { name: "Presidential Suite", floor: "Rp 5,500,000", ceiling: "Rp 11,000,000" },
+  { name: "Deluxe Twin", floor: "1,100,000", ceiling: "2,400,000" },
+  { name: "Double Queen", floor: "1,400,000", ceiling: "3,100,000" },
+  { name: "King Suite", floor: "2,000,000", ceiling: "4,600,000" },
+  { name: "Presidential Suite", floor: "5,500,000", ceiling: "11,000,000" },
 ];
 const QUEUE = [
-  { date: "Sat 13 Sep", roomType: "King Suite", current: "Rp 2,600,000", suggested: "Rp 3,120,000", reason: "Occupancy 91%, 4 OTAs raised rates" },
-  { date: "Sun 14 Sep", roomType: "Deluxe Twin", current: "Rp 1,450,000", suggested: "Rp 1,360,000", reason: "Pickup pace 22% below LY" },
-  { date: "Fri 19 Sep", roomType: "Double Queen", current: "Rp 1,850,000", suggested: "Rp 2,180,000", reason: "Beach festival within 2 km" },
+  { dayOffset: 5, roomType: "King Suite", current: "2,600,000", suggested: "3,120,000", reason: "Occupancy 91%, 4 OTAs raised rates" },
+  { dayOffset: 6, roomType: "Deluxe Twin", current: "1,450,000", suggested: "1,360,000", reason: "Pickup pace 22% below LY" },
+  { dayOffset: 11, roomType: "Double Queen", current: "1,850,000", suggested: "2,180,000", reason: "Beach festival within 2 km" },
 ];
 
-const fmt = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const money = (n: number) => Math.round(n).toLocaleString("en-US");
+const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+const queueDate = (iso: string, offset: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + offset);
+  return `${DOW_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
+
+function LegendCount({ cls, children }: { cls: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={`rounded-[4px] px-[5px] py-px font-mono text-[10px] font-bold ${cls}`}
+    >
+      {children}
+    </span>
+  );
+}
+function RestrictBadge({ cls, children }: { cls: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={`rounded-[3px] border px-[3px] text-[8.5px] font-bold leading-[1.4] ${cls}`}
+    >
+      {children}
+    </span>
+  );
+}
 
 export default function RatesPage() {
   const { activeProperty } = useProperty();
@@ -67,7 +94,7 @@ export default function RatesPage() {
       return n;
     });
 
-  const GRID = { gridTemplateColumns: `160px repeat(${DAYS}, minmax(72px,1fr))` };
+  const GRID = { gridTemplateColumns: `160px repeat(${DAYS}, minmax(84px,1fr))` };
 
   return (
     <div className="mx-auto max-w-content">
@@ -85,8 +112,36 @@ export default function RatesPage() {
       </div>
 
       {view === "grid" && (
+        <>
+          <div className="mb-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[11px] text-fg-3">
+            <LegendCount cls="bg-accent-cyan/10 text-accent-cyan">0</LegendCount>
+            <span>Available</span>
+            <LegendCount cls="bg-fg-1/[0.08] text-fg-2">0</LegendCount>
+            <span>Assigned</span>
+            <LegendCount cls="bg-room-ooo/[0.14] text-room-ooo">0</LegendCount>
+            <span>Unassigned / blocked</span>
+            <span className="flex items-center gap-1.5">
+              <RestrictBadge cls="border-room-ooo text-room-ooo">SO</RestrictBadge>
+              Stop-sell
+            </span>
+            <span className="flex items-center gap-1.5">
+              <RestrictBadge cls="border-accent-violet-hi text-accent-violet-hi">CTA</RestrictBadge>
+              Closed to arrival
+            </span>
+            <span className="flex items-center gap-1.5">
+              <RestrictBadge cls="border-res-tentative text-res-tentative">CTD</RestrictBadge>
+              Closed to departure
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-[9px] w-4 rounded-pill bg-accent-violet" />
+              dynamic on /
+              <span className="inline-block h-[9px] w-4 rounded-pill bg-line" />
+              manual override
+            </span>
+          </div>
+
         <Card className="overflow-x-auto p-0">
-          <div className="min-w-[1160px]">
+          <div className="min-w-[1320px]">
             <div className="grid border-b border-line" style={GRID}>
               <div className="sticky left-0 z-10 bg-elevated px-3 py-2.5 text-[11px] text-fg-3">
                 Room type
@@ -99,7 +154,7 @@ export default function RatesPage() {
                   <div className="text-[9px] font-semibold uppercase text-fg-2">
                     {DOW[d.getUTCDay()]}
                   </div>
-                  <div>{d.getUTCDate()}</div>
+                  <div>{dm(d)}</div>
                 </div>
               ))}
             </div>
@@ -126,44 +181,86 @@ export default function RatesPage() {
               ))}
             </div>
 
-            {ROOM_TYPES.map((rt) => (
-              <div
-                key={rt.name}
-                className="grid border-b border-line-soft"
-                style={GRID}
-              >
-                <div className="sticky left-0 z-10 flex flex-col gap-1 bg-elevated p-3">
-                  <div className="text-13 font-semibold">{rt.name}</div>
-                  <div className="text-[10.5px] text-fg-3">Base {fmt(rt.base)}</div>
-                </div>
-                {days.map((d, i) => {
-                  const dyn = dynamicDays.has(i);
-                  const rate = rt.base * DOW_MULT[d.getUTCDay()] * (dyn ? 1.06 : 1);
-                  return (
-                    <div
-                      key={i}
-                      className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-2"
-                      style={{ background: dyn ? "var(--violet-wash)" : undefined }}
-                    >
+            {ROOM_TYPES.map((rt, rtIdx) => {
+              const totalRooms = rt.name === "Presidential Suite" ? 6 : 8;
+              return (
+                <div
+                  key={rt.name}
+                  className="grid border-b border-line-soft"
+                  style={GRID}
+                >
+                  <div className="sticky left-0 z-10 flex flex-col gap-1 bg-elevated p-3">
+                    <div className="text-13 font-semibold">{rt.name}</div>
+                    <div className="text-[10.5px] text-fg-3">Base {money(rt.base)}</div>
+                  </div>
+                  {days.map((d, i) => {
+                    const dyn = dynamicDays.has(i);
+                    const dow = d.getUTCDay();
+                    const rate = rt.base * DOW_MULT[dow] * (dyn ? 1.06 : 1);
+                    const demand =
+                      DOW_MULT[dow] >= 1.25 ? "high" : DOW_MULT[dow] <= 0.95 ? "low" : "mid";
+                    const stopSell = rtIdx === 3 && (i + 4) % 11 === 0;
+                    const cta = demand === "high" && (i + rtIdx) % 5 === 0;
+                    const ctd = demand === "low" && (i + rtIdx) % 7 === 3;
+                    const minStay = demand === "high" ? 2 : 1;
+                    const minStayShow = minStay > 1 && !cta;
+                    const assigned = stopSell ? 0 : 2 + ((i + rtIdx) % 4);
+                    const unassigned = !stopSell && (i + rtIdx) % 6 === 2 ? 1 + (i % 2) : 0;
+                    const avail = stopSell
+                      ? 0
+                      : Math.max(0, totalRooms - assigned - unassigned);
+                    const hasRestriction = stopSell || minStayShow || cta || ctd;
+                    return (
                       <div
-                        className="font-mono text-[11px] font-semibold"
-                        style={{ color: dyn ? "var(--accent-violet-hi)" : "var(--fg-1)" }}
+                        key={i}
+                        className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-2"
+                        style={{ background: dyn ? "var(--violet-wash)" : undefined }}
                       >
-                        {fmt(rate)}
+                        <div
+                          className="font-mono text-[11px] font-semibold"
+                          style={{ color: dyn ? "var(--accent-violet-hi)" : "var(--fg-1)" }}
+                        >
+                          {money(rate)}
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-[3px]">
+                          <span className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan">
+                            {avail}
+                          </span>
+                          <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
+                            {assigned}
+                          </span>
+                          {unassigned > 0 && (
+                            <span className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo">
+                              {unassigned}
+                            </span>
+                          )}
+                        </div>
+                        {hasRestriction && (
+                          <div className="flex flex-wrap justify-center gap-0.5">
+                            {stopSell && (
+                              <RestrictBadge cls="border-room-ooo text-room-ooo">SO</RestrictBadge>
+                            )}
+                            {minStayShow && (
+                              <span className="text-[8.5px] text-fg-3">{minStay}N</span>
+                            )}
+                            {cta && (
+                              <RestrictBadge cls="border-accent-violet-hi text-accent-violet-hi">
+                                CTA
+                              </RestrictBadge>
+                            )}
+                            {ctd && (
+                              <RestrictBadge cls="border-res-tentative text-res-tentative">
+                                CTD
+                              </RestrictBadge>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-0.5">
-                        <span className="rounded-[4px] bg-accent-cyan/10 px-1 font-mono text-[10px] font-bold text-accent-cyan">
-                          {2 + (i % 4)}
-                        </span>
-                        <span className="rounded-[4px] bg-fg-1/[0.08] px-1 font-mono text-[10px] font-bold text-fg-2">
-                          {4 - (i % 3)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    );
+                  })}
+                </div>
+              );
+            })}
 
             <div className="grid border-t border-line bg-deep" style={GRID}>
               <div className="sticky left-0 z-10 bg-deep px-3 py-2.5 text-12 font-semibold text-ice">
@@ -180,6 +277,7 @@ export default function RatesPage() {
             </div>
           </div>
         </Card>
+        </>
       )}
 
       {view === "seasons" && (
@@ -275,10 +373,12 @@ export default function RatesPage() {
             <Card className="overflow-hidden p-0">
               {QUEUE.map((a) => (
                 <div
-                  key={a.date + a.roomType}
+                  key={a.dayOffset + a.roomType}
                   className="flex flex-wrap items-center gap-3.5 border-b border-line-soft px-4 py-3.5 last:border-0"
                 >
-                  <div className="w-[90px] font-mono text-12 text-fg-3">{a.date}</div>
+                  <div className="w-[90px] font-mono text-12 text-fg-3">
+                    {queueDate(todayIso, a.dayOffset)}
+                  </div>
                   <div className="w-[110px] text-13 font-medium">{a.roomType}</div>
                   <div className="font-mono text-[12.5px] text-fg-3 line-through">{a.current}</div>
                   <ArrowRight className="h-[13px] w-[13px] text-fg-3" />

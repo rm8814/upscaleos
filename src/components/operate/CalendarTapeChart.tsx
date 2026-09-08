@@ -20,9 +20,15 @@ import ReservationSlideOver, {
   type SlideOverReservation,
 } from "@/components/guests/ReservationSlideOver";
 
-const WINDOW_START = new Date("2026-09-05T00:00:00Z");
-const DAYS = 10;
+// Prototype "today" — matches the seed anchor. The window opens 3 days
+// before it so today sits in the 4th column.
 const TODAY_ISO = "2026-09-08";
+const DAYS = 10;
+const WINDOW_START = (() => {
+  const d = new Date(TODAY_ISO + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 3);
+  return d;
+})();
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
 const NIGHTLY: Record<string, number> = {
@@ -42,6 +48,7 @@ const CHANNEL_COLOR: Record<string, string> = {
 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`; // 8/9
 const addDays = (base: Date, n: number) => {
   const d = new Date(base);
   d.setUTCDate(d.getUTCDate() + n);
@@ -289,7 +296,7 @@ export default function CalendarTapeChart() {
       {/* Range + legend */}
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <div className="text-12 text-fg-3">
-          {iso(days[0])} – {iso(days[DAYS - 1])}
+          {dm(days[0])} – {dm(days[DAYS - 1])}
         </div>
         {legend.map((l) => (
           <div key={l.label} className="flex items-center gap-1.5 text-12 text-fg-3">
@@ -343,7 +350,7 @@ export default function CalendarTapeChart() {
                 <div className="text-[9px] font-semibold uppercase text-fg-2">
                   {DOW[d.getUTCDay()]}
                 </div>
-                <div>{d.getUTCDate()}</div>
+                <div>{dm(d)}</div>
               </div>
             ))}
           </div>

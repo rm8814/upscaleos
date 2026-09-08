@@ -36,17 +36,6 @@ const PERIOD_LABEL: Record<Period, string> = {
   "30d": "Last 30 days",
 };
 
-// Revenue/rate analytics have no source table in the prototype — these are the
-// design's "AI / analytics surface". Occupancy + room status + arrivals are live.
-const KPI_BY_PERIOD: Record<
-  Period,
-  { revenue: string; revDelta: string; adr: string; adrDelta: string; revpar: string; revparDelta: string }
-> = {
-  today: { revenue: "Rp 48,200,000", revDelta: "+6.1%", adr: "Rp 2,140,000", adrDelta: "+1.2%", revpar: "Rp 1,790,000", revparDelta: "+7.4%" },
-  "7d": { revenue: "Rp 331,000,000", revDelta: "+9.0%", adr: "Rp 2,090,000", adrDelta: "+2.4%", revpar: "Rp 1,710,000", revparDelta: "+11.0%" },
-  "30d": { revenue: "Rp 1,420,000,000", revDelta: "+12.6%", adr: "Rp 2,020,000", adrDelta: "+3.1%", revpar: "Rp 1,640,000", revparDelta: "+14.2%" },
-};
-
 const CHANNEL_MIX = [
   { name: "Direct", pct: "38%" },
   { name: "Booking.com", pct: "27%" },
@@ -86,7 +75,12 @@ export default function DashboardPage() {
   const arrivals = useQuery(api.reservations.getArrivalsToday, arg);
 
   const [period, setPeriod] = useState<Period>("today");
-  const kpi = KPI_BY_PERIOD[period];
+  const kpi = useQuery(
+    api.revenue.getKpis,
+    activeProperty ? { propertyId: activeProperty._id, period } : "skip"
+  );
+  const deltaTone = (d: string | undefined) =>
+    d && d.startsWith("+") && d !== "+0.0%" ? "positive" : "muted";
 
   const arrivalsWithRoom = (arrivals ?? []).filter(
     (a) => a.roomNumber && a.roomNumber !== "—"
@@ -149,10 +143,10 @@ export default function DashboardPage() {
       {/* KPI tiles */}
       <div className="mb-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label={`Revenue · ${PERIOD_LABEL[period]}`}
-          value={kpi.revenue}
-          delta={`${kpi.revDelta} · vs. prior period`}
-          deltaTone="positive"
+          label={`Room revenue · ${PERIOD_LABEL[period]}`}
+          value={kpi ? kpi.revenue : "—"}
+          delta={kpi ? `${kpi.revDelta} · vs. prior period` : undefined}
+          deltaTone={deltaTone(kpi?.revDelta)}
         />
         <StatTile
           label="Occupancy"
@@ -160,12 +154,17 @@ export default function DashboardPage() {
           delta={stats ? `${stats.occupied}/${stats.sellable} sellable rooms` : undefined}
           valueTone="cyan"
         />
-        <StatTile label="ADR" value={kpi.adr} delta={`${kpi.adrDelta} · vs. prior period`} />
+        <StatTile
+          label="ADR"
+          value={kpi ? kpi.adr : "—"}
+          delta={kpi ? `${kpi.adrDelta} · vs. prior period` : undefined}
+          deltaTone={deltaTone(kpi?.adrDelta)}
+        />
         <StatTile
           label="RevPAR"
-          value={kpi.revpar}
-          delta={`${kpi.revparDelta} · vs. prior period`}
-          deltaTone="positive"
+          value={kpi ? kpi.revpar : "—"}
+          delta={kpi ? `${kpi.revparDelta} · vs. prior period` : undefined}
+          deltaTone={deltaTone(kpi?.revparDelta)}
         />
       </div>
 

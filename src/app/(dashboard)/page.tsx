@@ -50,19 +50,26 @@ const REVENUE_SOURCES = [
   { label: "Other", pct: "9%", amount: "Rp 29,700,000" },
 ];
 
-const TASKS = [
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const prevDayLabel = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 1);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
+};
+
+const buildTasks = (businessDate: string) => [
   "Approve 3 rate overrides for the weekend",
   "Confirm group block — Astra offsite (12 rooms)",
   "Review 2 pending refunds",
-  "Sign off night audit for 07 Sep",
+  `Sign off night audit for ${prevDayLabel(businessDate)}`,
 ];
 
-const ACTIVITY = [
+const buildActivity = (businessDate: string) => [
   { time: "09:41", text: "Room 204 flagged out of order — AC" },
   { time: "09:12", text: "Sarah Wijaya checked in to 118" },
   { time: "08:55", text: "Agoda rate plan synced" },
   { time: "08:30", text: "Housekeeping started Floor 3" },
-  { time: "08:02", text: "Night audit posted for 07 Sep" },
+  { time: "08:02", text: `Night audit posted for ${prevDayLabel(businessDate)}` },
 ];
 
 const OUTLOOK = [72, 78, 81, 69, 64, 88, 92, 85, 79, 74, 70, 83, 90, 87];
@@ -89,6 +96,8 @@ export default function DashboardPage() {
 
   // PMS business date vs the real wall-clock date in the property's timezone.
   const bizDate = activeProperty?.businessDate ?? null;
+  const TASKS = buildTasks(bizDate ?? "2026-09-08");
+  const ACTIVITY = buildActivity(bizDate ?? "2026-09-08");
   const wallToday = (() => {
     const tz = activeProperty?.timezone ?? "Asia/Makassar";
     try {

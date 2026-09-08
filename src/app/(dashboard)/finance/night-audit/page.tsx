@@ -38,11 +38,21 @@ const EXCEPTIONS = [
   { text: "Guest folio RSV-8DZAAJ — deposit not applied", resolved: false },
   { text: "OTA settlement Agoda — Rp 42,000 rounding difference", resolved: true },
 ];
-const HISTORY = [
-  { date: "3 Sep 03:12", summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
-  { date: "2 Sep 03:08", summary: "Audit complete — 1 exception resolved", status: "OK", color: "var(--accent-cyan)" },
-  { date: "1 Sep 03:44", summary: "Manual re-run after POS outage", status: "Recovered", color: "var(--res-tentative)" },
-  { date: "31 Aug 03:05", summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
+const addDaysIso = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const dayLabel = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
+/** Prior closes, newest first, anchored to the current business date. */
+const buildHistory = (businessDate: string) => [
+  { date: `${dayLabel(addDaysIso(businessDate, -1))} 03:12`, summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
+  { date: `${dayLabel(addDaysIso(businessDate, -2))} 03:08`, summary: "Audit complete — 1 exception resolved", status: "OK", color: "var(--accent-cyan)" },
+  { date: `${dayLabel(addDaysIso(businessDate, -3))} 03:44`, summary: "Manual re-run after POS outage", status: "Recovered", color: "var(--res-tentative)" },
+  { date: `${dayLabel(addDaysIso(businessDate, -4))} 03:05`, summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
 ];
 const PROPERTY_STATUS = [
   { name: "Grand Samudra Bali", status: "In progress", color: "var(--res-tentative)" },
@@ -71,6 +81,8 @@ export default function NightAuditPage() {
   } | null>(null);
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const HISTORY = buildHistory(businessDate);
+  const lastAuditLabel = `${dayLabel(addDaysIso(businessDate, -1))}, 03:12`;
   const autoAudit = !!activeProperty?.autoNightAudit;
   const auditTime = activeProperty?.nightAuditTime ?? "03:00";
 
@@ -301,7 +313,7 @@ export default function NightAuditPage() {
         {[
           { label: "Room revenue posted", value: "Rp 42,600,000", tone: "" },
           { label: "Exceptions flagged", value: String(EXCEPTIONS.filter((e, i) => !e.resolved && !resolved.has(i)).length), tone: "rose" },
-          { label: "Last successful audit", value: "3 Sep, 03:12", tone: "" },
+          { label: "Last successful audit", value: lastAuditLabel, tone: "" },
         ].map((m) => (
           <Card key={m.label} className="p-3.5">
             <Eyebrow>{m.label}</Eyebrow>

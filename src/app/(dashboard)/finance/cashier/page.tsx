@@ -2,8 +2,17 @@
 
 import React, { useState } from "react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
 
 type Tab = "till" | "txns" | "recon";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shiftDay = (iso: string, back: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - back);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
 
 const TXNS = [
   { time: "14:22", guest: "Kadek Surya — RSV-8DZ7K6", ref: "Folio 204", method: "QRIS / e-wallet", amount: "Rp 1,240,000", voided: false },
@@ -13,10 +22,10 @@ const TXNS = [
   { time: "09:52", guest: "City ledger — Accor Global", ref: "Group folio", method: "City ledger", amount: "Rp 3,100,000", voided: false },
 ];
 
-const SHIFT_LOG = [
-  { cashier: "Amira K.", date: "3 Sep", shift: "07:00–15:00", expected: "Rp 8,240,000", counted: "Rp 8,240,000", variance: "Rp 0", status: "Balanced", color: "var(--accent-cyan)", handoverTo: "Rangga P." },
-  { cashier: "Rangga P.", date: "3 Sep", shift: "15:00–23:00", expected: "Rp 6,910,000", counted: "Rp 6,885,000", variance: "− Rp 25,000", status: "Short", color: "var(--res-tentative)", handoverTo: "Night audit" },
-  { cashier: "Amira K.", date: "2 Sep", shift: "07:00–15:00", expected: "Rp 7,500,000", counted: "Rp 7,520,000", variance: "+ Rp 20,000", status: "Over", color: "var(--res-tentative)", handoverTo: "Rangga P." },
+const buildShiftLog = (businessDate: string) => [
+  { cashier: "Amira K.", date: shiftDay(businessDate, 1), shift: "07:00–15:00", expected: "Rp 8,240,000", counted: "Rp 8,240,000", variance: "Rp 0", status: "Balanced", color: "var(--accent-cyan)", handoverTo: "Rangga P." },
+  { cashier: "Rangga P.", date: shiftDay(businessDate, 1), shift: "15:00–23:00", expected: "Rp 6,910,000", counted: "Rp 6,885,000", variance: "− Rp 25,000", status: "Short", color: "var(--res-tentative)", handoverTo: "Night audit" },
+  { cashier: "Amira K.", date: shiftDay(businessDate, 2), shift: "07:00–15:00", expected: "Rp 7,500,000", counted: "Rp 7,520,000", variance: "+ Rp 20,000", status: "Over", color: "var(--res-tentative)", handoverTo: "Rangga P." },
 ];
 
 const DENOMS = ["100,000", "50,000", "20,000", "10,000", "5,000", "2,000", "1,000"];
@@ -24,6 +33,9 @@ const DENOMS = ["100,000", "50,000", "20,000", "10,000", "5,000", "2,000", "1,00
 const TXN_GRID = "grid grid-cols-[0.7fr_1.4fr_1fr_0.9fr_0.6fr] gap-2.5 px-4";
 
 export default function CashierPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const SHIFT_LOG = buildShiftLog(businessDate);
   const [tab, setTab] = useState<Tab>("till");
   const [closeOpen, setCloseOpen] = useState(false);
 
@@ -35,7 +47,7 @@ export default function CashierPage() {
           <option>Front desk — Drawer 2</option>
           <option>Concierge — Drawer 3</option>
         </select>
-        <span className="text-[11.5px] text-fg-3">Business date 4 Sep 2026 · GMT+8</span>
+        <PmsDateChip className="ml-1" />
       </div>
 
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">

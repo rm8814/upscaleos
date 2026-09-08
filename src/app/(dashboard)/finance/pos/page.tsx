@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { AlertTriangle, FileSpreadsheet, ExternalLink } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useProperty } from "@/components/providers/PropertyProvider";
 
 const OUTLETS = [
   { name: "Ombak Restaurant", type: "All-day dining", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 14,200,000", postings: 62, sync: "2m ago" },
@@ -63,14 +64,17 @@ function Bars({ rows, color }: { rows: { label: string; pct: string; amount: str
 }
 
 export default function PosDashboardPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const max = Math.max(...HOURS);
 
   return (
     <div className="mx-auto max-w-content">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
+          key={businessDate}
           type="date"
-          defaultValue="2026-09-04"
+          defaultValue={businessDate}
           className="rounded-sm border border-line bg-elevated px-2.5 py-1.5 font-mono text-12 text-fg-2"
         />
         <select className="rounded-sm border border-line bg-elevated px-2.5 py-2 text-12 text-fg-2">

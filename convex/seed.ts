@@ -259,23 +259,25 @@ export const seed = mutation({
             : resStatuses[i % resStatuses.length];
       const rate = nightlyByType[room.type] ?? "Rp 1,850,000";
       const rupiah = Number(rate.replace(/[^\d]/g, ""));
+      // A couple of upcoming bookings arrived without a room assigned.
+      const roomless = i === 5 || i === 13;
       await ctx.db.insert("reservations", {
         guestId: guestIds[i],
         propertyId,
-        roomId: room._id,
+        roomId: roomless ? undefined : room._id,
         checkIn: iso(checkIn),
         checkOut: iso(checkOut),
         status,
         rate,
         totalAmount: `Rp ${(rupiah * nights).toLocaleString("en-US")}`,
         channel: channels[i % channels.length],
-        roomNumber: room.roomNumber,
+        roomNumber: roomless ? undefined : room.roomNumber,
         roomType: room.type,
         adults: 1 + (i % 3),
         children: i % 4 === 0 ? 1 : 0,
         // a few upcoming bookings came in via OTA and were auto-roomed
         roomAutoAssigned:
-          (status === "confirmed" || status === "tentative") && i % 2 === 0,
+          !roomless && (status === "confirmed" || status === "tentative") && i % 2 === 0,
         etaLabel: status === "confirmed" ? `${12 + (i % 8)}:${(i * 13) % 60 < 10 ? "0" : ""}${(i * 13) % 60}` : undefined,
       });
     }

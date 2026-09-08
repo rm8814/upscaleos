@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
@@ -46,6 +49,7 @@ const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const money = (n: number) => Math.round(n).toLocaleString("en-US");
 const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+const iso = (d: Date) => d.toISOString().slice(0, 10);
 const queueDate = (iso: string, offset: number) => {
   const d = new Date(iso + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + offset);
@@ -75,6 +79,11 @@ export default function RatesPage() {
   const { activeProperty } = useProperty();
   const [view, setView] = useState<"grid" | "seasons" | "rules">("grid");
   const [dynamicDays, setDynamicDays] = useState<Set<number>>(new Set([5, 6, 12, 13]));
+
+  const reservations = useQuery(
+    api.reservations.getByProperty,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
 
   const todayIso = activeProperty?.businessDate ?? "2026-09-08";
   const days = useMemo(
@@ -199,13 +208,22 @@ export default function RatesPage() {
                     const rate = rt.base * DOW_MULT[dow] * (dyn ? 1.06 : 1);
                     const demand =
                       DOW_MULT[dow] >= 1.25 ? "high" : DOW_MULT[dow] <= 0.95 ? "low" : "mid";
+                    const dayIso = iso(d);
                     const stopSell = rtIdx === 3 && (i + 4) % 11 === 0;
                     const cta = demand === "high" && (i + rtIdx) % 5 === 0;
                     const ctd = demand === "low" && (i + rtIdx) % 7 === 3;
                     const minStay = demand === "high" ? 2 : 1;
                     const minStayShow = minStay > 1 && !cta;
-                    const assigned = stopSell ? 0 : 2 + ((i + rtIdx) % 4);
-                    const unassigned = !stopSell && (i + rtIdx) % 6 === 2 ? 1 + (i % 2) : 0;
+                    const occ = (reservations ?? []).filter(
+                      (r) =>
+                        r.status !== "cancelled" &&
+                        r.status !== "departed" &&
+                        r.roomType === rt.name &&
+                        r.checkIn <= dayIso &&
+                        r.checkOut > dayIso
+                    );
+                    const unassigned = occ.filter((r) => !r.roomId).length;
+                    const assigned = stopSell ? 0 : occ.filter((r) => r.roomId).length;
                     const avail = stopSell
                       ? 0
                       : Math.max(0, totalRooms - assigned - unassigned);
@@ -230,9 +248,17 @@ export default function RatesPage() {
                             {assigned}
                           </span>
                           {unassigned > 0 && (
-                            <span className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo">
+                            <Link
+                              href={`/guests/reservations?unassigned=1&roomType=${encodeURIComponent(
+                                rt.name
+                              )}&date=${dayIso}`}
+                              title={`${unassigned} unassigned booking${
+                                unassigned > 1 ? "s" : ""
+                              } — open list`}
+                              className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo hover:bg-room-ooo/30"
+                            >
                               {unassigned}
-                            </span>
+                            </Link>
                           )}
                         </div>
                         {hasRestriction && (

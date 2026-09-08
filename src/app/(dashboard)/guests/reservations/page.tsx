@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -20,6 +22,16 @@ const GRID =
 type Tab = "arrivals" | "inhouse" | "departures" | "all";
 
 export default function ReservationListPage() {
+  return (
+    <Suspense
+      fallback={<div className="p-4 text-13 text-fg-3">Loading reservations…</div>}
+    >
+      <ReservationListInner />
+    </Suspense>
+  );
+}
+
+function ReservationListInner() {
   const { activeProperty } = useProperty();
   const reservations = useQuery(
     api.reservations.getByProperty,
@@ -28,6 +40,13 @@ export default function ReservationListPage() {
 
   const assignRooms = useMutation(api.reservations.assignRooms);
   const [assigning, setAssigning] = useState(false);
+
+  // Deep-link filters (e.g. from the rate grid's unassigned chip).
+  const params = useSearchParams();
+  const qUnassigned = params.get("unassigned") === "1";
+  const qRoomType = params.get("roomType");
+  const qDate = params.get("date");
+  const hasUrlFilter = qUnassigned || !!qRoomType || !!qDate;
 
   const [tab, setTab] = useState<Tab>("all");
   const [search, setSearch] = useState("");
@@ -72,8 +91,17 @@ export default function ReservationListPage() {
       );
     if (status !== "All") rows = rows.filter((r) => r.status === status);
     if (channel !== "All") rows = rows.filter((r) => (r.channel ?? "Direct") === channel);
+    if (qUnassigned)
+      rows = rows.filter(
+        (r) =>
+          r.roomNumber === "—" &&
+          r.status !== "cancelled" &&
+          r.status !== "departed"
+      );
+    if (qRoomType) rows = rows.filter((r) => r.roomType === qRoomType);
+    if (qDate) rows = rows.filter((r) => r.checkIn <= qDate && r.checkOut > qDate);
     return rows;
-  }, [list, tab, search, status, channel, TODAY]);
+  }, [list, tab, search, status, channel, TODAY, qUnassigned, qRoomType, qDate]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
@@ -170,6 +198,22 @@ export default function ReservationListPage() {
           </button>
         ))}
       </div>
+
+      {hasUrlFilter && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-accent-violet bg-violet-wash px-3 py-2 text-[12.5px] text-ice">
+          <span className="font-semibold">Filtered:</span>
+          {qUnassigned && <span>unassigned</span>}
+          {qRoomType && <span>· {qRoomType}</span>}
+          {qDate && <span>· stays on {qDate}</span>}
+          <span className="text-fg-3">({filtered.length})</span>
+          <Link
+            href="/guests/reservations"
+            className="ml-auto text-fg-3 hover:text-ice"
+          >
+            Clear ✕
+          </Link>
+        </div>
+      )}
 
       <Card className="overflow-hidden p-0">
         <div className="upx-scroll overflow-x-auto">

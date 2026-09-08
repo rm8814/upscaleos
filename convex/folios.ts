@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -162,7 +162,9 @@ export const getForReservation = query({
         .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
         .collect()
     ).sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
-    const balance = lines.reduce((s, l) => s + l.amount, 0);
+    const balance = lines
+      .filter((l) => !l.voided)
+      .reduce((s, l) => s + l.amount, 0);
     return {
       status: folio.status,
       openedOn: folio.openedOn,
@@ -174,9 +176,147 @@ export const getForReservation = query({
         description: l.description,
         amount: money(l.amount),
         raw: l.amount,
+        voided: l.voided ?? false,
       })),
       balance: money(balance),
       balanceRaw: balance,
     };
+  },
+});
+
+/* -------------------------------------------------- open-folio directory -- */
+
+/** Every open folio for a property with guest, room and live balance. */
+export const listOpen = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const folios = await ctx.db
+      .query("folios")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const out = [];
+    for (const folio of folios) {
+      if (folio.status !== "open") continue;
+      const [res, guest, lines] = await Promise.all([
+        ctx.db.get(folio.reservationId),
+        ctx.db.get(folio.guestId),
+        ctx.db
+          .query("folio_lines")
+          .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
+          .collect(),
+      ]);
+      const balance = lines
+        .filter((l) => !l.voided)
+        .reduce((s, l) => s + l.amount, 0);
+      out.push({
+        folioId: folio._id,
+        reservationId: folio.reservationId,
+        guestName: guest?.name ?? "Guest",
+        roomNumber: res?.roomNumber ?? null,
+        roomType: res?.roomType ?? null,
+        balance,
+        balanceLabel: money(balance),
+      });
+    }
+    return out.sort((a, b) =>
+      (a.roomNumber ?? "~").localeCompare(b.roomNumber ?? "~")
+    );
+  },
+});
+
+/** Folio lines of a given kind across a property (newest first). */
+export const listLinesByKind = query({
+  args: { propertyId: v.id("properties"), kind: v.string() },
+  handler: async (ctx, args) => {
+    const lines = await ctx.db
+      .query("folio_lines")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const rows = [];
+    for (const l of lines.filter((x) => x.kind === args.kind)) {
+      const folio = await ctx.db.get(l.folioId);
+      const res = folio ? await ctx.db.get(folio.reservationId) : null;
+      const guest = folio ? await ctx.db.get(folio.guestId) : null;
+      rows.push({
+        _id: l._id,
+        date: l.date,
+        postedAt: l.postedAt ?? 0,
+        description: l.description,
+        amount: l.amount,
+        amountLabel: money(l.amount),
+        method: l.method ?? null,
+        source: l.source ?? null,
+        voided: l.voided ?? false,
+        guestName: guest?.name ?? "Guest",
+        roomNumber: res?.roomNumber ?? null,
+      });
+    }
+    return rows.sort((a, b) =>
+      a.date === b.date ? b.postedAt - a.postedAt : a.date < b.date ? 1 : -1
+    );
+  },
+});
+
+/* -------------------------------------------------- cashier / POS writes -- */
+
+/** Record a guest payment as a negative line on the reservation's folio. */
+export const recordPayment = mutation({
+  args: {
+    reservationId: v.id("reservations"),
+    amount: v.number(),
+    method: v.string(),
+    businessDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const folio = await folioForReservation(ctx, args.reservationId);
+    if (!folio) throw new Error("No folio for that reservation");
+    const amt = Math.abs(Math.round(args.amount));
+    if (!amt) throw new Error("Amount must be greater than zero");
+    await ctx.db.insert("folio_lines", {
+      folioId: folio._id,
+      propertyId: folio.propertyId,
+      date: args.businessDate,
+      kind: "payment",
+      description: `Payment — ${args.method}`,
+      amount: -amt,
+      method: args.method,
+      postedAt: Date.now(),
+    });
+  },
+});
+
+/** Post a charge (POS food & beverage, spa, minibar, ...) to a folio. */
+export const postCharge = mutation({
+  args: {
+    reservationId: v.id("reservations"),
+    amount: v.number(),
+    kind: v.optional(v.string()),
+    description: v.string(),
+    source: v.optional(v.string()),
+    businessDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const folio = await folioForReservation(ctx, args.reservationId);
+    if (!folio) throw new Error("No folio for that reservation");
+    const amt = Math.abs(Math.round(args.amount));
+    if (!amt) throw new Error("Amount must be greater than zero");
+    await ctx.db.insert("folio_lines", {
+      folioId: folio._id,
+      propertyId: folio.propertyId,
+      date: args.businessDate,
+      kind: args.kind ?? "fnb",
+      description: args.description,
+      amount: amt,
+      source: args.source,
+      postedAt: Date.now(),
+    });
+  },
+});
+
+/** Void a folio line (kept for the audit trail, excluded from the balance). */
+export const voidLine = mutation({
+  args: { lineId: v.id("folio_lines") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.lineId, { voided: true });
   },
 });

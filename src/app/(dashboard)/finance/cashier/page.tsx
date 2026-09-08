@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -14,13 +17,18 @@ const shiftDay = (iso: string, back: number) => {
   d.setUTCDate(d.getUTCDate() - back);
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 };
+const rp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
-const TXNS = [
-  { time: "14:22", guest: "Kadek Surya — RSV-8DZ7K6", ref: "Folio 204", method: "QRIS / e-wallet", amount: "Rp 1,240,000", voided: false },
-  { time: "13:05", guest: "Walk-in — spa treatment", ref: "Counter sale", method: "Cash", amount: "Rp 450,000", voided: false },
-  { time: "12:40", guest: "Emma Thompson — RSV-8DYNT2", ref: "Folio 301", method: "Credit/debit card", amount: "Rp 890,000", voided: false },
-  { time: "11:18", guest: "Michael Chen — RSV-8DZFQH", ref: "Folio 201", method: "Cash", amount: "Rp 620,000", voided: true },
-  { time: "09:52", guest: "City ledger — Accor Global", ref: "Group folio", method: "City ledger", amount: "Rp 3,100,000", voided: false },
+const OPENING_FLOAT = 2_000_000;
+const CASH_METHODS = new Set(["Cash"]);
+
+const METHODS = [
+  "Cash",
+  "Credit/debit card",
+  "QRIS / e-wallet",
+  "Bank transfer",
+  "City ledger",
+  "Voucher/gift card",
 ];
 
 const buildShiftLog = (businessDate: string) => [
@@ -31,15 +39,71 @@ const buildShiftLog = (businessDate: string) => [
 
 const DENOMS = ["100,000", "50,000", "20,000", "10,000", "5,000", "2,000", "1,000"];
 
-const TXN_GRID = "grid grid-cols-[0.7fr_1.4fr_1fr_0.9fr_0.6fr] gap-2.5 px-4";
+const TXN_GRID = "grid grid-cols-[0.7fr_1.6fr_1.1fr_0.9fr_0.6fr] gap-2.5 px-4";
 
 export default function CashierPage() {
   const { activeProperty } = useProperty();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const propArg = activeProperty ? { propertyId: activeProperty._id } : "skip";
+
+  const openFolios = useQuery(api.folios.listOpen, propArg);
+  const payments = useQuery(
+    api.folios.listLinesByKind,
+    activeProperty
+      ? { propertyId: activeProperty._id, kind: "payment" }
+      : "skip"
+  );
+  const recordPayment = useMutation(api.folios.recordPayment);
+  const voidLine = useMutation(api.folios.voidLine);
+
   const SHIFT_LOG = buildShiftLog(businessDate);
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("till");
   const [closeOpen, setCloseOpen] = useState(false);
+
+  const [resId, setResId] = useState<string>("");
+  const [amount, setAmount] = useState<string>("");
+  const [method, setMethod] = useState<string>("Cash");
+  const [busy, setBusy] = useState(false);
+
+  const todaysPayments = useMemo(
+    () => (payments ?? []).filter((p) => p.date === businessDate && !p.voided),
+    [payments, businessDate]
+  );
+  const cashCollected = useMemo(
+    () =>
+      todaysPayments
+        .filter((p) => CASH_METHODS.has(p.method ?? ""))
+        .reduce((s, p) => s - p.amount, 0),
+    [todaysPayments]
+  );
+  const totalCollected = useMemo(
+    () => todaysPayments.reduce((s, p) => s - p.amount, 0),
+    [todaysPayments]
+  );
+
+  const submitPayment = async () => {
+    const amt = Number(amount.replace(/[^\d]/g, ""));
+    if (!resId || !amt) {
+      toast("Pick a folio and enter an amount", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      await recordPayment({
+        reservationId: resId as Id<"reservations">,
+        amount: amt,
+        method,
+        businessDate,
+      });
+      toast(`${rp(amt)} recorded — ${method}`, "success");
+      setAmount("");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not record payment", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-content">
@@ -55,9 +119,13 @@ export default function CashierPage() {
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           { label: "Shift status", value: "Open", tone: "cyan" },
-          { label: "Opening float", value: "Rp 2,000,000", tone: "" },
-          { label: "Cash collected", value: "Rp 1,520,000", tone: "" },
-          { label: "Expected in drawer", value: "Rp 3,520,000", tone: "" },
+          { label: "Opening float", value: rp(OPENING_FLOAT), tone: "" },
+          { label: "Cash collected", value: rp(cashCollected), tone: "" },
+          {
+            label: "Expected in drawer",
+            value: rp(OPENING_FLOAT + cashCollected),
+            tone: "",
+          },
         ].map((m) => (
           <Card key={m.label} className="p-3.5">
             <div className="text-[11px] text-fg-3">{m.label}</div>
@@ -99,37 +167,55 @@ export default function CashierPage() {
           <Card className="p-[18px]">
             <Eyebrow className="mb-3">Take payment</Eyebrow>
             <div className="flex flex-col gap-2">
-              <select className="rounded-sm border border-line bg-deep px-2.5 py-2.5 text-[12.5px] text-fg-2">
+              <select
+                value={resId}
+                onChange={(e) => setResId(e.target.value)}
+                className="rounded-sm border border-line bg-deep px-2.5 py-2.5 text-[12.5px] text-fg-2"
+              >
                 <option value="">Select folio / reservation…</option>
-                <option>Folio 204 · Kadek Surya</option>
-                <option>Folio 301 · Emma Thompson</option>
-                <option>Walk-in / other</option>
+                {(openFolios ?? []).map((f) => (
+                  <option key={f.folioId} value={f.reservationId}>
+                    {f.roomNumber ? `Room ${f.roomNumber}` : "Unassigned"} ·{" "}
+                    {f.guestName} · bal {f.balanceLabel}
+                  </option>
+                ))}
               </select>
               <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
                 placeholder="Amount (IDR)"
-                className="rounded-sm border border-line bg-deep px-2.5 py-2.5 font-mono text-[12.5px] text-fg-1 outline-none"
+                inputMode="numeric"
+                className="rounded-sm border border-line bg-deep px-2.5 py-2.5 font-mono text-[12.5px] text-fg-1 outline-none focus:border-accent-violet"
               />
-              <select className="rounded-sm border border-line bg-deep px-2.5 py-2.5 text-[12.5px] text-fg-2">
-                <option>Cash</option>
-                <option>Credit/debit card</option>
-                <option>QRIS / e-wallet</option>
-                <option>Bank transfer</option>
-                <option>City ledger</option>
-                <option>Voucher/gift card</option>
+              <select
+                value={method}
+                onChange={(e) => setMethod(e.target.value)}
+                className="rounded-sm border border-line bg-deep px-2.5 py-2.5 text-[12.5px] text-fg-2"
+              >
+                {METHODS.map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
               </select>
               <button
-                onClick={() => toast("Payment recorded to the drawer", "success")}
-                className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+                disabled={busy}
+                onClick={submitPayment}
+                className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
               >
-                Record payment
+                {busy ? "Recording…" : "Record payment"}
               </button>
+              {openFolios && openFolios.length === 0 && (
+                <div className="text-[11px] text-fg-3">
+                  No open folios. Check a guest in to open one.
+                </div>
+              )}
             </div>
           </Card>
 
           <div className="flex flex-col gap-2.5">
             <Card className="p-4">
               <div className="mb-2.5 text-[12.5px] text-fg-2">
-                Opened by Amira K. at 07:02.
+                Opened by Amira K. at 07:02 · {rp(totalCollected)} collected this
+                shift.
               </div>
               <button
                 onClick={() => setCloseOpen((v) => !v)}
@@ -152,12 +238,10 @@ export default function CashierPage() {
                   </div>
                 ))}
                 <div className="mt-2.5 flex justify-between border-t border-line-soft pt-2.5 text-[12.5px]">
-                  <span>Counted total</span>
-                  <span className="font-mono font-bold">Rp 3,495,000</span>
-                </div>
-                <div className="mt-1 flex justify-between text-[12.5px]">
-                  <span>Variance</span>
-                  <span className="font-mono font-bold text-res-tentative">− Rp 25,000</span>
+                  <span>Expected total</span>
+                  <span className="font-mono font-bold">
+                    {rp(OPENING_FLOAT + cashCollected)}
+                  </span>
                 </div>
                 <button
                   onClick={() => {
@@ -178,34 +262,47 @@ export default function CashierPage() {
         <Card className="overflow-x-auto p-0">
           <div className="min-w-[720px]">
             <div className={`${TXN_GRID} border-b border-line py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3`}>
-              <div>Time</div>
+              <div>Date</div>
               <div>Guest / reference</div>
               <div>Method</div>
               <div>Amount</div>
               <div />
             </div>
-            {TXNS.map((t) => (
+            {payments === undefined && (
+              <div className="px-4 py-6 text-13 text-fg-3">Loading…</div>
+            )}
+            {payments && payments.length === 0 && (
+              <div className="px-4 py-6 text-13 text-fg-3">
+                No payments recorded yet.
+              </div>
+            )}
+            {(payments ?? []).map((t) => (
               <div
-                key={t.time + t.guest}
+                key={t._id}
                 className={`${TXN_GRID} items-center border-b border-line-soft py-3 text-13 last:border-0`}
               >
-                <div className="font-mono text-12 text-fg-3">{t.time}</div>
+                <div className="font-mono text-12 text-fg-3">{t.date}</div>
                 <div>
                   <div className={`font-semibold ${t.voided ? "text-fg-3 line-through" : ""}`}>
-                    {t.guest}
+                    {t.guestName}
                   </div>
-                  <div className="text-[11px] text-fg-3">{t.ref}</div>
+                  <div className="text-[11px] text-fg-3">
+                    {t.roomNumber ? `Room ${t.roomNumber}` : "—"}
+                  </div>
                 </div>
-                <div className="text-12 text-fg-3">{t.method}</div>
+                <div className="text-12 text-fg-3">{t.method ?? "—"}</div>
                 <div className={`font-mono ${t.voided ? "text-fg-3 line-through" : ""}`}>
-                  {t.amount}
+                  {rp(-t.amount)}
                 </div>
                 <div>
                   {t.voided ? (
                     <span className="text-[11px] font-semibold text-room-ooo">Voided</span>
                   ) : (
                     <button
-                      onClick={() => toast(`Voided ${t.amount} — ${t.ref}`)}
+                      onClick={async () => {
+                        await voidLine({ lineId: t._id });
+                        toast(`Voided ${rp(-t.amount)} — ${t.guestName}`);
+                      }}
                       className="rounded-sm border border-line px-2 py-1 text-[11px] text-fg-3 hover:text-ice"
                     >
                       Void

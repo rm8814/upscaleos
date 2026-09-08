@@ -1,11 +1,17 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { AlertTriangle, FileSpreadsheet, ExternalLink } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { downloadCsv } from "@/lib/csv";
+
+const rp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
 const OUTLETS = [
   { name: "Ombak Restaurant", type: "All-day dining", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 14,200,000", postings: 62, sync: "2m ago" },
@@ -41,13 +47,6 @@ const STAFF = [
   { name: "Komang A.", outlet: "Cliff Bar", sales: "Rp 5,100,000" },
   { name: "Luh D.", outlet: "Spa Samudra", sales: "Rp 4,400,000" },
 ];
-const POSTINGS = [
-  { time: "14:22", outlet: "Ombak Restaurant", room: "204", guest: "Kadek Surya", amount: "Rp 380,000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "13:58", outlet: "Cliff Bar", room: "301", guest: "Emma Thompson", amount: "Rp 240,000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "13:10", outlet: "Spa Samudra", room: "118", guest: "Sarah Wijaya", amount: "Rp 700,000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "12:41", outlet: "Ombak Restaurant", room: "—", guest: "Walk-in", amount: "Rp 380,000", recon: "Unmatched", color: "var(--res-tentative)" },
-];
-
 function Bars({ rows, color }: { rows: { label: string; pct: string; amount: string }[]; color: string }) {
   return (
     <>
@@ -66,8 +65,53 @@ function Bars({ rows, color }: { rows: { label: string; pct: string; amount: str
 
 export default function PosDashboardPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const max = Math.max(...HOURS);
+
+  const openFolios = useQuery(
+    api.folios.listOpen,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
+  const fnbLines = useQuery(
+    api.folios.listLinesByKind,
+    activeProperty
+      ? { propertyId: activeProperty._id, kind: "fnb" }
+      : "skip"
+  );
+  const postCharge = useMutation(api.folios.postCharge);
+
+  const [outlet, setOutlet] = useState(OUTLETS[0].name);
+  const [resId, setResId] = useState("");
+  const [amt, setAmt] = useState("");
+  const [item, setItem] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const charge = async () => {
+    const n = Number(amt.replace(/[^\d]/g, ""));
+    if (!resId || !n) {
+      toast("Pick a room folio and enter an amount", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      await postCharge({
+        reservationId: resId as Id<"reservations">,
+        amount: n,
+        kind: "fnb",
+        description: `${outlet}${item ? ` — ${item}` : ""}`,
+        source: outlet,
+        businessDate,
+      });
+      toast(`${rp(n)} charged to room — ${outlet}`, "success");
+      setAmt("");
+      setItem("");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not post charge", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-content">
@@ -119,6 +163,58 @@ export default function PosDashboardPage() {
           </div>
         ))}
       </div>
+
+      <Card className="mb-5 p-4">
+        <Eyebrow className="mb-2.5">Charge to room</Eyebrow>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1.2fr_1.4fr_1fr_1fr_auto]">
+          <select
+            value={outlet}
+            onChange={(e) => setOutlet(e.target.value)}
+            className="rounded-sm border border-line bg-deep px-2.5 py-2 text-[12.5px] text-fg-2"
+          >
+            {OUTLETS.map((o) => (
+              <option key={o.name}>{o.name}</option>
+            ))}
+          </select>
+          <select
+            value={resId}
+            onChange={(e) => setResId(e.target.value)}
+            className="rounded-sm border border-line bg-deep px-2.5 py-2 text-[12.5px] text-fg-2"
+          >
+            <option value="">Select room folio…</option>
+            {(openFolios ?? []).map((f) => (
+              <option key={f.folioId} value={f.reservationId}>
+                {f.roomNumber ? `Room ${f.roomNumber}` : "Unassigned"} · {f.guestName}
+              </option>
+            ))}
+          </select>
+          <input
+            value={item}
+            onChange={(e) => setItem(e.target.value)}
+            placeholder="Item (optional)"
+            className="rounded-sm border border-line bg-deep px-2.5 py-2 text-[12.5px] text-fg-1 outline-none focus:border-accent-violet"
+          />
+          <input
+            value={amt}
+            onChange={(e) => setAmt(e.target.value)}
+            placeholder="Amount (IDR)"
+            inputMode="numeric"
+            className="rounded-sm border border-line bg-deep px-2.5 py-2 font-mono text-[12.5px] text-fg-1 outline-none focus:border-accent-violet"
+          />
+          <button
+            disabled={busy}
+            onClick={charge}
+            className="rounded-sm bg-accent-violet px-4 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+          >
+            {busy ? "Posting…" : "Post"}
+          </button>
+        </div>
+        {openFolios && openFolios.length === 0 && (
+          <div className="mt-2 text-[11px] text-fg-3">
+            No open folios to charge — check a guest in first.
+          </div>
+        )}
+      </Card>
 
       <Eyebrow className="mb-2.5">Connected outlets</Eyebrow>
       <div className="mb-5 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -204,26 +300,39 @@ export default function PosDashboardPage() {
       <Eyebrow className="mb-2.5">Recent postings to folio</Eyebrow>
       <Card className="overflow-x-auto p-0">
         <div className="min-w-[760px]">
-          <div className="grid grid-cols-[0.7fr_1.4fr_0.8fr_1.4fr_1fr_0.9fr] border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3">
-            <div>Time</div>
+          <div className="grid grid-cols-[0.9fr_1.4fr_0.8fr_1.4fr_1fr_0.9fr] border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3">
+            <div>Date</div>
             <div>Outlet</div>
             <div>Room</div>
             <div>Guest</div>
             <div>Amount</div>
             <div>Folio</div>
           </div>
-          {POSTINGS.map((p, i) => (
+          {fnbLines === undefined && (
+            <div className="px-4 py-6 text-13 text-fg-3">Loading…</div>
+          )}
+          {fnbLines && fnbLines.length === 0 && (
+            <div className="px-4 py-6 text-13 text-fg-3">
+              No room charges posted yet — use “Charge to room” above.
+            </div>
+          )}
+          {(fnbLines ?? []).map((p) => (
             <div
-              key={i}
-              className="grid grid-cols-[0.7fr_1.4fr_0.8fr_1.4fr_1fr_0.9fr] items-center border-b border-line-soft px-4 py-2.5 text-13 last:border-0"
+              key={p._id}
+              className="grid grid-cols-[0.9fr_1.4fr_0.8fr_1.4fr_1fr_0.9fr] items-center border-b border-line-soft px-4 py-2.5 text-13 last:border-0"
             >
-              <div className="font-mono text-fg-3">{p.time}</div>
-              <div>{p.outlet}</div>
-              <div className="font-mono">{p.room}</div>
-              <div className="text-fg-2">{p.guest}</div>
-              <div className="font-mono">{p.amount}</div>
-              <div className="text-[11.5px]" style={{ color: p.color }}>
-                {p.recon}
+              <div className="font-mono text-fg-3">{p.date}</div>
+              <div>{p.source ?? p.description}</div>
+              <div className="font-mono">{p.roomNumber ?? "—"}</div>
+              <div className="text-fg-2">{p.guestName}</div>
+              <div className={`font-mono ${p.voided ? "text-fg-3 line-through" : ""}`}>
+                {p.amountLabel}
+              </div>
+              <div
+                className="text-[11.5px]"
+                style={{ color: p.voided ? "var(--room-ooo)" : "var(--accent-cyan)" }}
+              >
+                {p.voided ? "Voided" : "Posted"}
               </div>
             </div>
           ))}

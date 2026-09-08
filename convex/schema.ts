@@ -118,6 +118,10 @@ export default defineSchema({
     kind: v.string(), // 'room' | 'tax' | 'service' | 'fnb' | 'payment' | 'adjustment'
     description: v.string(),
     amount: v.number(), // positive = charge, negative = payment / credit
+    method: v.optional(v.string()), // payment method, for 'payment' lines
+    source: v.optional(v.string()), // posting origin, e.g. a POS outlet name
+    voided: v.optional(v.boolean()),
+    postedAt: v.optional(v.number()), // wall-clock ms, for same-day ordering
   })
     .index("by_folio", ["folioId"])
     .index("by_property", ["propertyId"]),

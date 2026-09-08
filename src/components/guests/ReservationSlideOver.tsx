@@ -222,12 +222,20 @@ export default function ReservationSlideOver({
                     key={l._id}
                     className="flex items-baseline justify-between gap-3 text-12"
                   >
-                    <span className="min-w-0 flex-1 truncate text-fg-2">
+                    <span
+                      className={`min-w-0 flex-1 truncate text-fg-2 ${
+                        l.voided ? "line-through opacity-60" : ""
+                      }`}
+                    >
                       {l.description}
                     </span>
                     <span
                       className={`font-mono ${
-                        l.raw < 0 ? "text-accent-cyan" : "text-fg-1"
+                        l.voided
+                          ? "text-fg-3 line-through"
+                          : l.raw < 0
+                            ? "text-accent-cyan"
+                            : "text-fg-1"
                       }`}
                     >
                       {l.amount}

@@ -3,6 +3,7 @@ import "./globals.css";
 import { ConvexClientProvider } from "@/components/providers/ConvexClientProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { PropertyProvider } from "@/components/providers/PropertyProvider";
+import { ToastProvider } from "@/components/providers/ToastProvider";
 
 export const metadata: Metadata = {
   title: "Upscale OS | Hotel Management System",
@@ -20,7 +21,7 @@ export default function RootLayout({
         <AuthProvider>
           <PropertyProvider>
             <ConvexClientProvider>
-              {children}
+              <ToastProvider>{children}</ToastProvider>
             </ConvexClientProvider>
           </PropertyProvider>
         </AuthProvider>

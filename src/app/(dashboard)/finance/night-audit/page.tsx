@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useCurrentMember } from "@/components/providers/useCurrentMember";
 import { useAccount } from "@/components/providers/useAccount";
+import { roleLabel } from "@/lib/roles";
 import {
   AlertTriangle,
   Check,
@@ -48,13 +49,6 @@ const dayLabel = (iso: string) => {
   const d = new Date(iso + "T00:00:00Z");
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 };
-/** Prior closes, newest first, anchored to the current business date. */
-const buildHistory = (businessDate: string) => [
-  { date: `${dayLabel(addDaysIso(businessDate, -1))} 03:12`, summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
-  { date: `${dayLabel(addDaysIso(businessDate, -2))} 03:08`, summary: "Audit complete — 1 exception resolved", status: "OK", color: "var(--accent-cyan)" },
-  { date: `${dayLabel(addDaysIso(businessDate, -3))} 03:44`, summary: "Manual re-run after POS outage", status: "Recovered", color: "var(--res-tentative)" },
-  { date: `${dayLabel(addDaysIso(businessDate, -4))} 03:05`, summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
-];
 const PROPERTY_STATUS = [
   { name: "Grand Samudra Bali", status: "In progress", color: "var(--res-tentative)" },
   { name: "Samudra Ubud (sister)", status: "Complete", color: "var(--accent-cyan)" },
@@ -84,11 +78,20 @@ export default function NightAuditPage() {
     to: string;
     days: number;
     roomsAssigned: number;
+    balanced?: boolean;
+    outOfBalance?: { date: string; variance: number }[];
   } | null>(null);
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
-  const HISTORY = buildHistory(businessDate);
-  const lastAuditLabel = `${dayLabel(addDaysIso(businessDate, -1))}, 03:12`;
+  const stats = useQuery(
+    api.history.dailyStats,
+    activeProperty ? { propertyId: activeProperty._id, limit: 30 } : "skip"
+  );
+  const lastClose = stats?.[0];
+  const lastAuditLabel = lastClose
+    ? `${dayLabel(lastClose.date)}, ${new Date(lastClose.closedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "—";
+  const roomRevenuePosted = lastClose?.roomRevenueLabel ?? "—";
   const autoAudit = !!activeProperty?.autoNightAudit;
   const auditTime = activeProperty?.nightAuditTime ?? "03:00";
 
@@ -186,6 +189,12 @@ export default function NightAuditPage() {
                       result.roomsAssigned === 1 ? "" : "s"
                     } auto-assigned`
                   : ""
+              }${
+                result.balanced === false
+                  ? " · ⚠ trial balance off"
+                  : result.balanced
+                    ? " · trial balance OK"
+                    : ""
               }`
             : `${doneCount} of ${STEPS.length} steps complete`}
         </div>
@@ -216,19 +225,27 @@ export default function NightAuditPage() {
         </div>
       )}
 
-      {member !== undefined && (
-        canRun ? (
+      {member !== undefined &&
+        (canRun ? (
           <div className="mb-3.5 rounded-md border border-line bg-elevated p-3 text-[12.5px] text-fg-2">
-            Signed in as <span className="text-ice">{role}</span> — you have permission to run
-            the night audit.
+            You have permission to run the night audit
+            {role ? (
+              <>
+                {" "}as <span className="text-ice">{roleLabel(role)}</span>
+              </>
+            ) : accountRole ? (
+              <>
+                {" "}as <span className="text-ice">account {accountRole}</span>
+              </>
+            ) : null}
+            .
           </div>
         ) : (
           <div className="mb-3.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
-            Only a Night auditor or General Manager can run this audit. You are signed in as{" "}
-            {role ?? "a user with no role on this property"} — contact a manager to execute.
+            Only a night auditor or GM (or an account owner/admin) can run this
+            audit. Contact a manager to execute.
           </div>
-        )
-      )}
+        ))}
 
       <div className="mb-3.5 flex flex-col gap-2 rounded-lg border border-res-tentative bg-elevated p-3.5">
         <Eyebrow>Pre-audit warnings</Eyebrow>
@@ -317,7 +334,7 @@ export default function NightAuditPage() {
 
       <div className="mb-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
         {[
-          { label: "Room revenue posted", value: "Rp 42,600,000", tone: "" },
+          { label: "Room revenue (last close)", value: roomRevenuePosted, tone: "" },
           { label: "Exceptions flagged", value: String(EXCEPTIONS.filter((e, i) => !e.resolved && !resolved.has(i)).length), tone: "rose" },
           { label: "Last successful audit", value: lastAuditLabel, tone: "" },
         ].map((m) => (
@@ -338,15 +355,32 @@ export default function NightAuditPage() {
         <div>
           <Eyebrow className="mb-2.5">Run history</Eyebrow>
           <Card className="overflow-hidden p-0">
-            {HISTORY.map((h) => (
+            {stats === undefined && (
+              <div className="px-4 py-4 text-13 text-fg-3">Loading…</div>
+            )}
+            {stats && stats.length === 0 && (
+              <div className="px-4 py-4 text-13 text-fg-3">
+                No closed business dates yet — run the audit to write the first.
+              </div>
+            )}
+            {(stats ?? []).map((h) => (
               <div
                 key={h.date}
                 className="flex items-center gap-3 border-b border-line-soft px-4 py-2.5 text-[12.5px] last:border-0"
               >
-                <div className="w-[110px] font-mono text-fg-3">{h.date}</div>
-                <div className="flex-1">{h.summary}</div>
-                <span className="text-[11px]" style={{ color: h.color }}>
-                  {h.status}
+                <div className="w-[74px] font-mono text-fg-3">{dayLabel(h.date)}</div>
+                <div className="flex-1">
+                  {h.roomsSold} sold · {h.occupancyPct}% · ADR {h.adrLabel}
+                </div>
+                <span
+                  className="text-[11px]"
+                  style={{
+                    color: h.balanced
+                      ? "var(--accent-cyan)"
+                      : "var(--room-ooo)",
+                  }}
+                >
+                  {h.balanced ? "Balanced" : `Off ${h.varianceLabel}`}
                 </span>
               </div>
             ))}

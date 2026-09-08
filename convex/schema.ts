@@ -217,4 +217,36 @@ export default defineSchema({
     blocked: v.number(),
     rate: v.string(),
   }).index("by_group", ["groupId"]),
+
+  // ---- history: one immutable row per property per closed business date ----
+  daily_stats: defineTable({
+    propertyId: v.id("properties"),
+    date: v.string(), // the business date that just closed
+    roomsSold: v.number(), // occupied room-nights
+    availableRooms: v.number(), // sellable rooms (not OOO/OOS) that night
+    oooRooms: v.number(),
+    roomRevenue: v.number(), // expected room revenue for the night
+    postedRoomRevenue: v.number(), // room lines actually on folios for the night
+    variance: v.number(), // roomRevenue - postedRoomRevenue
+    balanced: v.boolean(), // variance === 0
+    adr: v.number(),
+    revpar: v.number(),
+    occupancyPct: v.number(),
+    arrivals: v.number(),
+    departures: v.number(),
+    closedAt: v.number(), // wall-clock ms the audit wrote this row
+  })
+    .index("by_property", ["propertyId", "date"])
+    .index("by_date", ["date"]),
+
+  // ---- pace / booking curve: rooms & revenue on the books as of a date ----
+  pickup_snapshots: defineTable({
+    propertyId: v.id("properties"),
+    asOf: v.string(), // business date the snapshot was taken (post night audit)
+    forDate: v.string(), // a future stay date
+    roomsOnBooks: v.number(),
+    revenueOnBooks: v.number(),
+  })
+    .index("by_property_asof", ["propertyId", "asOf"])
+    .index("by_property_target", ["propertyId", "forDate", "asOf"]),
 });

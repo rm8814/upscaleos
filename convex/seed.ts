@@ -1,4 +1,5 @@
 import { internalMutation } from "./_generated/server";
+import { nightlyRateFor } from "./revenue";
 
 /**
  * Wipes and reseeds the demo property. Idempotent — safe to run repeatedly.
@@ -34,6 +35,8 @@ export const seed = internalMutation({
       "folios",
       "group_subblocks",
       "group_blocks",
+      "daily_stats",
+      "pickup_snapshots",
       "waitlist",
       "reservations",
       "rooms",
@@ -318,53 +321,7 @@ export const seed = internalMutation({
         etaLabel: status === "confirmed" ? `${12 + (i % 8)}:${(i * 13) % 60 < 10 ? "0" : ""}${(i * 13) % 60}` : undefined,
       });
 
-      // In-house / departed reservations already have an open (or closed) folio
-      // with the stay's nights posted.
-      if ((status === "inhouse" || status === "departed") && !roomless) {
-        const businessDate = iso(TODAY);
-        const lastNight =
-          status === "departed"
-            ? iso(addDays(checkOut, -1))
-            : iso(
-                addDays(
-                  checkIn,
-                  Math.min(
-                    nights - 1,
-                    Math.round((TODAY.getTime() - checkIn.getTime()) / 86400000)
-                  )
-                )
-              );
-        const folioId = await ctx.db.insert("folios", {
-          propertyId,
-          reservationId: resId,
-          guestId: guestIds[i],
-          status: status === "departed" ? "closed" : "open",
-          openedOn: iso(checkIn),
-          closedOn: status === "departed" ? iso(checkOut) : undefined,
-        });
-        for (
-          let d = iso(checkIn);
-          d <= lastNight && d <= businessDate;
-          d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
-        ) {
-          await ctx.db.insert("folio_lines", {
-            folioId,
-            propertyId,
-            date: d,
-            kind: "room",
-            description: `Room — ${room.type} · night of ${d}`,
-            amount: rupiah,
-          });
-          await ctx.db.insert("folio_lines", {
-            folioId,
-            propertyId,
-            date: d,
-            kind: "tax",
-            description: "Service + government tax (21%)",
-            amount: Math.round(rupiah * 0.21),
-          });
-        }
-      }
+      void resId;
     }
 
     // ---- group blocks + rooming lists -----------------------------
@@ -538,6 +495,54 @@ export const seed = internalMutation({
           adults: 1,
           children: 0,
           groupId,
+        });
+      }
+    }
+
+    // ---- folios: every in-house / departed reservation with a room --
+    // gets an open (or closed) folio with its nights posted at the rack
+    // rate, so the night-audit trial balance reconciles to zero.
+    const businessDateIso = iso(TODAY);
+    const allRes = await ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect();
+    for (const r of allRes) {
+      if (r.status !== "inhouse" && r.status !== "departed") continue;
+      if (!r.roomId || !r.roomType) continue;
+      const departed = r.status === "departed";
+      const lastNight = iso(
+        addDays(new Date(r.checkOut + "T00:00:00Z"), -1)
+      );
+      const folioId = await ctx.db.insert("folios", {
+        propertyId,
+        reservationId: r._id,
+        guestId: r.guestId,
+        status: departed ? "closed" : "open",
+        openedOn: r.checkIn,
+        closedOn: departed ? r.checkOut : undefined,
+      });
+      for (
+        let d = r.checkIn;
+        d <= lastNight && d <= businessDateIso;
+        d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
+      ) {
+        const roomRate = nightlyRateFor(r.roomType, d);
+        await ctx.db.insert("folio_lines", {
+          folioId,
+          propertyId,
+          date: d,
+          kind: "room",
+          description: `Room — ${r.roomType} · night of ${d}`,
+          amount: roomRate,
+        });
+        await ctx.db.insert("folio_lines", {
+          folioId,
+          propertyId,
+          date: d,
+          kind: "tax",
+          description: "Service + government tax (21%)",
+          amount: Math.round(roomRate * 0.21),
         });
       }
     }

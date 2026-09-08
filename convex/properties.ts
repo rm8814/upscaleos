@@ -4,7 +4,128 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
+import { nightlyRateFor } from "./revenue";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
+
+const PICKUP_HORIZON_DAYS = 45;
+const addIso = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Night-audit statistics: write one immutable `daily_stats` row for the night
+ * that just closed and a `pickup_snapshots` fan-out for the booking curve.
+ * Includes a trial-balance check — expected room revenue (from the in-house
+ * reservations) vs. what actually posted to folios that night.
+ */
+async function writeNightStats(
+  ctx: MutationCtx,
+  propertyId: Id<"properties">,
+  closedDate: string,
+  newDate: string
+) {
+  const [rooms, reservations, folioLines] = await Promise.all([
+    ctx.db
+      .query("rooms")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+    ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+    ctx.db
+      .query("folio_lines")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+  ]);
+
+  const availableRooms = rooms.filter(
+    (r) => r.status !== "OOO" && r.status !== "OOS"
+  ).length;
+  const oooRooms = rooms.filter((r) => r.status === "OOO").length;
+
+  const soldThatNight = reservations.filter(
+    (r) =>
+      r.status !== "cancelled" &&
+      r.roomId && // an unassigned booking never occupied a billable room
+      r.checkIn <= closedDate &&
+      r.checkOut > closedDate
+  );
+  const roomsSold = soldThatNight.length;
+  const roomRevenue = soldThatNight.reduce(
+    (s, r) => s + nightlyRateFor(r.roomType ?? "", closedDate),
+    0
+  );
+  const postedRoomRevenue = folioLines
+    .filter((l) => l.kind === "room" && l.date === closedDate && !l.voided)
+    .reduce((s, l) => s + l.amount, 0);
+  const variance = roomRevenue - postedRoomRevenue;
+
+  const stat = {
+    propertyId,
+    date: closedDate,
+    roomsSold,
+    availableRooms,
+    oooRooms,
+    roomRevenue,
+    postedRoomRevenue,
+    variance,
+    balanced: variance === 0,
+    adr: roomsSold ? Math.round(roomRevenue / roomsSold) : 0,
+    revpar: availableRooms ? Math.round(roomRevenue / availableRooms) : 0,
+    occupancyPct: availableRooms
+      ? Math.round((roomsSold / availableRooms) * 100)
+      : 0,
+    arrivals: reservations.filter((r) => r.checkIn === closedDate).length,
+    departures: reservations.filter((r) => r.checkOut === newDate).length,
+    closedAt: Date.now(),
+  };
+
+  const existing = (
+    await ctx.db
+      .query("daily_stats")
+      .withIndex("by_property", (q) =>
+        q.eq("propertyId", propertyId).eq("date", closedDate)
+      )
+      .collect()
+  )[0];
+  if (existing) await ctx.db.patch(existing._id, stat);
+  else await ctx.db.insert("daily_stats", stat);
+
+  // Booking-curve snapshot: rooms & revenue on the books as of the new date.
+  const onBooks = reservations.filter(
+    (r) => r.status === "confirmed" || r.status === "tentative" || r.status === "inhouse"
+  );
+  const priorSnaps = await ctx.db
+    .query("pickup_snapshots")
+    .withIndex("by_property_asof", (q) =>
+      q.eq("propertyId", propertyId).eq("asOf", newDate)
+    )
+    .collect();
+  const priorByDate = new Map(priorSnaps.map((s) => [s.forDate, s._id]));
+
+  for (let i = 0; i < PICKUP_HORIZON_DAYS; i++) {
+    const forDate = addIso(newDate, i);
+    const staying = onBooks.filter(
+      (r) => r.checkIn <= forDate && r.checkOut > forDate
+    );
+    const row = {
+      propertyId,
+      asOf: newDate,
+      forDate,
+      roomsOnBooks: staying.length,
+      revenueOnBooks: staying.reduce(
+        (s, r) => s + nightlyRateFor(r.roomType ?? "", forDate),
+        0
+      ),
+    };
+    const id = priorByDate.get(forDate);
+    if (id) await ctx.db.patch(id, row);
+    else await ctx.db.insert("pickup_snapshots", row);
+  }
+}
 
 const policyValidator = v.object({
   cancellation: v.string(),
@@ -215,6 +336,8 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     }
   }
 
+  await writeNightStats(ctx, id, oldDate, newDate);
+
   return { businessDate: newDate, previous: oldDate };
 }
 
@@ -281,7 +404,24 @@ export const rollBusinessDate = mutation({
       ? (await assignPropertyRooms(ctx, args.id)).assigned
       : 0;
 
-    return { ...rolled, roomsAssigned };
+    // Trial balance: were all the nights just closed fully posted to folios?
+    const closed = await ctx.db
+      .query("daily_stats")
+      .withIndex("by_property", (q) =>
+        q.eq("propertyId", args.id).gte("date", rolled.from)
+      )
+      .collect();
+    const outOfBalance = closed.filter((s) => s.date < rolled.to && !s.balanced);
+
+    return {
+      ...rolled,
+      roomsAssigned,
+      balanced: outOfBalance.length === 0,
+      outOfBalance: outOfBalance.map((s) => ({
+        date: s.date,
+        variance: s.variance,
+      })),
+    };
   },
 });
 

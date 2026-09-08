@@ -16,6 +16,7 @@ import type * as crons from "../crons.js";
 import type * as folios from "../folios.js";
 import type * as groups from "../groups.js";
 import type * as guests from "../guests.js";
+import type * as history from "../history.js";
 import type * as http from "../http.js";
 import type * as maintenance from "../maintenance.js";
 import type * as operate from "../operate.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   folios: typeof folios;
   groups: typeof groups;
   guests: typeof guests;
+  history: typeof history;
   http: typeof http;
   maintenance: typeof maintenance;
   operate: typeof operate;

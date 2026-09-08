@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { reservationActions } from "@/lib/resStatus";
 import PmsDateChip from "@/components/common/PmsDateChip";
 import { ChevronRight, ChevronDown, X, LogIn, Move, XCircle, Zap } from "lucide-react";
 import {
@@ -810,18 +811,38 @@ export default function CalendarTapeChart() {
               style={{ left: ctxMenu.x, top: ctxMenu.y }}
             >
               <div className="px-2 py-1.5 text-[11px] text-fg-3">{ctxRes.guestName}</div>
-              <button
-                onClick={async () => {
-                  await setStatus({
-                    id: ctxMenu.resId as Id<"reservations">,
-                    status: "inhouse",
-                  });
-                  setCtxMenu(null);
-                }}
-                className="flex items-center gap-2 rounded-sm p-2 text-left text-[12.5px] text-fg-1 hover:bg-deep"
-              >
-                <LogIn className="h-3.5 w-3.5" /> Check in
-              </button>
+              {reservationActions(ctxRes.status, ctxRes.checkIn, todayIso).actions.map(
+                (a) => (
+                  <button
+                    key={a.label}
+                    onClick={async () => {
+                      setCtxMenu(null);
+                      await setStatus({
+                        id: ctxMenu.resId as Id<"reservations">,
+                        status: a.next,
+                      });
+                      toast(
+                        a.tone === "danger"
+                          ? `${ctxRes.guestName} — ${a.label.toLowerCase()}`
+                          : `${ctxRes.guestName} — ${
+                              RES_STATUS_LABEL[a.next] ?? a.next
+                            }`,
+                        a.tone === "danger" ? "error" : "success"
+                      );
+                    }}
+                    className={`flex items-center gap-2 rounded-sm p-2 text-left text-[12.5px] hover:bg-deep ${
+                      a.tone === "danger" ? "text-room-ooo" : "text-fg-1"
+                    }`}
+                  >
+                    {a.tone === "danger" ? (
+                      <XCircle className="h-3.5 w-3.5" />
+                    ) : (
+                      <LogIn className="h-3.5 w-3.5" />
+                    )}
+                    {a.label}
+                  </button>
+                )
+              )}
               <button
                 onClick={() => {
                   setCtxMenu(null);
@@ -830,18 +851,6 @@ export default function CalendarTapeChart() {
                 className="flex items-center gap-2 rounded-sm p-2 text-left text-[12.5px] text-fg-1 hover:bg-deep"
               >
                 <Move className="h-3.5 w-3.5" /> Move reservation
-              </button>
-              <button
-                onClick={async () => {
-                  await setStatus({
-                    id: ctxMenu.resId as Id<"reservations">,
-                    status: "cancelled",
-                  });
-                  setCtxMenu(null);
-                }}
-                className="flex items-center gap-2 rounded-sm p-2 text-left text-[12.5px] text-room-ooo hover:bg-deep"
-              >
-                <XCircle className="h-3.5 w-3.5" /> Cancel reservation
               </button>
             </div>
           </>,

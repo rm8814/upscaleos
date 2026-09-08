@@ -284,11 +284,17 @@ function ReservationListInner() {
               <div className="font-mono text-[11.5px] font-semibold">{r.totalAmount}</div>
               <div>
                 <span className="rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
-                  {r.status === "confirmed"
-                    ? "Check in"
-                    : r.status === "inhouse"
-                      ? "Check out"
-                      : "View"}
+                  {r.status === "tentative"
+                    ? "Confirm"
+                    : r.status === "confirmed"
+                      ? r.checkIn <= TODAY
+                        ? "Check in"
+                        : "View"
+                      : r.status === "inhouse"
+                        ? "Check out"
+                        : r.status === "cancelled"
+                          ? "Reinstate"
+                          : "View"}
                 </span>
               </div>
             </button>

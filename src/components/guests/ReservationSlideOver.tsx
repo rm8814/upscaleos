@@ -8,6 +8,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { X, Calendar, MapPin, CreditCard, User, Star } from "lucide-react";
 import GuestTimeline from "@/components/guests/GuestTimeline";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import { reservationActions, type ResAction } from "@/lib/resStatus";
 import {
   Eyebrow,
   RES_STATUS_COLOR,
@@ -64,19 +66,26 @@ export default function ReservationSlideOver({
   const statusColor = RES_STATUS_COLOR[res.status] ?? "var(--fg-2)";
   const setStatus = useMutation(api.reservations.setStatus);
   const toast = useToast();
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
 
-  const STATUS_CYCLE = ["tentative", "confirmed", "inhouse", "departed"];
-  const cycleStatus = async () => {
-    const i = STATUS_CYCLE.indexOf(res.status);
-    const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
-    await setStatus({ id: res._id as Id<"reservations">, status: next });
-    toast(`Status → ${RES_STATUS_LABEL[next] ?? next}`, "success");
-  };
-  const primaryAction = async () => {
-    const next = res.status === "inhouse" ? "departed" : "inhouse";
-    await setStatus({ id: res._id as Id<"reservations">, status: next });
-    toast(next === "inhouse" ? "Guest checked in" : "Guest checked out", "success");
-    onClose();
+  const { actions, note } = reservationActions(
+    res.status,
+    res.checkIn,
+    businessDate
+  );
+
+  const apply = async (a: ResAction) => {
+    await setStatus({ id: res._id as Id<"reservations">, status: a.next });
+    toast(
+      a.label === "Check in"
+        ? "Guest checked in"
+        : a.label === "Check out"
+          ? "Guest checked out"
+          : `${a.label} — ${RES_STATUS_LABEL[a.next] ?? a.next}`,
+      a.tone === "danger" ? "error" : "success"
+    );
+    if (a.next === "departed" || a.next === "cancelled") onClose();
   };
 
   return (
@@ -120,12 +129,6 @@ export default function ReservationSlideOver({
               </div>
             </div>
           </div>
-          <button
-            onClick={cycleStatus}
-            className="text-12 font-semibold text-accent-violet-hi hover:underline"
-          >
-            Change
-          </button>
         </div>
 
         {/* Stay */}
@@ -192,20 +195,36 @@ export default function ReservationSlideOver({
           </div>
         </div>
 
-        <div className="mt-auto flex gap-2.5">
-          <button
-            onClick={primaryAction}
-            className="flex-1 rounded-md bg-accent-violet py-3 text-13 font-semibold text-ice transition-colors hover:bg-accent-violet-hi"
-          >
-            {res.status === "inhouse" ? "Check out" : "Check in"}
-          </button>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md border border-line bg-fg-1/[0.06] px-4 py-3 text-fg-3 hover:text-ice"
-          >
-            <X className="h-5 w-5" />
-          </button>
+        <div className="mt-auto flex flex-col gap-2">
+          {note && (
+            <div className="rounded-md border border-line bg-elevated px-3 py-2 text-[11.5px] text-fg-3">
+              {note}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                onClick={() => apply(a)}
+                className={`flex-1 whitespace-nowrap rounded-md py-3 text-13 font-semibold transition-colors ${
+                  a.tone === "primary"
+                    ? "bg-accent-violet text-ice hover:bg-accent-violet-hi"
+                    : a.tone === "danger"
+                      ? "border border-room-ooo text-room-ooo hover:bg-room-ooo/10"
+                      : "border border-line bg-fg-1/[0.06] text-fg-1 hover:border-line-strong"
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md border border-line bg-fg-1/[0.06] px-4 py-3 text-fg-3 hover:text-ice"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
     </>

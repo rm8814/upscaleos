@@ -16,8 +16,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full font-body bg-ink text-ice">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <body
+        className="min-h-full font-body bg-ink text-ice"
+        suppressHydrationWarning
+      >
         <AuthProvider>
           <PropertyProvider>
             <ConvexClientProvider>

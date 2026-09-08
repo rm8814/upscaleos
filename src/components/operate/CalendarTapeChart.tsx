@@ -7,6 +7,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
 import { ChevronRight, ChevronDown, X, LogIn, Move, XCircle, Zap } from "lucide-react";
 import {
   Card,
@@ -295,6 +296,7 @@ export default function CalendarTapeChart() {
 
       {/* Range + legend */}
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
+        <PmsDateChip />
         <div className="text-12 text-fg-3">
           {dm(days[0])} – {dm(days[DAYS - 1])}
         </div>

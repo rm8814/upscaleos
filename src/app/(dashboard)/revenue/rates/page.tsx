@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
 import { Card, Eyebrow, Segmented } from "@/components/upx/primitives";
 
 const DAYS = 14;
@@ -70,7 +71,7 @@ export default function RatesPage() {
 
   return (
     <div className="mx-auto max-w-content">
-      <div className="mb-3.5">
+      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
         <Segmented<"grid" | "seasons" | "rules">
           value={view}
           onChange={setView}
@@ -80,6 +81,7 @@ export default function RatesPage() {
             { value: "rules", label: "Pricing rules" },
           ]}
         />
+        {view === "grid" && <PmsDateChip />}
       </div>
 
       {view === "grid" && (

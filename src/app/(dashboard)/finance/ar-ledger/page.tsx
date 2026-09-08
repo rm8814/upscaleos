@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AlertTriangle, X, FileSpreadsheet } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useProperty } from "@/components/providers/PropertyProvider";
 
 interface Account {
   account: string;
@@ -17,7 +18,31 @@ interface Account {
   transactions: { desc: string; date: string; ref: string; amount: string; credit: boolean }[];
 }
 
-const ACCOUNTS: Account[] = [
+type AccountSpec = Omit<Account, "lastPayment" | "transactions"> & {
+  lastPaymentOffset: number;
+  transactions: { desc: string; dateOffset: number; ref: string; amount: string; credit: boolean }[];
+};
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shiftDay = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+};
+const fullDate = (iso: string, n: number) => {
+  const d = shiftDay(iso, n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const shortDate = (iso: string, n: number) => {
+  const d = shiftDay(iso, n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
+};
+const monthLabel = (iso: string, n: number) => {
+  const d = shiftDay(iso, n);
+  return MONTHS[d.getUTCMonth()];
+};
+
+const ACCOUNT_SPECS: AccountSpec[] = [
   {
     account: "Accor Global",
     type: "Corporate",
@@ -26,13 +51,13 @@ const ACCOUNTS: Account[] = [
     a030: "Rp 62,000,000",
     a3160: "Rp 22,200,000",
     a60: "Rp 0",
-    lastPayment: "12 Aug 2026",
+    lastPaymentOffset: -27,
     overdue: false,
     transactions: [
-      { desc: "Invoice INV-2026-0841 — group block Aug", date: "01 Aug", ref: "INV-0841", amount: "Rp 62,000,000", credit: false },
-      { desc: "Invoice INV-2026-0798 — corporate rate Jul", date: "12 Jul", ref: "INV-0798", amount: "Rp 22,200,000", credit: false },
-      { desc: "Payment received — bank transfer", date: "12 Aug", ref: "PMT-3391", amount: "− Rp 40,000,000", credit: true },
-      { desc: "Invoice INV-2026-0712 — corporate rate Jun", date: "10 Jun", ref: "INV-0712", amount: "Rp 40,000,000", credit: false },
+      { desc: "Invoice INV-2026-0841 — group block", dateOffset: -38, ref: "INV-0841", amount: "Rp 62,000,000", credit: false },
+      { desc: "Invoice INV-2026-0798 — corporate rate", dateOffset: -58, ref: "INV-0798", amount: "Rp 22,200,000", credit: false },
+      { desc: "Payment received — bank transfer", dateOffset: -27, ref: "PMT-3391", amount: "− Rp 40,000,000", credit: true },
+      { desc: "Invoice INV-2026-0712 — corporate rate", dateOffset: -90, ref: "INV-0712", amount: "Rp 40,000,000", credit: false },
     ],
   },
   {
@@ -43,13 +68,13 @@ const ACCOUNTS: Account[] = [
     a030: "Rp 6,400,000",
     a3160: "Rp 12,500,000",
     a60: "Rp 23,000,000",
-    lastPayment: "28 Jun 2026",
+    lastPaymentOffset: -72,
     overdue: true,
     transactions: [
-      { desc: "Invoice INV-2026-0655 — TA allotment May", date: "05 May", ref: "INV-0655", amount: "Rp 23,000,000", credit: false },
-      { desc: "Invoice INV-2026-0740 — TA allotment Jun", date: "18 Jun", ref: "INV-0740", amount: "Rp 12,500,000", credit: false },
-      { desc: "Invoice INV-2026-0820 — TA allotment Jul", date: "22 Jul", ref: "INV-0820", amount: "Rp 6,400,000", credit: false },
-      { desc: "Payment received — cheque", date: "28 Jun", ref: "PMT-3120", amount: "− Rp 18,000,000", credit: true },
+      { desc: "Invoice INV-2026-0655 — TA allotment", dateOffset: -126, ref: "INV-0655", amount: "Rp 23,000,000", credit: false },
+      { desc: "Invoice INV-2026-0740 — TA allotment", dateOffset: -82, ref: "INV-0740", amount: "Rp 12,500,000", credit: false },
+      { desc: "Invoice INV-2026-0820 — TA allotment", dateOffset: -48, ref: "INV-0820", amount: "Rp 6,400,000", credit: false },
+      { desc: "Payment received — cheque", dateOffset: -72, ref: "PMT-3120", amount: "− Rp 18,000,000", credit: true },
     ],
   },
   {
@@ -60,19 +85,43 @@ const ACCOUNTS: Account[] = [
     a030: "Rp 18,600,000",
     a3160: "Rp 0",
     a60: "Rp 0",
-    lastPayment: "05 Sep 2026",
+    lastPaymentOffset: -3,
     overdue: false,
     transactions: [
-      { desc: "August commission settlement (net)", date: "01 Sep", ref: "OTA-BK-08", amount: "Rp 18,600,000", credit: false },
-      { desc: "Payout received", date: "05 Sep", ref: "PAYOUT-771", amount: "− Rp 41,200,000", credit: true },
+      { desc: "Commission settlement (net)", dateOffset: -7, ref: "OTA-BK", amount: "Rp 18,600,000", credit: false },
+      { desc: "Payout received", dateOffset: -3, ref: "PAYOUT-771", amount: "− Rp 41,200,000", credit: true },
     ],
   },
 ];
+
+function buildAccounts(businessDate: string): Account[] {
+  return ACCOUNT_SPECS.map((s) => {
+    const { lastPaymentOffset, transactions, ...rest } = s;
+    return {
+      ...rest,
+      lastPayment: fullDate(businessDate, lastPaymentOffset),
+      transactions: transactions.map((t) => {
+        const { dateOffset, desc, ...tr } = t;
+        // append the invoice month back onto invoice descriptions
+        const withMonth = /allotment$|rate$|block$/.test(desc)
+          ? `${desc} ${monthLabel(businessDate, dateOffset)}`
+          : desc;
+        return { ...tr, desc: withMonth, date: shortDate(businessDate, dateOffset) };
+      }),
+    };
+  });
+}
 
 const GRID =
   "grid grid-cols-[1.4fr_0.9fr_1fr_1fr_0.9fr_0.9fr_0.9fr_1fr] gap-2.5 px-4";
 
 export default function ArLedgerPage() {
+  const { activeProperty } = useProperty();
+  const ACCOUNTS = useMemo(
+    () => buildAccounts(activeProperty?.businessDate ?? "2026-09-08"),
+    [activeProperty?.businessDate]
+  );
+
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [payOpen, setPayOpen] = useState(false);
 

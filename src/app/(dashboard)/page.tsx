@@ -31,9 +31,10 @@ import {
   RES_STATUS_LABEL,
 } from "@/components/upx/primitives";
 
-type Period = "today" | "7d" | "30d";
+type Period = "yesterday" | "today" | "7d" | "30d";
 
 const PERIOD_LABEL: Record<Period, string> = {
+  yesterday: "Yesterday",
   today: "Today",
   "7d": "Last 7 days",
   "30d": "Last 30 days",
@@ -158,6 +159,7 @@ export default function DashboardPage() {
           value={period}
           onChange={setPeriod}
           options={[
+            { value: "yesterday", label: "Yesterday" },
             { value: "today", label: "Today" },
             { value: "7d", label: "7 days" },
             { value: "30d", label: "30 days" },

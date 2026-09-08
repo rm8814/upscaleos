@@ -99,7 +99,12 @@ export const applyRateSuggestion = mutation({
 export const getKpis = query({
   args: {
     propertyId: v.id("properties"),
-    period: v.union(v.literal("today"), v.literal("7d"), v.literal("30d")),
+    period: v.union(
+      v.literal("yesterday"),
+      v.literal("today"),
+      v.literal("7d"),
+      v.literal("30d")
+    ),
   },
   handler: async (ctx, args) => {
     const today = await businessDate(ctx, args.propertyId);
@@ -117,12 +122,16 @@ export const getKpis = query({
       (r) => r.status !== "OOO" && r.status !== "OOS"
     ).length;
 
-    const count = args.period === "today" ? 1 : args.period === "7d" ? 7 : 30;
+    // Window length and the last night of the window (yesterday shifts the
+    // anchor back a day; every other period ends on the business date).
+    const count =
+      args.period === "7d" ? 7 : args.period === "30d" ? 30 : 1;
+    const anchor = args.period === "yesterday" ? addDaysIso(today, -1) : today;
     const nights = Array.from({ length: count }, (_, i) =>
-      addDaysIso(today, -(count - 1 - i))
+      addDaysIso(anchor, -(count - 1 - i))
     );
     const priorNights = Array.from({ length: count }, (_, i) =>
-      addDaysIso(today, -(2 * count - 1 - i))
+      addDaysIso(anchor, -(2 * count - 1 - i))
     );
 
     const cur = windowStats(reservations, sellable, nights);

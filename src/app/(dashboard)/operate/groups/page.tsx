@@ -4,6 +4,27 @@ import React, { useMemo, useState } from "react";
 import { X, Sparkles } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import PmsDateChip from "@/components/common/PmsDateChip";
+import { useProperty } from "@/components/providers/PropertyProvider";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dayOf = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+};
+const fmtDate = (iso: string, n: number) => {
+  const d = dayOf(iso, n);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const fmtRange = (iso: string, start: number, nights: number) => {
+  const a = dayOf(iso, start);
+  const b = dayOf(iso, start + nights);
+  return a.getUTCMonth() === b.getUTCMonth()
+    ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[a.getUTCMonth()]} ${a.getUTCFullYear()}`
+    : `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]} – ${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]} ${b.getUTCFullYear()}`;
+};
+const inDays = (n: number) =>
+  n <= 0 ? "passed" : n === 1 ? "in 1 day" : `in ${n} days`;
 
 interface Group {
   id: string;
@@ -28,12 +49,20 @@ interface Group {
   cutoffMessage: string;
 }
 
-const GROUPS: Group[] = [
+type GroupSpec = Omit<Group, "dates" | "cutoff" | "cutoffMessage"> & {
+  startOffset: number;
+  nights: number;
+  cutoffOffset: number; // days from the business date; <= 0 renders as "Passed"
+  cutoffMessage: (days: number, confirmBy: string) => string;
+};
+
+const GROUP_SPECS: GroupSpec[] = [
   {
     id: "g1",
     name: "Astra International — Leadership Offsite",
-    dates: "18–21 Sep 2026",
-    cutoff: "11 Sep 2026",
+    startOffset: 10,
+    nights: 3,
+    cutoffOffset: 3,
     blocked: 24,
     picked: 19,
     pickupPct: "79%",
@@ -56,14 +85,15 @@ const GROUPS: Group[] = [
       { guest: "Arif Budiman", roomType: "Queen", roomLabel: "302", assigned: true },
       { guest: "Rina Kartika", roomType: "Queen", roomLabel: "TBD", assigned: false },
     ],
-    cutoffMessage:
-      "Cut-off is in 3 days. 5 of 24 blocked rooms are still unpicked — release them to general inventory or extend the cut-off.",
+    cutoffMessage: (d) =>
+      `Cut-off is ${inDays(d)}. 5 of 24 blocked rooms are still unpicked — release them to general inventory or extend the cut-off.`,
   },
   {
     id: "g2",
     name: "Wijaya–Santoso Wedding",
-    dates: "27–29 Sep 2026",
-    cutoff: "20 Sep 2026",
+    startOffset: 19,
+    nights: 2,
+    cutoffOffset: 12,
     blocked: 18,
     picked: 11,
     pickupPct: "61%",
@@ -85,14 +115,15 @@ const GROUPS: Group[] = [
       { guest: "Putri Santoso", roomType: "Suite", roomLabel: "502", assigned: true },
       { guest: "Bagus Wijaya", roomType: "Suite", roomLabel: "502", assigned: true },
     ],
-    cutoffMessage:
-      "7 rooms still unpicked with 9 days to cut-off. Pick-up pace is on track for this lead time.",
+    cutoffMessage: (d) =>
+      `7 rooms still unpicked with ${d} days to cut-off. Pick-up pace is on track for this lead time.`,
   },
   {
     id: "g3",
     name: "Java Jazz Pre-Tour Crew",
-    dates: "12–14 Sep 2026",
-    cutoff: "Passed",
+    startOffset: -1,
+    nights: 3,
+    cutoffOffset: -8,
     blocked: 10,
     picked: 10,
     pickupPct: "100%",
@@ -111,13 +142,14 @@ const GROUPS: Group[] = [
       { guest: "Andre Situmorang", roomType: "Queen", roomLabel: "203", assigned: true },
       { guest: "Kevin Halim", roomType: "Queen", roomLabel: "205", assigned: true },
     ],
-    cutoffMessage: "Fully picked up and in-house. Nothing to action.",
+    cutoffMessage: () => "Fully picked up and in-house. Nothing to action.",
   },
   {
     id: "g4",
     name: "TechCorp APAC Summit",
-    dates: "6–9 Oct 2026",
-    cutoff: "29 Sep 2026",
+    startOffset: 28,
+    nights: 3,
+    cutoffOffset: 21,
     blocked: 30,
     picked: 4,
     pickupPct: "13%",
@@ -136,10 +168,25 @@ const GROUPS: Group[] = [
       { roomType: "Presidential Suite", blocked: 10, picked: 1, rate: "Rp 6,200,000" },
     ],
     rooming: [{ guest: "Michael Chen", roomType: "Pres.", roomLabel: "TBD", assigned: false }],
-    cutoffMessage:
-      "Contract unsigned and deposit not received with 22 days to cut-off. Hold expires automatically if not confirmed by 22 Sep.",
+    cutoffMessage: (d, confirmBy) =>
+      `Contract unsigned and deposit not received with ${d} days to cut-off. Hold expires automatically if not confirmed by ${confirmBy}.`,
   },
 ];
+
+function buildGroups(businessDate: string): Group[] {
+  return GROUP_SPECS.map((spec) => {
+    const { startOffset, nights, cutoffOffset, cutoffMessage, ...rest } = spec;
+    return {
+      ...rest,
+      dates: fmtRange(businessDate, startOffset, nights),
+      cutoff: cutoffOffset <= 0 ? "Passed" : fmtDate(businessDate, cutoffOffset),
+      cutoffMessage: cutoffMessage(
+        cutoffOffset,
+        fmtDate(businessDate, cutoffOffset - 7)
+      ),
+    };
+  });
+}
 
 const WAITLIST = [
   {
@@ -154,6 +201,10 @@ const TABLE_GRID =
   "grid grid-cols-[2fr_1.6fr_0.7fr_1.1fr_0.9fr_1.4fr_1.5fr] gap-2.5 px-4";
 
 export default function GroupsBlocksPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const GROUPS = useMemo(() => buildGroups(businessDate), [businessDate]);
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -165,7 +216,7 @@ export default function GroupsBlocksPage() {
         if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [search, status]
+    [GROUPS, search, status]
   );
 
   const g = openId ? GROUPS.find((x) => x.id === openId) ?? null : null;

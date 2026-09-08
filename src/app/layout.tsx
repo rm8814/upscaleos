@@ -21,13 +21,13 @@ export default function RootLayout({
         className="min-h-full font-body bg-ink text-ice"
         suppressHydrationWarning
       >
-        <AuthProvider>
-          <PropertyProvider>
-            <ConvexClientProvider>
+        <ConvexClientProvider>
+          <AuthProvider>
+            <PropertyProvider>
               <ToastProvider>{children}</ToastProvider>
-            </ConvexClientProvider>
-          </PropertyProvider>
-        </AuthProvider>
+            </PropertyProvider>
+          </AuthProvider>
+        </ConvexClientProvider>
       </body>
     </html>
   );

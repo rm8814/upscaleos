@@ -9,12 +9,14 @@
  */
 
 import type * as accounts from "../accounts.js";
+import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
 import type * as channels from "../channels.js";
 import type * as crons from "../crons.js";
 import type * as folios from "../folios.js";
 import type * as groups from "../groups.js";
 import type * as guests from "../guests.js";
+import type * as http from "../http.js";
 import type * as maintenance from "../maintenance.js";
 import type * as operate from "../operate.js";
 import type * as properties from "../properties.js";
@@ -33,12 +35,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
+  auth: typeof auth;
   authz: typeof authz;
   channels: typeof channels;
   crons: typeof crons;
   folios: typeof folios;
   groups: typeof groups;
   guests: typeof guests;
+  http: typeof http;
   maintenance: typeof maintenance;
   operate: typeof operate;
   properties: typeof properties;

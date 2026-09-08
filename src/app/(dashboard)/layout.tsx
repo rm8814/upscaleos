@@ -50,10 +50,7 @@ export default function DashboardLayout({
   // The account this user belongs to and the properties they can open. Account
   // owner / admin / analyst get every property in the account; property staff
   // get just the ones they have a role on.
-  const account = useQuery(
-    api.accounts.me,
-    user ? { email: user.email } : "skip"
-  );
+  const account = useQuery(api.accounts.me, user ? {} : "skip");
   const memberProperties = account?.properties;
 
   useEffect(() => {

@@ -10,10 +10,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
  */
 export function useAccount() {
   const { user } = useAuth();
-  const data = useQuery(
-    api.accounts.me,
-    user ? { email: user.email } : "skip"
-  );
+  const data = useQuery(api.accounts.me, user ? {} : "skip");
   return {
     loading: data === undefined,
     email: data?.email ?? user?.email ?? null,

@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
@@ -12,10 +13,9 @@ import type { Id } from "./_generated/dataModel";
  * every property in the account, analyst gets read-only everywhere) OR an
  * explicit `property_members` row.
  *
- * IDENTITY: until a real auth provider is wired, the caller passes its email and
- * this is NOT a hard security boundary — a client could pass someone else's
- * address. `currentEmail` already prefers `ctx.auth.getUserIdentity()` when a
- * token is present, so wiring real auth later is a one-spot change.
+ * IDENTITY: comes from Convex Auth (`getAuthUserId` → the users table email).
+ * The `email` argument some mutations still accept is ignored — kept only so an
+ * older client build doesn't fail its validator.
  */
 
 export type AccountRole = "owner" | "admin" | "analyst" | "member";
@@ -54,11 +54,13 @@ export interface Scope {
 
 export async function currentEmail(
   ctx: QueryCtx,
-  passedEmail?: string
+  _ignoredPassedEmail?: string
 ): Promise<string | null> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (identity?.email) return identity.email.toLowerCase();
-  return passedEmail ? passedEmail.trim().toLowerCase() : null;
+  const userId = await getAuthUserId(ctx);
+  if (!userId) return null;
+  const user = await ctx.db.get(userId);
+  const email = (user as { email?: string } | null)?.email;
+  return email ? email.trim().toLowerCase() : null;
 }
 
 export async function resolveScope(

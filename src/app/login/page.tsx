@@ -3,19 +3,32 @@
 import React, { useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 
-const PROPERTY_ID = "04812";
-
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { authenticate } = useAuth();
+  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("anin@upscale.asia");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
-    await login(email, PROPERTY_ID);
+    setError(null);
+    try {
+      await authenticate(email, password, flow, name.trim() || undefined);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? flow === "signIn"
+            ? "Wrong email or password."
+            : err.message
+          : "Could not sign in."
+      );
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -38,7 +51,7 @@ export default function LoginPage() {
 
         <div>
           <div className="mb-1.5 font-display text-[22px] font-bold tracking-display">
-            Sign in to UpscaleOS
+            {flow === "signIn" ? "Sign in to UpscaleOS" : "Create your login"}
           </div>
           <div className="text-13 text-fg-3">
             Your account&rsquo;s properties load after sign-in.
@@ -46,6 +59,17 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-col gap-3.5">
+          {flow === "signUp" && (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-fg-3">Name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="rounded-sm border border-line bg-deep px-3 py-2.5 font-body text-14 text-ice outline-none focus:border-accent-violet"
+              />
+            </label>
+          )}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wide text-fg-3">Work email</span>
             <input
@@ -58,30 +82,44 @@ export default function LoginPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-fg-3">6-digit code</span>
+            <span className="text-[11px] uppercase tracking-wide text-fg-3">Password</span>
             <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="• • • • • •"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              className="rounded-sm border border-line bg-deep px-3 py-2.5 font-mono text-16 tracking-[0.3em] text-ice outline-none placeholder:text-fg-4 focus:border-accent-violet"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="rounded-sm border border-line bg-deep px-3 py-2.5 font-body text-14 text-ice outline-none focus:border-accent-violet"
             />
           </label>
         </div>
+
+        {error && <div className="text-12 text-room-ooo">{error}</div>}
 
         <button
           type="submit"
           disabled={submitting}
           className="rounded-md bg-accent-violet px-3 py-3.5 font-body text-14 font-semibold text-ice transition-colors duration-fast ease-out hover:bg-accent-violet-hi disabled:opacity-40"
         >
-          {submitting ? "Signing in…" : "Continue"}
+          {submitting
+            ? "Working…"
+            : flow === "signIn"
+              ? "Sign in"
+              : "Create login"}
         </button>
 
-        <div className="text-center text-12 text-fg-3">
-          Protected by property-level 2FA &middot; SOC2-aligned
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setFlow((f) => (f === "signIn" ? "signUp" : "signIn"));
+          }}
+          className="text-center text-12 text-fg-3 hover:text-ice"
+        >
+          {flow === "signIn"
+            ? "First time here? Create a login for your invited email"
+            : "Already have a login? Sign in"}
+        </button>
       </form>
     </div>
   );

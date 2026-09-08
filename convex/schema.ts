@@ -1,7 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
+  ...authTables,
   properties: defineTable({
     name: v.string(),
     location: v.string(),
@@ -31,12 +33,7 @@ export default defineSchema({
       })
     ),
   }).index("by_external_id", ["id"]),
-  users: defineTable({
-    name: v.string(),
-    email: v.string(),
-    role: v.string(), // e.g., 'Admin', 'Manager', 'Staff'
-    propertyId: v.id("properties"),
-  }).index("by_email", ["email"]),
+  // `users` is provided by authTables (Convex Auth).
   property_members: defineTable({
     propertyId: v.id("properties"),
     accountId: v.optional(v.id("accounts")), // denormalized owner account

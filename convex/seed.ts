@@ -47,8 +47,10 @@ export const seed = mutation({
       "property_members",
       "account_members",
       "accounts",
-      "users",
       "properties",
+      // NOTE: `users` (Convex Auth identities) is deliberately not wiped, so a
+      // signed-up demo login survives a reseed. Membership rows are keyed by
+      // email and re-link on the next sign-in.
     ] as const) {
       const rows = await ctx.db.query(table).collect();
       await Promise.all(rows.map((r) => ctx.db.delete(r._id)));
@@ -86,7 +88,7 @@ export const seed = mutation({
       businessDate: "2026-09-08",
       status: "active",
       accountId,
-      autoAssignRooms: true,
+      autoAssignRooms: false, // demo starts with two roomless bookings intact
       autoNightAudit: true,
       nightAuditTime: "03:00",
       policies: {

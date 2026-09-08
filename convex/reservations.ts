@@ -1,9 +1,25 @@
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 
 const TODAY = "2026-09-08";
+
+const NIGHTLY: Record<string, number> = {
+  "Deluxe Twin": 1_450_000,
+  "Double Queen": 1_850_000,
+  "King Suite": 2_600_000,
+  "Presidential Suite": 6_900_000,
+};
+const fmtRp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+const nights = (a: string, b: string) =>
+  Math.max(
+    1,
+    Math.round(
+      (new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) /
+        86400000
+    )
+  );
 
 async function joinGuestAndRoom(ctx: QueryCtx, rows: Doc<"reservations">[]) {
   return Promise.all(
@@ -49,5 +65,107 @@ export const getArrivalsToday = query({
       ctx,
       rows.filter((r) => r.checkIn === TODAY)
     );
+  },
+});
+
+/* --------------------------------------------------------------- mutations */
+
+async function findOrCreateGuest(
+  ctx: MutationCtx,
+  name: string,
+  email?: string,
+  phone?: string
+): Promise<Id<"guests">> {
+  const guests = await ctx.db.query("guests").collect();
+  const match = guests.find(
+    (g) =>
+      (email && g.email.toLowerCase() === email.toLowerCase()) ||
+      g.name.toLowerCase() === name.toLowerCase()
+  );
+  if (match) return match._id;
+  return ctx.db.insert("guests", {
+    name,
+    email: email || `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@guest.upscale.id`,
+    phone: phone || "—",
+    loyaltyTier: "Silver",
+  });
+}
+
+export const create = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    guestName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    roomId: v.optional(v.id("rooms")),
+    roomType: v.string(),
+    channel: v.string(),
+    status: v.string(),
+    adults: v.optional(v.number()),
+    children: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
+    let roomNumber: string | undefined;
+    if (args.roomId) {
+      const room = await ctx.db.get(args.roomId);
+      roomNumber = room?.roomNumber;
+    }
+    const rate = NIGHTLY[args.roomType] ?? 1_850_000;
+    const n = nights(args.checkIn, args.checkOut);
+    return await ctx.db.insert("reservations", {
+      guestId,
+      propertyId: args.propertyId,
+      roomId: args.roomId,
+      checkIn: args.checkIn,
+      checkOut: args.checkOut,
+      status: args.status,
+      rate: fmtRp(rate),
+      totalAmount: fmtRp(rate * n),
+      channel: args.channel,
+      roomNumber,
+      roomType: args.roomType,
+      adults: args.adults ?? 2,
+      children: args.children ?? 0,
+    });
+  },
+});
+
+export const updateDates = mutation({
+  args: {
+    id: v.id("reservations"),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    roomId: v.optional(v.id("rooms")),
+  },
+  handler: async (ctx, args) => {
+    const res = await ctx.db.get(args.id);
+    if (!res) return;
+    const rate =
+      NIGHTLY[res.roomType ?? ""] ??
+      (Number(res.rate.replace(/[^\d]/g, "")) || 1_850_000);
+    const patch: Record<string, unknown> = {
+      checkIn: args.checkIn,
+      checkOut: args.checkOut,
+      totalAmount: fmtRp(rate * nights(args.checkIn, args.checkOut)),
+    };
+    if (args.roomId) {
+      patch.roomId = args.roomId;
+      const room = await ctx.db.get(args.roomId);
+      if (room) {
+        patch.roomNumber = room.roomNumber;
+        patch.roomType = room.type;
+      }
+    }
+    await ctx.db.patch(args.id, patch);
+  },
+});
+
+export const setStatus = mutation({
+  args: { id: v.id("reservations"), status: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { status: args.status });
   },
 });

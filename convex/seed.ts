@@ -30,6 +30,7 @@ export const seed = mutation({
   handler: async (ctx) => {
     // ---- wipe --------------------------------------------------------------
     for (const table of [
+      "waitlist",
       "reservations",
       "rooms",
       "maintenance_tickets",
@@ -280,6 +281,15 @@ export const seed = mutation({
       { category: "Marketing", amount: "Rp 9,800,000", date: iso(addDays(TODAY, -2)), description: "OTA commission — Expedia" },
     ];
     for (const e of expenses) await ctx.db.insert("expenses", { ...e, propertyId });
+
+    // ---- waitlist (unassigned requests on the tape chart) -----------
+    const waitlist = [
+      { guest: "Anjali Menon", roomType: "King Suite", checkIn: iso(addDays(TODAY, 2)), checkOut: iso(addDays(TODAY, 5)), party: "2 adults", source: "Phone" },
+      { guest: "Grup Astra (12 kamar)", roomType: "Double Queen", checkIn: iso(addDays(TODAY, 6)), checkOut: iso(addDays(TODAY, 9)), party: "Group inquiry", source: "Group inquiry" },
+    ];
+    for (const w of waitlist) {
+      await ctx.db.insert("waitlist", { ...w, propertyId });
+    }
 
     // ---- corporate agreements (grow milestone) -------------------
     const corporates = [

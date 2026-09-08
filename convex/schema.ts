@@ -95,6 +95,15 @@ export default defineSchema({
     children: v.optional(v.number()),
     etaLabel: v.optional(v.string()), // e.g. '14:20'
   }).index("by_property", ["propertyId"]),
+  waitlist: defineTable({
+    propertyId: v.id("properties"),
+    guest: v.string(),
+    roomType: v.string(),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    party: v.string(), // '2 adults, 1 child'
+    source: v.string(), // 'Direct' | 'Phone' | 'Group inquiry'
+  }).index("by_property", ["propertyId"]),
   expenses: defineTable({
     propertyId: v.id("properties"),
     category: v.string(), // 'Utilities', 'Payroll', 'Marketing', 'Maintenance'

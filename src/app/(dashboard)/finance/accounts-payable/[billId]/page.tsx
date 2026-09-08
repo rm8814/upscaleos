@@ -5,11 +5,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
-import { BILLS, STATUS_COLOR } from "../data";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import { buildBills, STATUS_COLOR } from "../data";
 
 export default function BillDetailPage() {
   const { billId } = useParams<{ billId: string }>();
-  const bill = BILLS.find((b) => b.id === billId);
+  const { activeProperty } = useProperty();
+  const bill = buildBills(activeProperty?.businessDate ?? "2026-09-08").find(
+    (b) => b.id === billId
+  );
 
   if (!bill)
     return (

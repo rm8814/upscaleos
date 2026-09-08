@@ -1,16 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, Eyebrow } from "@/components/upx/primitives";
-import { BILLS, STATUS_COLOR } from "./data";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import { buildBills, STATUS_COLOR } from "./data";
 
 type Tab = "bills" | "runs" | "vendors";
 
-const RUNS = [
-  { date: "05 Sep 2026", billCount: "6", total: "Rp 74,200,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
-  { date: "22 Aug 2026", billCount: "4", total: "Rp 38,900,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
-  { date: "08 Aug 2026", billCount: "5", total: "Rp 51,400,000", method: "Bank transfer + cheque", status: "Completed", color: "var(--accent-cyan)" },
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const runDate = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const rp = (n: number) => `Rp ${n.toLocaleString("en-US")}`;
+
+const RUN_SPECS = [
+  { offset: -3, billCount: "6", total: "Rp 74,200,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
+  { offset: -17, billCount: "4", total: "Rp 38,900,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
+  { offset: -31, billCount: "5", total: "Rp 51,400,000", method: "Bank transfer + cheque", status: "Completed", color: "var(--accent-cyan)" },
 ];
 const VENDORS = [
   { name: "PLN (electricity)", category: "Utilities", contact: "billing@pln.co.id", terms: "Net 14", bank: "BNI ****4821", openBalance: "Rp 12,400,000" },
@@ -24,16 +33,37 @@ const VENDORS = [
 const BILL_GRID = "grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr_0.9fr_0.9fr_1fr] gap-2.5 px-4";
 
 export default function AccountsPayablePage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const BILLS = useMemo(() => buildBills(businessDate), [businessDate]);
+  const RUNS = RUN_SPECS.map((r) => ({ ...r, date: runDate(businessDate, r.offset) }));
+
   const [tab, setTab] = useState<Tab>("bills");
+
+  const unpaid = BILLS.filter((b) => b.status !== "Paid");
+  const weekEndIso = (() => {
+    const d = new Date(businessDate + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const totalPayable = unpaid.reduce((s, b) => s + b.amountValue, 0);
+  const overdueTotal = BILLS.filter((b) => b.status === "Overdue").reduce(
+    (s, b) => s + b.amountValue,
+    0
+  );
+  const dueThisWeek = unpaid
+    .filter((b) => b.dueIso >= businessDate && b.dueIso <= weekEndIso)
+    .reduce((s, b) => s + b.amountValue, 0);
+  const pendingCount = BILLS.filter((b) => b.status === "Pending approval").length;
 
   return (
     <div className="mx-auto max-w-content">
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { label: "Total payable", value: "Rp 58,100,000", tone: "", border: "line" },
-          { label: "Overdue", value: "Rp 21,600,000", tone: "rose", border: "room-ooo" },
-          { label: "Due this week", value: "Rp 21,300,000", tone: "", border: "line" },
-          { label: "Pending approval", value: "1", tone: "amber", border: "line" },
+          { label: "Total payable", value: rp(totalPayable), tone: "", border: "line" },
+          { label: "Overdue", value: rp(overdueTotal), tone: "rose", border: "room-ooo" },
+          { label: "Due this week", value: rp(dueThisWeek), tone: "", border: "line" },
+          { label: "Pending approval", value: String(pendingCount), tone: "amber", border: "line" },
         ].map((m) => (
           <div
             key={m.label}

@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useCurrentMember, initialsOf } from "@/components/providers/useCurrentMember";
 import { AddPropertyButton } from "@/components/property/AddPropertyDialog";
 
 interface NavItem {
@@ -118,8 +119,12 @@ export default function Sidebar({
   onToggleCollapse,
 }: SidebarProps) {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { properties, activeProperty, setActivePropertyId } = useProperty();
+  const member = useCurrentMember();
+
+  const displayName = member?.name ?? user?.name ?? "—";
+  const displayRole = member?.role ?? (member === null ? "No access" : "…");
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   // Active = the single most specific nav href the current path falls under.
@@ -312,14 +317,16 @@ export default function Sidebar({
           }`}
         >
           <span
-            title={collapsed ? "Amira K. · Front office" : undefined}
+            title={collapsed ? `${displayName} · ${displayRole}` : undefined}
             className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-pill bg-accent-violet text-[13px] font-semibold text-ice"
           >
-            A
+            {initialsOf(displayName)}
           </span>
           <span className={`flex-1 overflow-hidden ${hideWhenRail}`}>
-            <span className="block truncate text-[13px] font-medium text-ice">Amira K.</span>
-            <span className="block text-[11px] text-fg-3">Front office</span>
+            <span className="block truncate text-[13px] font-medium text-ice">
+              {displayName}
+            </span>
+            <span className="block truncate text-[11px] text-fg-3">{displayRole}</span>
           </span>
           <button
             onClick={logout}

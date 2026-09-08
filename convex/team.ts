@@ -12,6 +12,18 @@ export const listMembers = query({
   },
 });
 
+/** The signed-in user's membership row for one property (role, status, name). */
+export const currentMember = query({
+  args: { propertyId: v.id("properties"), email: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("property_members")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .collect();
+    return rows.find((r) => r.propertyId === args.propertyId) ?? null;
+  },
+});
+
 export const addMember = mutation({
   args: {
     propertyId: v.id("properties"),

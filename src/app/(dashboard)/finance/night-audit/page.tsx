@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useCurrentMember } from "@/components/providers/useCurrentMember";
 import {
   AlertTriangle,
   Check,
@@ -51,7 +52,12 @@ const PROPERTY_STATUS = [
 
 export default function NightAuditPage() {
   const { activeProperty } = useProperty();
+  const member = useCurrentMember();
   const rollBusinessDate = useMutation(api.properties.rollBusinessDate);
+
+  const AUDIT_ROLES = ["Night auditor", "General Manager"];
+  const role = member?.role ?? null;
+  const canRun = role ? AUDIT_ROLES.includes(role) : false;
 
   const [expanded, setExpanded] = useState<string | null>("Reconcile POS postings");
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
@@ -92,7 +98,7 @@ export default function NightAuditPage() {
   const doneCount = STEPS.filter(stepDone).length;
 
   const runRemaining = async () => {
-    if (!activeProperty || running || ranAll) return;
+    if (!activeProperty || running || ranAll || !canRun) return;
     setRunning(true);
     await rollBusinessDate({ id: activeProperty._id });
     setRanAll(true);
@@ -118,17 +124,26 @@ export default function NightAuditPage() {
         </div>
         <button
           onClick={runRemaining}
-          disabled={!activeProperty || running || ranAll}
+          disabled={!activeProperty || running || ranAll || !canRun}
           className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
         >
           {running ? "Running…" : ranAll ? "Audit complete" : "Run remaining steps"}
         </button>
       </div>
 
-      <div className="mb-3.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
-        Only the Night Auditor role can run this audit. You are signed in as Front office — contact
-        Amira K. or a manager to execute.
-      </div>
+      {member !== undefined && (
+        canRun ? (
+          <div className="mb-3.5 rounded-md border border-line bg-elevated p-3 text-[12.5px] text-fg-2">
+            Signed in as <span className="text-ice">{role}</span> — you have permission to run
+            the night audit.
+          </div>
+        ) : (
+          <div className="mb-3.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
+            Only a Night auditor or General Manager can run this audit. You are signed in as{" "}
+            {role ?? "a user with no role on this property"} — contact a manager to execute.
+          </div>
+        )
+      )}
 
       <div className="mb-3.5 flex flex-col gap-2 rounded-lg border border-res-tentative bg-elevated p-3.5">
         <Eyebrow>Pre-audit warnings</Eyebrow>

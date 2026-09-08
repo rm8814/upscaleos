@@ -2,9 +2,11 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   Plus,
   LogIn,
@@ -76,6 +78,8 @@ const OUTLOOK = [72, 78, 81, 69, 64, 88, 92, 85, 79, 74, 70, 83, 90, 87];
 const DOW = ["M", "T", "W", "T", "F", "S", "S", "M", "T", "W", "T", "F", "S", "S"];
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const toast = useToast();
   const { activeProperty } = useProperty();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const stats = useQuery(api.operate.getDashboardStats, arg);
@@ -160,16 +164,18 @@ export default function DashboardPage() {
           ]}
         />
         <div className="ml-auto flex flex-wrap gap-2">
-          <PrimaryButton>
+          <PrimaryButton onClick={() => router.push("/operate/calendar")}>
             <Plus className="h-3.5 w-3.5" /> New reservation
           </PrimaryButton>
-          <GhostButton>
+          <GhostButton onClick={() => router.push("/guests/reservations")}>
             <LogIn className="h-3.5 w-3.5" /> Check in
           </GhostButton>
-          <GhostButton>
+          <GhostButton onClick={() => router.push("/operate/calendar")}>
             <DoorOpen className="h-3.5 w-3.5" /> Walk-in
           </GhostButton>
-          <GhostButton>
+          <GhostButton
+            onClick={() => toast("Dashboard layout editing isn’t available in this preview")}
+          >
             <SlidersHorizontal className="h-3.5 w-3.5" /> Customize
           </GhostButton>
         </div>
@@ -248,7 +254,10 @@ export default function DashboardPage() {
               Rate up 12% for Sat. — demand from 4 OTAs.
             </div>
           </div>
-          <button className="flex-none rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi">
+          <button
+            onClick={() => router.push("/revenue/rates")}
+            className="flex-none rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi"
+          >
             Apply
           </button>
         </div>

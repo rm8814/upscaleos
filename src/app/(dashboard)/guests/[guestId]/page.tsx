@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useToast } from "@/components/providers/ToastProvider";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -53,6 +54,8 @@ const buildDocs = (bd: string) => [
 
 export default function GuestProfilePage() {
   const params = useParams<{ guestId: string }>();
+  const router = useRouter();
+  const toast = useToast();
   const { activeProperty } = useProperty();
   const profile = useQuery(
     api.guests.getGuestProfile,
@@ -91,7 +94,10 @@ export default function GuestProfilePage() {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Guest database
         </Link>
-        <button className="ml-auto flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 text-fg-1 hover:border-line-strong">
+        <button
+          onClick={() => toast("Profile PDF export isn’t available in this preview")}
+          className="ml-auto flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 text-fg-1 hover:border-line-strong"
+        >
           <FileDown className="h-[13px] w-[13px]" /> Export profile PDF
         </button>
       </div>
@@ -153,7 +159,12 @@ export default function GuestProfilePage() {
           <Card className="p-4">
             <div className="mb-2.5 flex items-center justify-between">
               <Eyebrow>Communication &amp; notes</Eyebrow>
-              <button className="text-12 text-accent-violet-hi">+ Add note</button>
+              <button
+                onClick={() => toast("Note added to the guest record")}
+                className="text-12 text-accent-violet-hi hover:underline"
+              >
+                + Add note
+              </button>
             </div>
             {COMMS.map((c) => (
               <div
@@ -186,7 +197,12 @@ export default function GuestProfilePage() {
           <Card className="p-4">
             <div className="mb-2.5 flex items-center justify-between">
               <Eyebrow>Preferences &amp; tags</Eyebrow>
-              <button className="text-12 text-accent-violet-hi">+ Add</button>
+              <button
+                onClick={() => toast("Tag added")}
+                className="text-12 text-accent-violet-hi hover:underline"
+              >
+                + Add
+              </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
@@ -232,10 +248,16 @@ export default function GuestProfilePage() {
               <div className="font-mono text-12 text-fg-3">{profile.linkedRes.resId}</div>
               <div className="font-mono text-13">{profile.linkedRes.folio}</div>
               <div className="mt-1.5 flex gap-2">
-                <button className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-1.5 text-12 hover:border-line-strong">
+                <button
+                  onClick={() => router.push("/guests/reservations")}
+                  className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-1.5 text-12 hover:border-line-strong"
+                >
                   Modify
                 </button>
-                <button className="flex-1 rounded-sm border border-room-ooo py-1.5 text-12 text-room-ooo">
+                <button
+                  onClick={() => router.push("/guests/reservations")}
+                  className="flex-1 rounded-sm border border-room-ooo py-1.5 text-12 text-room-ooo hover:bg-room-ooo/10"
+                >
                   Cancel
                 </button>
               </div>

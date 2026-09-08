@@ -2,8 +2,12 @@
 
 import React from "react";
 import Link from "next/link";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { X, Calendar, MapPin, CreditCard, User, Star } from "lucide-react";
 import GuestTimeline from "@/components/guests/GuestTimeline";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   Eyebrow,
   RES_STATUS_COLOR,
@@ -58,6 +62,22 @@ export default function ReservationSlideOver({
   onClose: () => void;
 }) {
   const statusColor = RES_STATUS_COLOR[res.status] ?? "var(--fg-2)";
+  const setStatus = useMutation(api.reservations.setStatus);
+  const toast = useToast();
+
+  const STATUS_CYCLE = ["tentative", "confirmed", "inhouse", "departed"];
+  const cycleStatus = async () => {
+    const i = STATUS_CYCLE.indexOf(res.status);
+    const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
+    await setStatus({ id: res._id as Id<"reservations">, status: next });
+    toast(`Status → ${RES_STATUS_LABEL[next] ?? next}`, "success");
+  };
+  const primaryAction = async () => {
+    const next = res.status === "inhouse" ? "departed" : "inhouse";
+    await setStatus({ id: res._id as Id<"reservations">, status: next });
+    toast(next === "inhouse" ? "Guest checked in" : "Guest checked out", "success");
+    onClose();
+  };
 
   return (
     <>
@@ -100,7 +120,12 @@ export default function ReservationSlideOver({
               </div>
             </div>
           </div>
-          <button className="text-12 font-semibold text-accent-violet-hi">Change</button>
+          <button
+            onClick={cycleStatus}
+            className="text-12 font-semibold text-accent-violet-hi hover:underline"
+          >
+            Change
+          </button>
         </div>
 
         {/* Stay */}
@@ -168,10 +193,17 @@ export default function ReservationSlideOver({
         </div>
 
         <div className="mt-auto flex gap-2.5">
-          <button className="flex-1 rounded-md bg-accent-violet py-3 text-13 font-semibold text-ice transition-colors hover:bg-accent-violet-hi">
+          <button
+            onClick={primaryAction}
+            className="flex-1 rounded-md bg-accent-violet py-3 text-13 font-semibold text-ice transition-colors hover:bg-accent-violet-hi"
+          >
             {res.status === "inhouse" ? "Check out" : "Check in"}
           </button>
-          <button className="rounded-md border border-line bg-fg-1/[0.06] px-4 py-3 text-fg-3 hover:text-ice">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md border border-line bg-fg-1/[0.06] px-4 py-3 text-fg-3 hover:text-ice"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>

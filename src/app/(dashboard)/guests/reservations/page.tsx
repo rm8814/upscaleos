@@ -2,10 +2,11 @@
 
 import React, { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { downloadCsv } from "@/lib/csv";
 import { FileSpreadsheet } from "lucide-react";
 import {
   Card,
@@ -32,6 +33,7 @@ export default function ReservationListPage() {
 }
 
 function ReservationListInner() {
+  const router = useRouter();
   const { activeProperty } = useProperty();
   const reservations = useQuery(
     api.reservations.getByProperty,
@@ -152,7 +154,25 @@ function ReservationListInner() {
           <option>Expedia</option>
           <option>Traveloka</option>
         </select>
-        <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong">
+        <button
+          onClick={() =>
+            downloadCsv(
+              `reservations-${TODAY}.csv`,
+              filtered.map((r) => ({
+                guest: r.guestName,
+                confirmation: `RSV-${r._id.slice(-6).toUpperCase()}`,
+                arrival: r.checkIn,
+                departure: r.checkOut,
+                roomType: r.roomType,
+                room: r.roomNumber,
+                source: r.channel ?? "Direct",
+                status: RES_STATUS_LABEL[r.status] ?? r.status,
+                value: r.totalAmount,
+              }))
+            )
+          }
+          className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong"
+        >
           <FileSpreadsheet className="h-[13px] w-[13px]" /> Export
         </button>
         <PmsDateChip className="ml-auto" />
@@ -168,6 +188,7 @@ function ReservationListInner() {
           </button>
         )}
         <button
+          onClick={() => router.push("/operate/calendar")}
           className={`${
             unassigned > 0 ? "" : "ml-auto"
           } rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi`}

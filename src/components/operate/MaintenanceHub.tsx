@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
 import { X } from "lucide-react";
 import type { Doc } from "@/convex/_generated/dataModel";
@@ -31,10 +32,30 @@ export default function MaintenanceHub() {
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const tickets = useQuery(api.operate.getMaintenanceTickets, arg);
   const resolveTicket = useMutation(api.maintenance.resolveTicket);
+  const createTicket = useMutation(api.operate.createTicket);
+  const toast = useToast();
 
   const [priority, setPriority] = useState("All");
   const [status, setStatus] = useState("All");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    location: "",
+    priority: "Medium",
+    assignee: "Budi (in-house)",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const submitTicket = async () => {
+    if (!activeProperty || !form.title.trim() || saving) return;
+    setSaving(true);
+    await createTicket({ propertyId: activeProperty._id, ...form });
+    setSaving(false);
+    setNewOpen(false);
+    setForm({ title: "", location: "", priority: "Medium", assignee: "Budi (in-house)" });
+    toast("Maintenance ticket created", "success");
+  };
 
   const rows = (tickets ?? []).filter((t) => {
     if (priority !== "All" && t.priority !== priority) return false;
@@ -98,7 +119,10 @@ export default function MaintenanceHub() {
           <option>Resolved</option>
         </select>
         <PmsDateChip className="ml-auto" />
-        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice transition-colors hover:bg-accent-violet-hi">
+        <button
+          onClick={() => setNewOpen(true)}
+          className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice transition-colors hover:bg-accent-violet-hi"
+        >
           + New ticket
         </button>
       </div>
@@ -255,6 +279,70 @@ export default function MaintenanceHub() {
                   Mark resolved
                 </button>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* New ticket modal */}
+      {newOpen && (
+        <>
+          <div
+            onClick={() => setNewOpen(false)}
+            className="fixed inset-0 z-40 bg-deepest/70 backdrop-blur-[6px]"
+          />
+          <div className="fixed left-1/2 top-1/2 z-50 w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-elevated p-5 shadow-3">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="font-display text-16 font-bold text-ice">New maintenance ticket</div>
+              <button
+                onClick={() => setNewOpen(false)}
+                className="text-fg-3 hover:text-ice"
+                aria-label="Close"
+              >
+                <X className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              <input
+                autoFocus
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="Issue (e.g. AC not cooling)"
+                className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-ice outline-none focus:border-accent-violet"
+              />
+              <input
+                value={form.location}
+                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                placeholder="Location (e.g. Room 204)"
+                className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-ice outline-none focus:border-accent-violet"
+              />
+              <div className="grid grid-cols-2 gap-2.5">
+                <select
+                  value={form.priority}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                  className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-fg-2"
+                >
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+                <select
+                  value={form.assignee}
+                  onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
+                  className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-fg-2"
+                >
+                  <option>Budi (in-house)</option>
+                  <option>PT Sanitasi Jaya</option>
+                  <option>PT Kolam Sehat</option>
+                </select>
+              </div>
+              <button
+                onClick={submitTicket}
+                disabled={!form.title.trim() || saving}
+                className="mt-1 rounded-sm bg-accent-violet px-3 py-2.5 text-13 font-semibold text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+              >
+                {saving ? "Creating…" : "Create ticket"}
+              </button>
             </div>
           </div>
         </>

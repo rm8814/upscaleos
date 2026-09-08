@@ -5,6 +5,7 @@ import { X, Sparkles } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import PmsDateChip from "@/components/common/PmsDateChip";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayOf = (iso: string, n: number) => {
@@ -202,6 +203,7 @@ const TABLE_GRID =
 
 export default function GroupsBlocksPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const GROUPS = useMemo(() => buildGroups(businessDate), [businessDate]);
 
@@ -241,7 +243,10 @@ export default function GroupsBlocksPage() {
           ))}
         </select>
         <PmsDateChip className="ml-auto" />
-        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice hover:bg-accent-violet-hi">
+        <button
+          onClick={() => toast("Group block creation isn’t wired in this preview")}
+          className="rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice hover:bg-accent-violet-hi"
+        >
           + New group block
         </button>
       </div>
@@ -300,7 +305,10 @@ export default function GroupsBlocksPage() {
             <div className="w-[100px] font-mono text-12 text-fg-3">{w.dates}</div>
             <div className="w-[70px] text-12 text-fg-3">{w.rooms} rooms</div>
             <div className="flex-[1.4] text-12 text-fg-3">{w.contact}</div>
-            <button className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong">
+            <button
+              onClick={() => toast(`Converted “${w.name}” inquiry to a tentative block`)}
+              className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+            >
               Convert to block
             </button>
           </div>
@@ -378,7 +386,12 @@ export default function GroupsBlocksPage() {
             <div>
               <div className="mb-2 flex items-baseline justify-between">
                 <Eyebrow>Rooming list</Eyebrow>
-                <button className="text-[11.5px] text-accent-violet-hi">+ Add guest</button>
+                <button
+                  onClick={() => toast("Added a rooming-list row")}
+                  className="text-[11.5px] text-accent-violet-hi hover:underline"
+                >
+                  + Add guest
+                </button>
               </div>
               <Card className="overflow-hidden p-0">
                 {g.rooming.map((rm) => (
@@ -394,7 +407,10 @@ export default function GroupsBlocksPage() {
                     >
                       {rm.roomLabel}
                     </div>
-                    <button className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px]">
+                    <button
+                      onClick={() => toast(`${rm.assigned ? "Reassigning" : "Assigning"} a room for ${rm.guest}`)}
+                      className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px] hover:border-line-strong"
+                    >
                       {rm.assigned ? "Change" : "Assign"}
                     </button>
                   </div>

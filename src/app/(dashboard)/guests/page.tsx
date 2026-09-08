@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { downloadCsv } from "@/lib/csv";
 import { Card, Eyebrow, GhostButton, TIER_COLOR, initialsOf } from "@/components/upx/primitives";
 
 type Segment = "All" | "Platinum" | "Repeat guests" | "Marketing opt-in";
@@ -14,6 +16,7 @@ const GRID =
 
 export default function GuestDatabasePage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const guests = useQuery(
     api.guests.getGuestsForProperty,
     activeProperty ? { propertyId: activeProperty._id } : "skip"
@@ -58,8 +61,31 @@ export default function GuestDatabasePage() {
           ))}
         </select>
         <div className="ml-auto flex gap-2">
-          <GhostButton>Import CSV</GhostButton>
-          <GhostButton>Export CSV</GhostButton>
+          <GhostButton
+            onClick={() => toast("CSV import isn’t available in this preview")}
+          >
+            Import CSV
+          </GhostButton>
+          <GhostButton
+            onClick={() =>
+              downloadCsv(
+                "guests.csv",
+                rows.map((g) => ({
+                  name: g.name,
+                  email: g.email,
+                  phone: g.phone,
+                  tier: g.tier,
+                  source: g.source,
+                  stays: g.stays,
+                  lastStay: g.lastStay,
+                  lifetimeValue: g.ltv,
+                  marketing: g.marketingOptOut ? "Opted out" : "Subscribed",
+                }))
+              )
+            }
+          >
+            Export CSV
+          </GhostButton>
         </div>
       </div>
 
@@ -134,7 +160,12 @@ export default function GuestDatabasePage() {
       </Card>
 
       <div className="mt-4 flex justify-end">
-        <button className="text-[11.5px] text-fg-3 hover:text-fg-1">
+        <button
+          onClick={() =>
+            toast("Logged a GDPR data request — the DPO team follows up within 30 days")
+          }
+          className="text-[11.5px] text-fg-3 hover:text-fg-1"
+        >
           Data controls: request export or deletion (GDPR)
         </button>
       </div>

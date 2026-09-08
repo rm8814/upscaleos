@@ -56,7 +56,8 @@ const addDays = (base: Date, n: number) => {
 };
 const dayIndex = (isoDate: string) =>
   Math.round((new Date(isoDate + "T00:00:00Z").getTime() - WINDOW_START.getTime()) / 86400000);
-const rp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+const money = (n: number) => Math.round(n).toLocaleString("en-US");
+const rp = (n: number) => `Rp ${money(n)}`;
 const nightsBetween = (a: string, b: string) => Math.max(1, dayIndex(b) - dayIndex(a));
 
 type Rooms = FunctionReturnType<typeof api.operate.getRooms>;
@@ -140,7 +141,7 @@ export default function CalendarTapeChart() {
         return Math.round((occ / total) * 100);
       });
       const rates = days.map((d) =>
-        rp((NIGHTLY[type] ?? 1_850_000) * DOW_MULT[d.getUTCDay()])
+        money((NIGHTLY[type] ?? 1_850_000) * DOW_MULT[d.getUTCDay()])
       );
       return { type, rooms: rs, aggOcc, rates };
     });

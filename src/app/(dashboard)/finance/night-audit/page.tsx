@@ -63,10 +63,41 @@ export default function NightAuditPage() {
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
   const [ranAll, setRanAll] = useState(false);
   const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ from: string; to: string; days: number } | null>(
+    null
+  );
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const autoAudit = !!activeProperty?.autoNightAudit;
   const auditTime = activeProperty?.nightAuditTime ?? "03:00";
+
+  // Wall-clock date in the property's timezone — what the business date should
+  // reach once the audit is up to date.
+  const wallToday = useMemo(() => {
+    const tz = activeProperty?.timezone ?? "Asia/Makassar";
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }, [activeProperty?.timezone]);
+
+  const daysBehind = Math.max(
+    0,
+    Math.round(
+      (Date.parse(wallToday + "T00:00:00Z") -
+        Date.parse(businessDate + "T00:00:00Z")) /
+        86400000
+    )
+  );
+  // 1 day behind is the normal "audit hasn't run yet tonight" state; 2+ means a
+  // close was missed and the date needs to catch up.
+  const behind = daysBehind >= 2;
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -90,7 +121,7 @@ export default function NightAuditPage() {
     { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", alwaysDone: true, affected: undefined as { room: string; text: string }[] | undefined },
     { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", alwaysDone: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380,000 unmatched — posted to house account" }] },
     { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", alwaysDone: true, affected: undefined },
-    { icon: RefreshCw, label: "Roll business date", detail: `Advance system date from ${fmtDate(businessDate)} to ${fmtDate(nextDay(businessDate))}.`, alwaysDone: false, affected: undefined },
+    { icon: RefreshCw, label: "Roll business date", detail: behind ? `Catch up ${daysBehind} days — advance from ${fmtDate(businessDate)} to ${fmtDate(wallToday)}, posting each day's departures.` : `Advance system date from ${fmtDate(businessDate)} to ${fmtDate(nextDay(businessDate))}.`, alwaysDone: false, affected: undefined },
     { icon: FileSpreadsheet, label: "Generate revenue journal", detail: "Trial balance and revenue journal exported to accounting.", alwaysDone: false, affected: undefined },
     { icon: Check, label: "Close audit & notify", detail: "Lock the day, email the manager report.", alwaysDone: false, affected: undefined },
   ];
@@ -100,7 +131,12 @@ export default function NightAuditPage() {
   const runRemaining = async () => {
     if (!activeProperty || running || ranAll || !canRun) return;
     setRunning(true);
-    await rollBusinessDate({ id: activeProperty._id });
+    const r = await rollBusinessDate(
+      behind
+        ? { id: activeProperty._id, toDate: wallToday }
+        : { id: activeProperty._id }
+    );
+    setResult(r);
     setRanAll(true);
     setRunning(false);
   };
@@ -120,16 +156,38 @@ export default function NightAuditPage() {
           </div>
         )}
         <div className="ml-auto text-12 text-fg-3">
-          {doneCount} of {STEPS.length} steps complete
+          {result
+            ? `Rolled ${fmtDate(result.from)} → ${fmtDate(result.to)} (${result.days} day${
+                result.days === 1 ? "" : "s"
+              })`
+            : `${doneCount} of ${STEPS.length} steps complete`}
         </div>
         <button
           onClick={runRemaining}
           disabled={!activeProperty || running || ranAll || !canRun}
           className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
         >
-          {running ? "Running…" : ranAll ? "Audit complete" : "Run remaining steps"}
+          {running
+            ? "Running…"
+            : ranAll
+              ? "Audit complete"
+              : behind
+                ? `Catch up ${daysBehind} days`
+                : "Run remaining steps"}
         </button>
       </div>
+
+      {behind && !ranAll && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none text-room-ooo" />
+          <div>
+            Night audit is <strong>{daysBehind} days behind</strong> — last close was{" "}
+            {fmtDate(businessDate)}. Running it now posts {daysBehind} days of departures and
+            advances the business date to {fmtDate(wallToday)}. Until then, the calendar and all
+            arrival/departure counts still show {fmtDate(businessDate)}.
+          </div>
+        </div>
+      )}
 
       {member !== undefined && (
         canRun ? (

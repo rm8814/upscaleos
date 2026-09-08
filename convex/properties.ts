@@ -148,17 +148,58 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
   return { businessDate: newDate, previous: oldDate };
 }
 
-/** Night-audit "Run remaining steps" calls this to roll the date manually. */
+const MAX_AUTO_CATCHUP = 14; // days; a larger gap needs a manual catch-up
+
+function daysBetween(a: string, b: string) {
+  return Math.round(
+    (Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000
+  );
+}
+
+/**
+ * Roll a property's business date forward one day at a time until it reaches
+ * `target` (or `cap` rolls, whichever comes first). Each step runs a full
+ * `rollOne`, so every skipped day's departures still post.
+ */
+async function rollUpTo(
+  ctx: MutationCtx,
+  id: Id<"properties">,
+  target: string,
+  cap: number
+) {
+  const start = (await ctx.db.get(id))?.businessDate ?? "2026-09-08";
+  let current = start;
+  let days = 0;
+  while (current < target && days < cap) {
+    current = (await rollOne(ctx, id)).businessDate;
+    days += 1;
+  }
+  return { from: start, to: current, days, behind: current < target };
+}
+
+/**
+ * Night-audit "Run remaining steps" calls this. On schedule it advances one
+ * day; if the last close was several days ago it catches up to `toDate`,
+ * posting each intervening day.
+ */
 export const rollBusinessDate = mutation({
-  args: { id: v.id("properties") },
-  handler: (ctx, args) => rollOne(ctx, args.id),
+  args: { id: v.id("properties"), toDate: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const biz = (await ctx.db.get(args.id))?.businessDate ?? "2026-09-08";
+    if (args.toDate && args.toDate > biz) {
+      return rollUpTo(ctx, args.id, args.toDate, 60);
+    }
+    const res = await rollOne(ctx, args.id);
+    return { from: res.previous, to: res.businessDate, days: 1, behind: false };
+  },
 });
 
 /**
- * Cron entry point. For every property with automatic night audit enabled,
- * roll the business date once per day, on or after its scheduled local time,
- * and only when it is exactly one day behind the wall-clock date (so a stale
- * demo dataset never "runs away" catching up).
+ * Cron entry point. For every property with automatic night audit enabled and
+ * whose local time is at/after its scheduled hour, advance the business date to
+ * the current wall-clock date — one day if on schedule, or catching up day by
+ * day if the last close was missed. A gap wider than MAX_AUTO_CATCHUP days is
+ * left for a manual catch-up so a badly wrong clock can't run the date away.
  */
 export const runScheduledNightAudits = internalMutation({
   args: {},
@@ -166,6 +207,7 @@ export const runScheduledNightAudits = internalMutation({
     const now = new Date();
     const properties = await ctx.db.query("properties").collect();
     const rolled: string[] = [];
+    const needsManualCatchup: string[] = [];
 
     for (const p of properties) {
       if (!p.autoNightAudit || !p.nightAuditTime) continue;
@@ -190,17 +232,18 @@ export const runScheduledNightAudits = internalMutation({
         continue; // unknown timezone — skip rather than roll on a wrong clock
       }
 
-      const yesterday = new Date(wallDate + "T00:00:00Z");
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-      const yesterdayIso = yesterday.toISOString().slice(0, 10);
-
       const bizDate = p.businessDate ?? "2026-09-08";
-      if (bizDate === yesterdayIso && wallTime >= p.nightAuditTime) {
-        await rollOne(ctx, p._id);
-        rolled.push(p.name);
+      if (wallTime < p.nightAuditTime || bizDate >= wallDate) continue;
+
+      if (daysBetween(bizDate, wallDate) > MAX_AUTO_CATCHUP) {
+        needsManualCatchup.push(p.name);
+        continue;
       }
+
+      const r = await rollUpTo(ctx, p._id, wallDate, MAX_AUTO_CATCHUP);
+      rolled.push(`${p.name} (+${r.days}d)`);
     }
 
-    return { rolled };
+    return { rolled, needsManualCatchup };
   },
 });

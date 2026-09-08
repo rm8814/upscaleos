@@ -228,8 +228,12 @@ export default function DashboardPage() {
         />
         <StatTile
           label="Occupancy"
-          value={stats ? `${stats.occupancyPct}%` : "—"}
-          delta={stats ? `${stats.occupied}/${stats.sellable} sellable rooms` : undefined}
+          value={kpi ? `${kpi.occupancyPct}%` : "—"}
+          delta={
+            kpi
+              ? `${kpi.roomsSold}/${kpi.availableRoomNights} room-nights`
+              : undefined
+          }
           valueTone="cyan"
         />
         <StatTile

@@ -101,9 +101,11 @@ export default defineSchema({
     etaLabel: v.optional(v.string()), // e.g. '14:20'
     roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
     groupId: v.optional(v.id("group_blocks")), // part of a group block's rooming list
+    externalRef: v.optional(v.string()), // channel/OTA booking reference, for idempotent ingest
   })
     .index("by_property", ["propertyId"])
-    .index("by_group", ["groupId"]),
+    .index("by_group", ["groupId"])
+    .index("by_external_ref", ["externalRef"]),
   folios: defineTable({
     propertyId: v.id("properties"),
     reservationId: v.id("reservations"),

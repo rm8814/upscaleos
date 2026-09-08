@@ -1,9 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { ChevronRight, ChevronDown, Upload, Download, ArrowRight, AlertTriangle } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useProperty } from "@/components/providers/PropertyProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shortDate = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
 
 interface Channel {
   name: string;
@@ -46,7 +55,34 @@ const GRID = "grid grid-cols-[1.2fr_0.9fr_0.9fr_1fr_0.9fr_0.8fr_0.7fr] gap-2.5 p
 
 export default function ChannelManagerPage() {
   const toast = useToast();
+  const { activeProperty } = useProperty();
+  const propArg = activeProperty ? { propertyId: activeProperty._id } : "skip";
+  const recent = useQuery(api.channels.recentIngests, propArg);
+  const pullBookings = useMutation(api.channels.pullBookings);
   const [expanded, setExpanded] = useState<string | null>("Expedia");
+  const [pulling, setPulling] = useState<string | null>(null);
+
+  const doPull = async (channel: string) => {
+    if (!activeProperty) return;
+    setPulling(channel);
+    try {
+      const r = await pullBookings({
+        propertyId: activeProperty._id,
+        channel,
+        count: 3,
+      });
+      toast(
+        r.created === 0
+          ? `No new bookings on ${channel}`
+          : `Pulled ${r.created} booking${r.created > 1 ? "s" : ""} from ${channel} · ${r.roomsAssigned} auto-roomed`,
+        "success"
+      );
+    } catch {
+      toast(`Could not pull from ${channel}`, "error");
+    } finally {
+      setPulling(null);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-content">
@@ -122,10 +158,12 @@ export default function ChannelManagerPage() {
                       <Upload className="h-[13px] w-[13px]" /> Push rates &amp; inventory now
                     </button>
                     <button
-                      onClick={() => toast(`Pulled new bookings from ${c.name}`, "success")}
-                      className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+                      disabled={pulling === c.name}
+                      onClick={() => doPull(c.name)}
+                      className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong disabled:opacity-40"
                     >
-                      <Download className="h-[13px] w-[13px]" /> Pull bookings now
+                      <Download className="h-[13px] w-[13px]" />{" "}
+                      {pulling === c.name ? "Pulling…" : "Pull bookings now"}
                     </button>
                     {c.reconnect && (
                       <button
@@ -185,6 +223,48 @@ export default function ChannelManagerPage() {
             </div>
           );
         })}
+      </Card>
+
+      <Eyebrow className="mb-2.5 mt-6">Recently pulled bookings</Eyebrow>
+      <Card className="overflow-x-auto p-0">
+        <div className="min-w-[720px]">
+          <div className="grid grid-cols-[1fr_1.4fr_0.9fr_1.1fr_1fr_0.9fr] border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3">
+            <div>Channel ref</div>
+            <div>Guest</div>
+            <div>Channel</div>
+            <div>Stay</div>
+            <div>Room</div>
+            <div>Status</div>
+          </div>
+          {recent === undefined && (
+            <div className="px-4 py-6 text-13 text-fg-3">Loading…</div>
+          )}
+          {recent && recent.length === 0 && (
+            <div className="px-4 py-6 text-13 text-fg-3">
+              No channel bookings ingested yet — use “Pull bookings now” on a channel above.
+            </div>
+          )}
+          {(recent ?? []).map((r) => (
+            <div
+              key={r._id}
+              className="grid grid-cols-[1fr_1.4fr_0.9fr_1.1fr_1fr_0.9fr] items-center border-b border-line-soft px-4 py-2.5 text-13 last:border-0"
+            >
+              <div className="font-mono text-[11.5px] text-fg-3">{r.externalRef}</div>
+              <div className="font-medium">{r.guestName}</div>
+              <div className="text-12 text-fg-2">{r.channel}</div>
+              <div className="font-mono text-[11.5px] text-fg-3">
+                {shortDate(r.checkIn)} – {shortDate(r.checkOut)}
+              </div>
+              <div
+                className="font-mono text-12"
+                style={{ color: r.assigned ? "var(--fg-1)" : "var(--res-tentative)" }}
+              >
+                {r.assigned ? `${r.roomNumber} · ${r.roomType}` : "Unassigned"}
+              </div>
+              <div className="text-[11.5px] text-fg-3 capitalize">{r.status}</div>
+            </div>
+          ))}
+        </div>
       </Card>
     </div>
   );

@@ -176,7 +176,7 @@ export const getArrivalsToday = query({
 
 /* --------------------------------------------------------------- mutations */
 
-async function findOrCreateGuest(
+export async function findOrCreateGuest(
   ctx: MutationCtx,
   name: string,
   email?: string,

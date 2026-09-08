@@ -6,20 +6,20 @@ import { Card, Eyebrow } from "@/components/upx/primitives";
 type Tab = "till" | "txns" | "recon";
 
 const TXNS = [
-  { time: "14:22", guest: "Kadek Surya — RSV-8DZ7K6", ref: "Folio 204", method: "QRIS / e-wallet", amount: "Rp 1.240.000", voided: false },
-  { time: "13:05", guest: "Walk-in — spa treatment", ref: "Counter sale", method: "Cash", amount: "Rp 450.000", voided: false },
-  { time: "12:40", guest: "Emma Thompson — RSV-8DYNT2", ref: "Folio 301", method: "Credit/debit card", amount: "Rp 890.000", voided: false },
-  { time: "11:18", guest: "Michael Chen — RSV-8DZFQH", ref: "Folio 201", method: "Cash", amount: "Rp 620.000", voided: true },
-  { time: "09:52", guest: "City ledger — Accor Global", ref: "Group folio", method: "City ledger", amount: "Rp 3.100.000", voided: false },
+  { time: "14:22", guest: "Kadek Surya — RSV-8DZ7K6", ref: "Folio 204", method: "QRIS / e-wallet", amount: "Rp 1,240,000", voided: false },
+  { time: "13:05", guest: "Walk-in — spa treatment", ref: "Counter sale", method: "Cash", amount: "Rp 450,000", voided: false },
+  { time: "12:40", guest: "Emma Thompson — RSV-8DYNT2", ref: "Folio 301", method: "Credit/debit card", amount: "Rp 890,000", voided: false },
+  { time: "11:18", guest: "Michael Chen — RSV-8DZFQH", ref: "Folio 201", method: "Cash", amount: "Rp 620,000", voided: true },
+  { time: "09:52", guest: "City ledger — Accor Global", ref: "Group folio", method: "City ledger", amount: "Rp 3,100,000", voided: false },
 ];
 
 const SHIFT_LOG = [
-  { cashier: "Amira K.", date: "3 Sep", shift: "07:00–15:00", expected: "Rp 8.240.000", counted: "Rp 8.240.000", variance: "Rp 0", status: "Balanced", color: "var(--accent-cyan)", handoverTo: "Rangga P." },
-  { cashier: "Rangga P.", date: "3 Sep", shift: "15:00–23:00", expected: "Rp 6.910.000", counted: "Rp 6.885.000", variance: "− Rp 25.000", status: "Short", color: "var(--res-tentative)", handoverTo: "Night audit" },
-  { cashier: "Amira K.", date: "2 Sep", shift: "07:00–15:00", expected: "Rp 7.500.000", counted: "Rp 7.520.000", variance: "+ Rp 20.000", status: "Over", color: "var(--res-tentative)", handoverTo: "Rangga P." },
+  { cashier: "Amira K.", date: "3 Sep", shift: "07:00–15:00", expected: "Rp 8,240,000", counted: "Rp 8,240,000", variance: "Rp 0", status: "Balanced", color: "var(--accent-cyan)", handoverTo: "Rangga P." },
+  { cashier: "Rangga P.", date: "3 Sep", shift: "15:00–23:00", expected: "Rp 6,910,000", counted: "Rp 6,885,000", variance: "− Rp 25,000", status: "Short", color: "var(--res-tentative)", handoverTo: "Night audit" },
+  { cashier: "Amira K.", date: "2 Sep", shift: "07:00–15:00", expected: "Rp 7,500,000", counted: "Rp 7,520,000", variance: "+ Rp 20,000", status: "Over", color: "var(--res-tentative)", handoverTo: "Rangga P." },
 ];
 
-const DENOMS = ["100.000", "50.000", "20.000", "10.000", "5.000", "2.000", "1.000"];
+const DENOMS = ["100,000", "50,000", "20,000", "10,000", "5,000", "2,000", "1,000"];
 
 const TXN_GRID = "grid grid-cols-[0.7fr_1.4fr_1fr_0.9fr_0.6fr] gap-2.5 px-4";
 
@@ -41,9 +41,9 @@ export default function CashierPage() {
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           { label: "Shift status", value: "Open", tone: "cyan" },
-          { label: "Opening float", value: "Rp 2.000.000", tone: "" },
-          { label: "Cash collected", value: "Rp 1.520.000", tone: "" },
-          { label: "Expected in drawer", value: "Rp 3.520.000", tone: "" },
+          { label: "Opening float", value: "Rp 2,000,000", tone: "" },
+          { label: "Cash collected", value: "Rp 1,520,000", tone: "" },
+          { label: "Expected in drawer", value: "Rp 3,520,000", tone: "" },
         ].map((m) => (
           <Card key={m.label} className="p-3.5">
             <div className="text-[11px] text-fg-3">{m.label}</div>
@@ -136,11 +136,11 @@ export default function CashierPage() {
                 ))}
                 <div className="mt-2.5 flex justify-between border-t border-line-soft pt-2.5 text-[12.5px]">
                   <span>Counted total</span>
-                  <span className="font-mono font-bold">Rp 3.495.000</span>
+                  <span className="font-mono font-bold">Rp 3,495,000</span>
                 </div>
                 <div className="mt-1 flex justify-between text-[12.5px]">
                   <span>Variance</span>
-                  <span className="font-mono font-bold text-res-tentative">− Rp 25.000</span>
+                  <span className="font-mono font-bold text-res-tentative">− Rp 25,000</span>
                 </div>
                 <button className="mt-3 w-full rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice">
                   Confirm close &amp; hand over

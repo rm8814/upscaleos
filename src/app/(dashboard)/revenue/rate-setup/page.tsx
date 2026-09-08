@@ -30,7 +30,7 @@ const PLANS: Plan[] = [
     formula: "= dynamic base",
     status: "Active",
     bookings30d: "184",
-    revenue30d: "Rp 402.900.000",
+    revenue30d: "Rp 402,900,000",
     channels: "All OTAs · Direct",
     los: "1 / 14 nights",
     cta: "None",
@@ -50,7 +50,7 @@ const PLANS: Plan[] = [
     formula: "= BAR − 18%",
     status: "Active",
     bookings30d: "63",
-    revenue30d: "Rp 118.400.000",
+    revenue30d: "Rp 118,400,000",
     channels: "Direct · Booking.com",
     los: "2 / 10 nights",
     cta: "None",
@@ -63,10 +63,10 @@ const PLANS: Plan[] = [
     code: "GOV",
     name: "Government Rate",
     segment: "Corporate",
-    formula: "= flat Rp 1.250.000",
+    formula: "= flat Rp 1,250,000",
     status: "Active",
     bookings30d: "12",
-    revenue30d: "Rp 21.800.000",
+    revenue30d: "Rp 21,800,000",
     channels: "Direct only",
     los: "1 / 30 nights",
     cta: "None",
@@ -79,10 +79,10 @@ const PLANS: Plan[] = [
     code: "PKG-HNY",
     name: "Honeymoon Package",
     segment: "Package",
-    formula: "= BAR + Rp 900.000",
+    formula: "= BAR + Rp 900,000",
     status: "Active",
     bookings30d: "9",
-    revenue30d: "Rp 41.600.000",
+    revenue30d: "Rp 41,600,000",
     channels: "Direct only",
     los: "2 / 7 nights",
     cta: "None",
@@ -110,9 +110,9 @@ const PLANS: Plan[] = [
 ];
 
 const PACKAGES = [
-  { name: "Romance Escape", code: "PKG-ROM", inclusions: "Sparkling wine on arrival, couples massage, private beach dinner.", price: "1.900.000", unit: "/ stay" },
-  { name: "Family Fun", code: "PKG-FAM", inclusions: "Kids stay & eat free, welcome amenity, late checkout.", price: "600.000", unit: "/ night" },
-  { name: "Workation", code: "PKG-WRK", inclusions: "Desk upgrade, fast Wi-Fi guarantee, daily laundry.", price: "350.000", unit: "/ night" },
+  { name: "Romance Escape", code: "PKG-ROM", inclusions: "Sparkling wine on arrival, couples massage, private beach dinner.", price: "1,900,000", unit: "/ stay" },
+  { name: "Family Fun", code: "PKG-FAM", inclusions: "Kids stay & eat free, welcome amenity, late checkout.", price: "600,000", unit: "/ night" },
+  { name: "Workation", code: "PKG-WRK", inclusions: "Desk upgrade, fast Wi-Fi guarantee, daily laundry.", price: "350,000", unit: "/ night" },
 ];
 
 const STATUS_COLOR: Record<Plan["status"], string> = {

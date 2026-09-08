@@ -23,7 +23,7 @@ const SLA_COLOR = (sla: string) =>
   sla === "Overdue" ? "var(--room-ooo)" : sla === "Done" ? "var(--fg-3)" : "var(--fg-2)";
 
 const rupiah = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
-const fmtRp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+const fmtRp = (n: number) => `Rp ${n.toLocaleString("en-US")}`;
 
 export default function MaintenanceHub() {
   const { activeProperty } = useProperty();

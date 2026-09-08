@@ -33,8 +33,8 @@ export const getRevenueMetrics = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
     return {
-      adr: "Rp 2.35M",
-      revpar: "Rp 1.9M",
+      adr: "Rp 2,350,000",
+      revpar: "Rp 1,900,000",
       avgLeadTime: "14 Days",
       marketShare: "24%",
     };
@@ -45,10 +45,10 @@ export const getRateSuggestions = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
     return [
-      { date: "Sep 10", currentRate: "Rp 2.2M", suggestedRate: "Rp 2.8M", delta: "+Rp 600k", confidence: "94%", reason: "High demand forecast due to Java Jazz Festival", demand: "High" },
-      { date: "Sep 11", currentRate: "Rp 2.2M", suggestedRate: "Rp 2.5M", delta: "+Rp 300k", confidence: "88%", reason: "Mid-week corporate peak", demand: "Medium" },
-      { date: "Sep 12", currentRate: "Rp 2.2M", suggestedRate: "Rp 2.1M", delta: "-Rp 100k", confidence: "72%", reason: "Low organic demand detected", demand: "Low" },
-      { date: "Sep 13", currentRate: "Rp 2.5M", suggestedRate: "Rp 3.2M", delta: "+Rp 700k", confidence: "91%", reason: "Weekend peak + wedding block", demand: "High" },
+      { date: "Sep 10", currentRate: "Rp 2,200,000", suggestedRate: "Rp 2,800,000", delta: "+Rp 600,000", confidence: "94%", reason: "High demand forecast due to Java Jazz Festival", demand: "High" },
+      { date: "Sep 11", currentRate: "Rp 2,200,000", suggestedRate: "Rp 2,500,000", delta: "+Rp 300,000", confidence: "88%", reason: "Mid-week corporate peak", demand: "Medium" },
+      { date: "Sep 12", currentRate: "Rp 2,200,000", suggestedRate: "Rp 2,100,000", delta: "-Rp 100,000", confidence: "72%", reason: "Low organic demand detected", demand: "Low" },
+      { date: "Sep 13", currentRate: "Rp 2,500,000", suggestedRate: "Rp 3,200,000", delta: "+Rp 700,000", confidence: "91%", reason: "Weekend peak + wedding block", demand: "High" },
     ];
   },
 });

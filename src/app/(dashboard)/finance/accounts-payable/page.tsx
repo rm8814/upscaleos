@@ -8,17 +8,17 @@ import { BILLS, STATUS_COLOR } from "./data";
 type Tab = "bills" | "runs" | "vendors";
 
 const RUNS = [
-  { date: "05 Sep 2026", billCount: "6", total: "Rp 74.200.000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
-  { date: "22 Aug 2026", billCount: "4", total: "Rp 38.900.000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
-  { date: "08 Aug 2026", billCount: "5", total: "Rp 51.400.000", method: "Bank transfer + cheque", status: "Completed", color: "var(--accent-cyan)" },
+  { date: "05 Sep 2026", billCount: "6", total: "Rp 74,200,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
+  { date: "22 Aug 2026", billCount: "4", total: "Rp 38,900,000", method: "Bank transfer — BCA", status: "Completed", color: "var(--accent-cyan)" },
+  { date: "08 Aug 2026", billCount: "5", total: "Rp 51,400,000", method: "Bank transfer + cheque", status: "Completed", color: "var(--accent-cyan)" },
 ];
 const VENDORS = [
-  { name: "PLN (electricity)", category: "Utilities", contact: "billing@pln.co.id", terms: "Net 14", bank: "BNI ****4821", openBalance: "Rp 12.400.000" },
-  { name: "Bali Fresh Produce", category: "F&B supplies", contact: "+62 361 555 210", terms: "Net 14", bank: "BCA ****9930", openBalance: "Rp 8.900.000" },
-  { name: "PT Sanitasi Jaya", category: "Maintenance", contact: "admin@sanitasijaya.id", terms: "Net 14", bank: "Mandiri ****1177", openBalance: "Rp 21.600.000" },
+  { name: "PLN (electricity)", category: "Utilities", contact: "billing@pln.co.id", terms: "Net 14", bank: "BNI ****4821", openBalance: "Rp 12,400,000" },
+  { name: "Bali Fresh Produce", category: "F&B supplies", contact: "+62 361 555 210", terms: "Net 14", bank: "BCA ****9930", openBalance: "Rp 8,900,000" },
+  { name: "PT Sanitasi Jaya", category: "Maintenance", contact: "admin@sanitasijaya.id", terms: "Net 14", bank: "Mandiri ****1177", openBalance: "Rp 21,600,000" },
   { name: "Expedia Group", category: "OTA commission", contact: "partner-finance@expedia.com", terms: "Net 30", bank: "Netted from payout", openBalance: "Rp 0" },
-  { name: "PT Kolam Sehat", category: "Maintenance", contact: "+62 812 340 990", terms: "Net 7", bank: "BCA ****3305", openBalance: "Rp 2.100.000" },
-  { name: "Sri Rejeki Laundry", category: "Housekeeping", contact: "+62 361 555 884", terms: "Net 14", bank: "BRI ****6642", openBalance: "Rp 4.700.000" },
+  { name: "PT Kolam Sehat", category: "Maintenance", contact: "+62 812 340 990", terms: "Net 7", bank: "BCA ****3305", openBalance: "Rp 2,100,000" },
+  { name: "Sri Rejeki Laundry", category: "Housekeeping", contact: "+62 361 555 884", terms: "Net 14", bank: "BRI ****6642", openBalance: "Rp 4,700,000" },
 ];
 
 const BILL_GRID = "grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr_0.9fr_0.9fr_1fr] gap-2.5 px-4";
@@ -30,9 +30,9 @@ export default function AccountsPayablePage() {
     <div className="mx-auto max-w-content">
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { label: "Total payable", value: "Rp 58.100.000", tone: "", border: "line" },
-          { label: "Overdue", value: "Rp 21.600.000", tone: "rose", border: "room-ooo" },
-          { label: "Due this week", value: "Rp 21.300.000", tone: "", border: "line" },
+          { label: "Total payable", value: "Rp 58,100,000", tone: "", border: "line" },
+          { label: "Overdue", value: "Rp 21,600,000", tone: "rose", border: "room-ooo" },
+          { label: "Due this week", value: "Rp 21,300,000", tone: "", border: "line" },
           { label: "Pending approval", value: "1", tone: "amber", border: "line" },
         ].map((m) => (
           <div
@@ -61,13 +61,13 @@ export default function AccountsPayablePage() {
         </div>
         <div className="flex gap-4 text-[11.5px] text-fg-3">
           <span>
-            <span className="text-accent-cyan">●</span> Current — Rp 26.100.000
+            <span className="text-accent-cyan">●</span> Current — Rp 26,100,000
           </span>
           <span>
-            <span className="text-res-tentative">●</span> 31–60d — Rp 10.400.000
+            <span className="text-res-tentative">●</span> 31–60d — Rp 10,400,000
           </span>
           <span>
-            <span className="text-room-ooo">●</span> 60d+ — Rp 21.600.000
+            <span className="text-room-ooo">●</span> 60d+ — Rp 21,600,000
           </span>
         </div>
       </Card>

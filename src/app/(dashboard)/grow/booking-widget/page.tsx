@@ -4,25 +4,25 @@ import React, { useState } from "react";
 import { Star, Tag, BadgeCheck, ChevronDown, Flame, Mail } from "lucide-react";
 
 const PRICE_CAL = [
-  { label: "Fri 12", price: "1.2jt", cheapest: false },
-  { label: "Sat 13", price: "1.4jt", cheapest: false },
-  { label: "Sun 14", price: "980rb", cheapest: true },
-  { label: "Mon 15", price: "1.0jt", cheapest: false },
-  { label: "Tue 16", price: "1.0jt", cheapest: false },
-  { label: "Wed 17", price: "1.1jt", cheapest: false },
-  { label: "Thu 18", price: "1.2jt", cheapest: false },
+  { label: "Fri 12", price: "1,200,000", cheapest: false },
+  { label: "Sat 13", price: "1,400,000", cheapest: false },
+  { label: "Sun 14", price: "980,000", cheapest: true },
+  { label: "Mon 15", price: "1,000,000", cheapest: false },
+  { label: "Tue 16", price: "1,000,000", cheapest: false },
+  { label: "Wed 17", price: "1,100,000", cheapest: false },
+  { label: "Thu 18", price: "1,200,000", cheapest: false },
 ];
 
 const ROOMS = [
-  { name: "Deluxe Twin", blurb: "Garden view · 32m²", price: "Rp 1.450.000", left: 3 },
-  { name: "Double Queen", blurb: "Pool view · 38m²", price: "Rp 1.850.000", left: 5 },
-  { name: "King Suite", blurb: "Ocean view · 54m²", price: "Rp 2.600.000", left: 1 },
+  { name: "Deluxe Twin", blurb: "Garden view · 32m²", price: "Rp 1,450,000", left: 3 },
+  { name: "Double Queen", blurb: "Pool view · 38m²", price: "Rp 1,850,000", left: 5 },
+  { name: "King Suite", blurb: "Ocean view · 54m²", price: "Rp 2,600,000", left: 1 },
 ];
 
 const ADDONS = [
-  { label: "Airport transfer (one way)", price: "Rp 250.000" },
-  { label: "Daily breakfast for 2", price: "Rp 180.000" },
-  { label: "Late checkout (16:00)", price: "Rp 300.000" },
+  { label: "Airport transfer (one way)", price: "Rp 250,000" },
+  { label: "Daily breakfast for 2", price: "Rp 180,000" },
+  { label: "Late checkout (16:00)", price: "Rp 300,000" },
 ];
 
 export default function BookingWidgetPage() {

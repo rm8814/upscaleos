@@ -89,7 +89,7 @@ export const seed = mutation({
     const taxes = [
       { name: "Government tax", rate: "11%", basis: "Room + F&B", inclusive: "Exclusive" },
       { name: "Service charge", rate: "10%", basis: "Room + F&B", inclusive: "Exclusive" },
-      { name: "City / tourism levy", rate: "Rp 20.000", basis: "Per room-night", inclusive: "Exclusive" },
+      { name: "City / tourism levy", rate: "Rp 20,000", basis: "Per room-night", inclusive: "Exclusive" },
     ];
     for (const t of taxes) {
       await ctx.db.insert("taxes", { ...t, propertyId });
@@ -143,7 +143,7 @@ export const seed = mutation({
         status: "In progress",
         created: iso(addDays(TODAY, -1)),
         oooLinked: true,
-        cost: "1.850.000",
+        cost: "1,850,000",
         slaText: "2h left",
       },
       {
@@ -155,7 +155,7 @@ export const seed = mutation({
         status: "Scheduled",
         created: iso(addDays(TODAY, -2)),
         oooLinked: false,
-        cost: "640.000",
+        cost: "640,000",
         slaText: "Tomorrow",
       },
       {
@@ -179,7 +179,7 @@ export const seed = mutation({
         status: "In progress",
         created: iso(addDays(TODAY, -4)),
         oooLinked: false,
-        cost: "2.100.000",
+        cost: "2,100,000",
         slaText: "Overdue",
       },
       {
@@ -191,7 +191,7 @@ export const seed = mutation({
         status: "Resolved",
         created: iso(addDays(TODAY, -8)),
         oooLinked: false,
-        cost: "180.000",
+        cost: "180,000",
         slaText: "Done",
       },
     ];
@@ -234,10 +234,10 @@ export const seed = mutation({
     );
 
     const nightlyByType: Record<string, string> = {
-      "Deluxe Twin": "Rp 1.450.000",
-      "Double Queen": "Rp 1.850.000",
-      "King Suite": "Rp 2.600.000",
-      "Presidential Suite": "Rp 6.900.000",
+      "Deluxe Twin": "Rp 1,450,000",
+      "Double Queen": "Rp 1,850,000",
+      "King Suite": "Rp 2,600,000",
+      "Presidential Suite": "Rp 6,900,000",
     };
 
     for (let i = 0; i < guestIds.length; i++) {
@@ -252,7 +252,7 @@ export const seed = mutation({
           : startOffset <= 0
             ? "inhouse"
             : resStatuses[i % resStatuses.length];
-      const rate = nightlyByType[room.type] ?? "Rp 1.850.000";
+      const rate = nightlyByType[room.type] ?? "Rp 1,850,000";
       const rupiah = Number(rate.replace(/[^\d]/g, ""));
       await ctx.db.insert("reservations", {
         guestId: guestIds[i],
@@ -262,7 +262,7 @@ export const seed = mutation({
         checkOut: iso(checkOut),
         status,
         rate,
-        totalAmount: `Rp ${(rupiah * nights).toLocaleString("id-ID")}`,
+        totalAmount: `Rp ${(rupiah * nights).toLocaleString("en-US")}`,
         channel: channels[i % channels.length],
         roomNumber: room.roomNumber,
         roomType: room.type,
@@ -274,18 +274,18 @@ export const seed = mutation({
 
     // ---- expenses (finance milestone) ------------------------------
     const expenses = [
-      { category: "Payroll", amount: "Rp 82.000.000", date: iso(addDays(TODAY, -6)), description: "Staff salaries — September" },
-      { category: "Utilities", amount: "Rp 12.400.000", date: iso(addDays(TODAY, -5)), description: "PLN electricity + water" },
-      { category: "Maintenance", amount: "Rp 5.100.000", date: iso(addDays(TODAY, -3)), description: "AC repair — Room 204" },
-      { category: "Marketing", amount: "Rp 9.800.000", date: iso(addDays(TODAY, -2)), description: "OTA commission — Expedia" },
+      { category: "Payroll", amount: "Rp 82,000,000", date: iso(addDays(TODAY, -6)), description: "Staff salaries — September" },
+      { category: "Utilities", amount: "Rp 12,400,000", date: iso(addDays(TODAY, -5)), description: "PLN electricity + water" },
+      { category: "Maintenance", amount: "Rp 5,100,000", date: iso(addDays(TODAY, -3)), description: "AC repair — Room 204" },
+      { category: "Marketing", amount: "Rp 9,800,000", date: iso(addDays(TODAY, -2)), description: "OTA commission — Expedia" },
     ];
     for (const e of expenses) await ctx.db.insert("expenses", { ...e, propertyId });
 
     // ---- corporate agreements (grow milestone) -------------------
     const corporates = [
-      { accountName: "Accor Global", type: "Corporate", rate: "Rp 1.800.000", vsBar: "−20%", commission: "10%", roomType: "King Suite", contractStart: "2026-01-01", contractEnd: "2026-12-31", status: "Active", blackoutDates: "Dec 24–31" },
-      { accountName: "La Compagnie", type: "Corporate", rate: "Rp 2.100.000", vsBar: "−15%", commission: "8%", roomType: "Double Queen", contractStart: "2026-03-15", contractEnd: "2027-03-14", status: "Active", blackoutDates: "Aug 10–15" },
-      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1.600.000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-06-01", contractEnd: "2026-12-31", status: "Expired", blackoutDates: "None" },
+      { accountName: "Accor Global", type: "Corporate", rate: "Rp 1,800,000", vsBar: "−20%", commission: "10%", roomType: "King Suite", contractStart: "2026-01-01", contractEnd: "2026-12-31", status: "Active", blackoutDates: "Dec 24–31" },
+      { accountName: "La Compagnie", type: "Corporate", rate: "Rp 2,100,000", vsBar: "−15%", commission: "8%", roomType: "Double Queen", contractStart: "2026-03-15", contractEnd: "2027-03-14", status: "Active", blackoutDates: "Aug 10–15" },
+      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1,600,000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-06-01", contractEnd: "2026-12-31", status: "Expired", blackoutDates: "None" },
     ];
     const corpIds = await Promise.all(
       corporates.map((c) => ctx.db.insert("corporate_agreements", { ...c, propertyId }))

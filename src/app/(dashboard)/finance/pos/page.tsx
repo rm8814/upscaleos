@@ -6,44 +6,44 @@ import { AlertTriangle, FileSpreadsheet, ExternalLink } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 
 const OUTLETS = [
-  { name: "Ombak Restaurant", type: "All-day dining", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 14.200.000", postings: 62, sync: "2m ago" },
-  { name: "Cliff Bar", type: "Bar & lounge", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 8.900.000", postings: 41, sync: "1m ago" },
-  { name: "Spa Samudra", type: "Wellness", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 6.400.000", postings: 12, sync: "6m ago" },
+  { name: "Ombak Restaurant", type: "All-day dining", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 14,200,000", postings: 62, sync: "2m ago" },
+  { name: "Cliff Bar", type: "Bar & lounge", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 8,900,000", postings: 41, sync: "1m ago" },
+  { name: "Spa Samudra", type: "Wellness", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 6,400,000", postings: 12, sync: "6m ago" },
   { name: "Pool Snacks", type: "Kiosk", status: "Offline", color: "var(--room-ooo)", revenue: "Rp 0", postings: 0, sync: "3h ago" },
 ];
 const ALERTS = [
   "Pool Snacks terminal offline for 3h — 0 postings today.",
-  "Ombak Restaurant — Rp 380.000 posting unmatched to any folio.",
+  "Ombak Restaurant — Rp 380,000 posting unmatched to any folio.",
 ];
 const CATEGORY_MIX = [
-  { label: "Food", pct: "54%", amount: "Rp 16.000.000" },
-  { label: "Beverage", pct: "31%", amount: "Rp 9.200.000" },
-  { label: "Spa", pct: "10%", amount: "Rp 3.000.000" },
-  { label: "Retail", pct: "5%", amount: "Rp 1.300.000" },
+  { label: "Food", pct: "54%", amount: "Rp 16,000,000" },
+  { label: "Beverage", pct: "31%", amount: "Rp 9,200,000" },
+  { label: "Spa", pct: "10%", amount: "Rp 3,000,000" },
+  { label: "Retail", pct: "5%", amount: "Rp 1,300,000" },
 ];
 const PAYMENT_MIX = [
-  { label: "Charge to room", pct: "48%", amount: "Rp 14.200.000" },
-  { label: "QRIS / e-wallet", pct: "27%", amount: "Rp 8.000.000" },
-  { label: "Card", pct: "16%", amount: "Rp 4.700.000" },
-  { label: "Cash", pct: "9%", amount: "Rp 2.600.000" },
+  { label: "Charge to room", pct: "48%", amount: "Rp 14,200,000" },
+  { label: "QRIS / e-wallet", pct: "27%", amount: "Rp 8,000,000" },
+  { label: "Card", pct: "16%", amount: "Rp 4,700,000" },
+  { label: "Cash", pct: "9%", amount: "Rp 2,600,000" },
 ];
 const HOURS = [1, 1, 0, 0, 0, 1, 2, 4, 6, 5, 4, 7, 9, 6, 4, 3, 4, 6, 8, 9, 7, 5, 3, 2];
 const TOP_ITEMS = [
-  { name: "Nasi Goreng Samudra", qty: 34, revenue: "Rp 2.380.000" },
-  { name: "Fresh coconut", qty: 51, revenue: "Rp 1.530.000" },
-  { name: "Grilled snapper", qty: 18, revenue: "Rp 3.240.000" },
-  { name: "Signature spa ritual", qty: 6, revenue: "Rp 4.200.000" },
+  { name: "Nasi Goreng Samudra", qty: 34, revenue: "Rp 2,380,000" },
+  { name: "Fresh coconut", qty: 51, revenue: "Rp 1,530,000" },
+  { name: "Grilled snapper", qty: 18, revenue: "Rp 3,240,000" },
+  { name: "Signature spa ritual", qty: 6, revenue: "Rp 4,200,000" },
 ];
 const STAFF = [
-  { name: "Wayan S.", outlet: "Ombak Restaurant", sales: "Rp 6.900.000" },
-  { name: "Komang A.", outlet: "Cliff Bar", sales: "Rp 5.100.000" },
-  { name: "Luh D.", outlet: "Spa Samudra", sales: "Rp 4.400.000" },
+  { name: "Wayan S.", outlet: "Ombak Restaurant", sales: "Rp 6,900,000" },
+  { name: "Komang A.", outlet: "Cliff Bar", sales: "Rp 5,100,000" },
+  { name: "Luh D.", outlet: "Spa Samudra", sales: "Rp 4,400,000" },
 ];
 const POSTINGS = [
-  { time: "14:22", outlet: "Ombak Restaurant", room: "204", guest: "Kadek Surya", amount: "Rp 380.000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "13:58", outlet: "Cliff Bar", room: "301", guest: "Emma Thompson", amount: "Rp 240.000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "13:10", outlet: "Spa Samudra", room: "118", guest: "Sarah Wijaya", amount: "Rp 700.000", recon: "Matched", color: "var(--accent-cyan)" },
-  { time: "12:41", outlet: "Ombak Restaurant", room: "—", guest: "Walk-in", amount: "Rp 380.000", recon: "Unmatched", color: "var(--res-tentative)" },
+  { time: "14:22", outlet: "Ombak Restaurant", room: "204", guest: "Kadek Surya", amount: "Rp 380,000", recon: "Matched", color: "var(--accent-cyan)" },
+  { time: "13:58", outlet: "Cliff Bar", room: "301", guest: "Emma Thompson", amount: "Rp 240,000", recon: "Matched", color: "var(--accent-cyan)" },
+  { time: "13:10", outlet: "Spa Samudra", room: "118", guest: "Sarah Wijaya", amount: "Rp 700,000", recon: "Matched", color: "var(--accent-cyan)" },
+  { time: "12:41", outlet: "Ombak Restaurant", room: "—", guest: "Walk-in", amount: "Rp 380,000", recon: "Unmatched", color: "var(--res-tentative)" },
 ];
 
 function Bars({ rows, color }: { rows: { label: string; pct: string; amount: string }[]; color: string }) {

@@ -32,7 +32,7 @@ const MENU: Record<Cat, { name: string; price: number }[]> = {
   ],
 };
 
-const fmt = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+const fmt = (n: number) => `Rp ${n.toLocaleString("en-US")}`;
 
 export default function GuestPosPage() {
   const [cat, setCat] = useState<Cat>("Mains");

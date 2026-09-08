@@ -19,57 +19,57 @@ const TABLES: Record<Exclude<ReportTab, "monthly">, { cols: string[]; rows: stri
   pace: {
     cols: ["Stay date", "OTB rooms", "Pace vs. LY", "ADR", "Revenue OTB", "Pickup 7d"],
     rows: [
-      ["12 Sep", "24", "+8%", "Rp 2.06jt", "Rp 49.4jt", "+6"],
-      ["13 Sep", "27", "+14%", "Rp 2.31jt", "Rp 62.4jt", "+9"],
-      ["14 Sep", "19", "−4%", "Rp 1.88jt", "Rp 35.7jt", "+2"],
-      ["15 Sep", "22", "+3%", "Rp 1.97jt", "Rp 43.3jt", "+4"],
-      ["16 Sep", "20", "−1%", "Rp 1.91jt", "Rp 38.2jt", "+3"],
-      ["17 Sep", "25", "+11%", "Rp 2.14jt", "Rp 53.5jt", "+7"],
+      ["12 Sep", "24", "+8%", "Rp 2,060,000", "Rp 49,400,000", "+6"],
+      ["13 Sep", "27", "+14%", "Rp 2,310,000", "Rp 62,400,000", "+9"],
+      ["14 Sep", "19", "−4%", "Rp 1,880,000", "Rp 35,700,000", "+2"],
+      ["15 Sep", "22", "+3%", "Rp 1,970,000", "Rp 43,300,000", "+4"],
+      ["16 Sep", "20", "−1%", "Rp 1,910,000", "Rp 38,200,000", "+3"],
+      ["17 Sep", "25", "+11%", "Rp 2,140,000", "Rp 53,500,000", "+7"],
     ],
   },
   pickup: {
     cols: ["Date booked", "Rooms", "Room-nights", "ADR", "Revenue", "Cxl"],
     rows: [
-      ["07 Sep", "11", "24", "Rp 2.02jt", "Rp 48.5jt", "1"],
-      ["06 Sep", "9", "19", "Rp 1.96jt", "Rp 37.2jt", "0"],
-      ["05 Sep", "13", "31", "Rp 2.11jt", "Rp 65.4jt", "2"],
-      ["04 Sep", "7", "14", "Rp 1.88jt", "Rp 26.3jt", "1"],
-      ["03 Sep", "10", "22", "Rp 2.04jt", "Rp 44.9jt", "0"],
+      ["07 Sep", "11", "24", "Rp 2,020,000", "Rp 48,500,000", "1"],
+      ["06 Sep", "9", "19", "Rp 1,960,000", "Rp 37,200,000", "0"],
+      ["05 Sep", "13", "31", "Rp 2,110,000", "Rp 65,400,000", "2"],
+      ["04 Sep", "7", "14", "Rp 1,880,000", "Rp 26,300,000", "1"],
+      ["03 Sep", "10", "22", "Rp 2,040,000", "Rp 44,900,000", "0"],
     ],
   },
   source: {
     cols: ["Source", "Rooms", "Room-nights", "ADR", "Revenue", "Commission"],
     rows: [
-      ["Direct", "68", "152", "Rp 2.18jt", "Rp 331.4jt", "Rp 0"],
-      ["Booking.com", "62", "138", "Rp 2.04jt", "Rp 281.5jt", "Rp 42.2jt"],
-      ["Agoda", "38", "84", "Rp 1.96jt", "Rp 164.6jt", "Rp 28.0jt"],
-      ["Traveloka", "29", "61", "Rp 1.99jt", "Rp 121.4jt", "Rp 19.4jt"],
-      ["Expedia", "21", "44", "Rp 1.92jt", "Rp 84.5jt", "Rp 15.2jt"],
+      ["Direct", "68", "152", "Rp 2,180,000", "Rp 331,400,000", "Rp 0"],
+      ["Booking.com", "62", "138", "Rp 2,040,000", "Rp 281,500,000", "Rp 42,200,000"],
+      ["Agoda", "38", "84", "Rp 1,960,000", "Rp 164,600,000", "Rp 28,000,000"],
+      ["Traveloka", "29", "61", "Rp 1,990,000", "Rp 121,400,000", "Rp 19,400,000"],
+      ["Expedia", "21", "44", "Rp 1,920,000", "Rp 84,500,000", "Rp 15,200,000"],
     ],
   },
   roomType: {
     cols: ["Room type", "Sold", "Occ %", "ADR", "RevPAR", "Revenue"],
     rows: [
-      ["Deluxe Twin", "142", "82%", "Rp 1.51jt", "Rp 1.24jt", "Rp 214.4jt"],
-      ["Double Queen", "128", "76%", "Rp 1.92jt", "Rp 1.46jt", "Rp 245.8jt"],
-      ["King Suite", "74", "71%", "Rp 2.71jt", "Rp 1.92jt", "Rp 200.5jt"],
-      ["Presidential Suite", "18", "60%", "Rp 7.10jt", "Rp 4.26jt", "Rp 127.8jt"],
+      ["Deluxe Twin", "142", "82%", "Rp 1,510,000", "Rp 1,240,000", "Rp 214,400,000"],
+      ["Double Queen", "128", "76%", "Rp 1,920,000", "Rp 1,460,000", "Rp 245,800,000"],
+      ["King Suite", "74", "71%", "Rp 2,710,000", "Rp 1,920,000", "Rp 200,500,000"],
+      ["Presidential Suite", "18", "60%", "Rp 7,100,000", "Rp 4,260,000", "Rp 127,800,000"],
     ],
   },
   forecast: {
     cols: ["Week", "Fcst occ", "Fcst ADR", "Fcst RevPAR", "Confidence", "Delta vs. budget"],
     rows: [
-      ["15–21 Sep", "79%", "Rp 2.08jt", "Rp 1.64jt", "High", "+4.2%"],
-      ["22–28 Sep", "74%", "Rp 2.01jt", "Rp 1.49jt", "Medium", "+1.1%"],
-      ["29 Sep–5 Oct", "68%", "Rp 1.94jt", "Rp 1.32jt", "Medium", "−2.4%"],
-      ["6–12 Oct", "72%", "Rp 1.98jt", "Rp 1.43jt", "Low", "+0.3%"],
+      ["15–21 Sep", "79%", "Rp 2,080,000", "Rp 1,640,000", "High", "+4.2%"],
+      ["22–28 Sep", "74%", "Rp 2,010,000", "Rp 1,490,000", "Medium", "+1.1%"],
+      ["29 Sep–5 Oct", "68%", "Rp 1,940,000", "Rp 1,320,000", "Medium", "−2.4%"],
+      ["6–12 Oct", "72%", "Rp 1,980,000", "Rp 1,430,000", "Low", "+0.3%"],
     ],
   },
 };
 
 const MONTHLY_METRICS = [
   { label: "Room-nights sold", value: "3,412" },
-  { label: "ADR", value: "Rp 2.04jt" },
+  { label: "ADR", value: "Rp 2,040,000" },
   { label: "Cancellations", value: "48" },
   { label: "Direct share", value: "39%" },
 ];
@@ -157,9 +157,9 @@ export default function ReportsPage() {
         <>
           <div className="mb-3.5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
             {[
-              { label: "MTD revenue", value: "Rp 890.400.000", delta: "+6.8% vs. last year", tone: "cyan" },
+              { label: "MTD revenue", value: "Rp 890,400,000", delta: "+6.8% vs. last year", tone: "cyan" },
               { label: "Occupancy", value: "78%", delta: "+3pt vs. last year", tone: "muted" },
-              { label: "RevPAR", value: "Rp 1.011.000", delta: "+4.2% vs. last year", tone: "cyan" },
+              { label: "RevPAR", value: "Rp 1,011,000", delta: "+4.2% vs. last year", tone: "cyan" },
             ].map((m) => (
               <Card key={m.label} className="p-4">
                 <div className="text-[11px] uppercase tracking-[0.08em] text-fg-3">{m.label}</div>

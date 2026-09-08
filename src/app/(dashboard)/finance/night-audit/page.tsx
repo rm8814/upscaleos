@@ -16,7 +16,7 @@ import { Card, Eyebrow } from "@/components/upx/primitives";
 
 const STEPS = [
   { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", done: true },
-  { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", done: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380.000 unmatched — posted to house account" }] },
+  { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", done: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380,000 unmatched — posted to house account" }] },
   { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", done: true },
   { icon: RefreshCw, label: "Roll business date", detail: "Advance system date from 4 Sep to 5 Sep 2026.", done: false },
   { icon: FileSpreadsheet, label: "Generate revenue journal", detail: "Trial balance and revenue journal exported to accounting.", done: false },
@@ -28,9 +28,9 @@ const WARNINGS = [
   "1 reservation marked in-house has no room assigned.",
 ];
 const EXCEPTIONS = [
-  { text: "Room 312 — rate override below floor (Rp 980.000 vs. floor Rp 1.400.000)", resolved: false },
+  { text: "Room 312 — rate override below floor (Rp 980,000 vs. floor Rp 1,400,000)", resolved: false },
   { text: "Guest folio RSV-8DZAAJ — deposit not applied", resolved: false },
-  { text: "OTA settlement Agoda — Rp 42.000 rounding difference", resolved: true },
+  { text: "OTA settlement Agoda — Rp 42,000 rounding difference", resolved: true },
 ];
 const HISTORY = [
   { date: "3 Sep 03:12", summary: "Audit complete — 0 exceptions", status: "OK", color: "var(--accent-cyan)" },
@@ -156,7 +156,7 @@ export default function NightAuditPage() {
 
       <div className="mb-5 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
         {[
-          { label: "Room revenue posted", value: "Rp 42.600.000", tone: "" },
+          { label: "Room revenue posted", value: "Rp 42,600,000", tone: "" },
           { label: "Exceptions flagged", value: String(EXCEPTIONS.filter((e, i) => !e.resolved && !resolved.has(i)).length), tone: "rose" },
           { label: "Last successful audit", value: "3 Sep, 03:12", tone: "" },
         ].map((m) => (

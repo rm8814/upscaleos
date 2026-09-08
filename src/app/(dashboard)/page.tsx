@@ -42,9 +42,9 @@ const KPI_BY_PERIOD: Record<
   Period,
   { revenue: string; revDelta: string; adr: string; adrDelta: string; revpar: string; revparDelta: string }
 > = {
-  today: { revenue: "Rp 48.2jt", revDelta: "+6.1%", adr: "Rp 2.14jt", adrDelta: "+1.2%", revpar: "Rp 1.79jt", revparDelta: "+7.4%" },
-  "7d": { revenue: "Rp 331jt", revDelta: "+9.0%", adr: "Rp 2.09jt", adrDelta: "+2.4%", revpar: "Rp 1.71jt", revparDelta: "+11.0%" },
-  "30d": { revenue: "Rp 1,42mia", revDelta: "+12.6%", adr: "Rp 2.02jt", adrDelta: "+3.1%", revpar: "Rp 1.64jt", revparDelta: "+14.2%" },
+  today: { revenue: "Rp 48,200,000", revDelta: "+6.1%", adr: "Rp 2,140,000", adrDelta: "+1.2%", revpar: "Rp 1,790,000", revparDelta: "+7.4%" },
+  "7d": { revenue: "Rp 331,000,000", revDelta: "+9.0%", adr: "Rp 2,090,000", adrDelta: "+2.4%", revpar: "Rp 1,710,000", revparDelta: "+11.0%" },
+  "30d": { revenue: "Rp 1,420,000,000", revDelta: "+12.6%", adr: "Rp 2,020,000", adrDelta: "+3.1%", revpar: "Rp 1,640,000", revparDelta: "+14.2%" },
 };
 
 const CHANNEL_MIX = [
@@ -55,9 +55,9 @@ const CHANNEL_MIX = [
 ];
 
 const REVENUE_SOURCES = [
-  { label: "Rooms", pct: "72%", amount: "Rp 238.400.000" },
-  { label: "F&B", pct: "19%", amount: "Rp 62.900.000" },
-  { label: "Other", pct: "9%", amount: "Rp 29.700.000" },
+  { label: "Rooms", pct: "72%", amount: "Rp 238,400,000" },
+  { label: "F&B", pct: "19%", amount: "Rp 62,900,000" },
+  { label: "Other", pct: "9%", amount: "Rp 29,700,000" },
 ];
 
 const TASKS = [

@@ -17,10 +17,10 @@ const ROOM_TYPES = [
 ];
 
 const SEASONS = [
-  { name: "Low", dates: "Feb 1 – Mar 31", color: "var(--accent-cyan)", standard: "Rp 1.150.000", deluxe: "Rp 1.480.000", suite: "Rp 2.100.000", flex: "Rp 1.650.000" },
-  { name: "Shoulder", dates: "Apr 1 – Jun 30", color: "var(--res-tentative)", standard: "Rp 1.350.000", deluxe: "Rp 1.750.000", suite: "Rp 2.500.000", flex: "Rp 1.950.000" },
-  { name: "High", dates: "Jul 1 – Sep 30", color: "var(--accent-violet)", standard: "Rp 1.650.000", deluxe: "Rp 2.150.000", suite: "Rp 3.100.000", flex: "Rp 2.400.000" },
-  { name: "Peak", dates: "Dec 20 – Jan 5", color: "var(--room-ooo)", standard: "Rp 2.400.000", deluxe: "Rp 3.200.000", suite: "Rp 4.900.000", flex: "Rp 3.600.000" },
+  { name: "Low", dates: "Feb 1 – Mar 31", color: "var(--accent-cyan)", standard: "Rp 1,150,000", deluxe: "Rp 1,480,000", suite: "Rp 2,100,000", flex: "Rp 1,650,000" },
+  { name: "Shoulder", dates: "Apr 1 – Jun 30", color: "var(--res-tentative)", standard: "Rp 1,350,000", deluxe: "Rp 1,750,000", suite: "Rp 2,500,000", flex: "Rp 1,950,000" },
+  { name: "High", dates: "Jul 1 – Sep 30", color: "var(--accent-violet)", standard: "Rp 1,650,000", deluxe: "Rp 2,150,000", suite: "Rp 3,100,000", flex: "Rp 2,400,000" },
+  { name: "Peak", dates: "Dec 20 – Jan 5", color: "var(--room-ooo)", standard: "Rp 2,400,000", deluxe: "Rp 3,200,000", suite: "Rp 4,900,000", flex: "Rp 3,600,000" },
 ];
 
 const RULES = [
@@ -30,19 +30,18 @@ const RULES = [
   { condition: "competitor drops rate > 10%", action: "match within guardrails", scope: "King Suite", status: "Active", ok: true },
 ];
 const GUARDRAILS = [
-  { name: "Deluxe Twin", floor: "Rp 1.100.000", ceiling: "Rp 2.400.000" },
-  { name: "Double Queen", floor: "Rp 1.400.000", ceiling: "Rp 3.100.000" },
-  { name: "King Suite", floor: "Rp 2.000.000", ceiling: "Rp 4.600.000" },
-  { name: "Presidential Suite", floor: "Rp 5.500.000", ceiling: "Rp 11.000.000" },
+  { name: "Deluxe Twin", floor: "Rp 1,100,000", ceiling: "Rp 2,400,000" },
+  { name: "Double Queen", floor: "Rp 1,400,000", ceiling: "Rp 3,100,000" },
+  { name: "King Suite", floor: "Rp 2,000,000", ceiling: "Rp 4,600,000" },
+  { name: "Presidential Suite", floor: "Rp 5,500,000", ceiling: "Rp 11,000,000" },
 ];
 const QUEUE = [
-  { date: "Sat 13 Sep", roomType: "King Suite", current: "Rp 2.600.000", suggested: "Rp 3.120.000", reason: "Occupancy 91%, 4 OTAs raised rates" },
-  { date: "Sun 14 Sep", roomType: "Deluxe Twin", current: "Rp 1.450.000", suggested: "Rp 1.360.000", reason: "Pickup pace 22% below LY" },
-  { date: "Fri 19 Sep", roomType: "Double Queen", current: "Rp 1.850.000", suggested: "Rp 2.180.000", reason: "Beach festival within 2 km" },
+  { date: "Sat 13 Sep", roomType: "King Suite", current: "Rp 2,600,000", suggested: "Rp 3,120,000", reason: "Occupancy 91%, 4 OTAs raised rates" },
+  { date: "Sun 14 Sep", roomType: "Deluxe Twin", current: "Rp 1,450,000", suggested: "Rp 1,360,000", reason: "Pickup pace 22% below LY" },
+  { date: "Fri 19 Sep", roomType: "Double Queen", current: "Rp 1,850,000", suggested: "Rp 2,180,000", reason: "Beach festival within 2 km" },
 ];
 
-const fmt = (n: number) =>
-  n >= 1_000_000 ? `Rp ${(n / 1_000_000).toFixed(2)}jt` : `Rp ${Math.round(n / 1000)}rb`;
+const fmt = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
 export default function RatesPage() {
   const [view, setView] = useState<"grid" | "seasons" | "rules">("grid");

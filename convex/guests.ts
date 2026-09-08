@@ -2,7 +2,7 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 
 const rupiah = (s: string | undefined) => Number((s ?? "").replace(/[^\d]/g, "")) || 0;
-const fmtRp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+const fmtRp = (n: number) => `Rp ${n.toLocaleString("en-US")}`;
 
 /** Guests who have at least one reservation at this property, with rollups. */
 export const getGuestsForProperty = query({

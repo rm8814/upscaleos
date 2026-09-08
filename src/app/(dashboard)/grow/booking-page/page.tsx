@@ -4,9 +4,9 @@ import React from "react";
 import { Star, ShieldCheck, BadgeCheck, Undo2, Waves, Wifi, Coffee, Dumbbell, Car } from "lucide-react";
 
 const ROOMS = [
-  { name: "Deluxe Twin", blurb: "Garden view · 32m²", ota: "Rp 1.680.000", price: "Rp 1.450.000", left: 3 },
-  { name: "Double Queen", blurb: "Pool view · 38m²", ota: "Rp 2.140.000", price: "Rp 1.850.000", left: 5 },
-  { name: "King Suite", blurb: "Ocean view · 54m²", ota: "Rp 3.050.000", price: "Rp 2.600.000", left: 1 },
+  { name: "Deluxe Twin", blurb: "Garden view · 32m²", ota: "Rp 1,680,000", price: "Rp 1,450,000", left: 3 },
+  { name: "Double Queen", blurb: "Pool view · 38m²", ota: "Rp 2,140,000", price: "Rp 1,850,000", left: 5 },
+  { name: "King Suite", blurb: "Ocean view · 54m²", ota: "Rp 3,050,000", price: "Rp 2,600,000", left: 1 },
 ];
 const AMENITIES = [
   { icon: Waves, label: "Infinity pool" },
@@ -32,7 +32,7 @@ const REVIEWS = [
 const FAQS = [
   { q: "Is the direct rate really cheaper?", a: "Yes — direct rates run 8–15% below OTAs and always include breakfast and late checkout." },
   { q: "What's the cancellation policy?", a: "Free cancellation up to 48 hours before arrival on all flexible rates." },
-  { q: "Do you offer airport transfers?", a: "Yes, add it during checkout for Rp 250.000 one way." },
+  { q: "Do you offer airport transfers?", a: "Yes, add it during checkout for Rp 250,000 one way." },
   { q: "Can I pay with QRIS or GoPay?", a: "All local e-wallets and major cards are accepted at secure checkout." },
 ];
 
@@ -322,7 +322,7 @@ export default function BookingLandingPage() {
         <div className="text-13" style={{ color: "#4C5876" }}>
           From{" "}
           <span className="font-mono font-bold" style={{ color: "#14213E" }}>
-            Rp 980.000
+            Rp 980,000
           </span>{" "}
           / night · free cancellation
         </div>

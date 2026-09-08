@@ -96,7 +96,7 @@ export default function BillDetailPage() {
             </button>
           </Card>
           <div className="px-1 text-11 text-fg-3">
-            Bills over Rp 20.000.000 require GM approval before payment-run inclusion.
+            Bills over Rp 20,000,000 require GM approval before payment-run inclusion.
           </div>
         </div>
       </div>

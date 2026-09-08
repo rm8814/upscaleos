@@ -21,10 +21,10 @@ interface Channel {
 }
 
 const CHANNELS: Channel[] = [
-  { name: "Booking.com", status: "Connected", ariPush: "Every 5 min", parity: "In parity", parityOk: true, lastSync: "2 min ago", roomTypes: "4/4", errors: 0, commission: "15%", bookings: "62", revenue: "Rp 148.900.000" },
-  { name: "Agoda", status: "Connected", ariPush: "Every 5 min", parity: "In parity", parityOk: true, lastSync: "4 min ago", roomTypes: "4/4", errors: 0, commission: "17%", bookings: "38", revenue: "Rp 79.400.000" },
-  { name: "Expedia", status: "Degraded", ariPush: "Every 15 min", parity: "1 rate below", parityOk: false, lastSync: "38 min ago", roomTypes: "3/4", errors: 2, commission: "18%", bookings: "21", revenue: "Rp 41.200.000", errorLog: "Rate plan FLEX rejected — room type not mapped" },
-  { name: "Traveloka", status: "Connected", ariPush: "Every 10 min", parity: "In parity", parityOk: true, lastSync: "7 min ago", roomTypes: "4/4", errors: 0, commission: "16%", bookings: "29", revenue: "Rp 52.800.000" },
+  { name: "Booking.com", status: "Connected", ariPush: "Every 5 min", parity: "In parity", parityOk: true, lastSync: "2 min ago", roomTypes: "4/4", errors: 0, commission: "15%", bookings: "62", revenue: "Rp 148,900,000" },
+  { name: "Agoda", status: "Connected", ariPush: "Every 5 min", parity: "In parity", parityOk: true, lastSync: "4 min ago", roomTypes: "4/4", errors: 0, commission: "17%", bookings: "38", revenue: "Rp 79,400,000" },
+  { name: "Expedia", status: "Degraded", ariPush: "Every 15 min", parity: "1 rate below", parityOk: false, lastSync: "38 min ago", roomTypes: "3/4", errors: 2, commission: "18%", bookings: "21", revenue: "Rp 41,200,000", errorLog: "Rate plan FLEX rejected — room type not mapped" },
+  { name: "Traveloka", status: "Connected", ariPush: "Every 10 min", parity: "In parity", parityOk: true, lastSync: "7 min ago", roomTypes: "4/4", errors: 0, commission: "16%", bookings: "29", revenue: "Rp 52,800,000" },
   { name: "Airbnb", status: "Disconnected", ariPush: "Paused", parity: "—", parityOk: false, lastSync: "3 days ago", roomTypes: "0/4", errors: 1, commission: "3%", bookings: "0", revenue: "Rp 0", reconnect: true, errorLog: "OAuth token expired — re-authentication required" },
 ];
 

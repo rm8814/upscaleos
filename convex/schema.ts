@@ -43,7 +43,7 @@ export default defineSchema({
   taxes: defineTable({
     propertyId: v.id("properties"),
     name: v.string(),
-    rate: v.string(), // '11%' or 'Rp 20.000'
+    rate: v.string(), // '11%' or 'Rp 20,000'
     basis: v.string(), // 'Room + F&B' | 'Per room-night' | ...
     inclusive: v.string(), // 'Inclusive' | 'Exclusive'
   }).index("by_property", ["propertyId"]),

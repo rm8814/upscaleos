@@ -32,6 +32,8 @@ export const seed = mutation({
     for (const table of [
       "folio_lines",
       "folios",
+      "group_subblocks",
+      "group_blocks",
       "waitlist",
       "reservations",
       "rooms",
@@ -329,6 +331,181 @@ export const seed = mutation({
             amount: Math.round(rupiah * 0.21),
           });
         }
+      }
+    }
+
+    // ---- group blocks + rooming lists -----------------------------
+    const groupSeed = [
+      {
+        name: "Astra International — Leadership Offsite",
+        status: "Definite",
+        startOffset: 10,
+        nights: 3,
+        cutoffOffset: 3,
+        contractLabel: "Signed",
+        salesManager: "Rangga Putra",
+        billing: "Master folio — all room & tax",
+        depositStatus: "Received",
+        depositAmount: "Rp 42,000,000",
+        concessions:
+          "1 comp room per 20, free meeting room, 15:00 late checkout for VIPs.",
+        contact: "Dewi Anggraini · dewi.a@astra.co.id · +62 811 900 4471",
+        subs: [
+          { roomType: "Double Queen", blocked: 16, rate: "Rp 1,750,000" },
+          { roomType: "King Suite", blocked: 8, rate: "Rp 2,400,000" },
+        ],
+        rooming: [
+          { guest: "Dewi Anggraini", roomType: "King Suite", assign: true },
+          { guest: "Arif Budiman", roomType: "Double Queen", assign: true },
+          { guest: "Rina Kartika", roomType: "Double Queen", assign: false },
+          { guest: "Hadi Santoso", roomType: "Double Queen", assign: true },
+          { guest: "Lestari Dewi", roomType: "King Suite", assign: false },
+        ],
+      },
+      {
+        name: "Wijaya–Santoso Wedding",
+        status: "Definite",
+        startOffset: 19,
+        nights: 2,
+        cutoffOffset: 12,
+        contractLabel: "Signed",
+        salesManager: "Sari Melati",
+        billing: "Split — room to guests, F&B to master",
+        depositStatus: "Partial",
+        depositAmount: "Rp 15,000,000 of Rp 30,000,000",
+        concessions:
+          "Complimentary bridal suite, welcome drinks, 20% spa discount for the party.",
+        contact: "Putri Santoso · putri.s@gmail.com · +62 812 555 8890",
+        subs: [
+          { roomType: "Deluxe Twin", blocked: 12, rate: "Rp 1,380,000" },
+          { roomType: "King Suite", blocked: 6, rate: "Rp 2,200,000" },
+        ],
+        rooming: [
+          { guest: "Putri Santoso", roomType: "King Suite", assign: true },
+          { guest: "Bagus Wijaya", roomType: "King Suite", assign: true },
+          { guest: "Indah Permata", roomType: "Deluxe Twin", assign: false },
+          { guest: "Rudi Hartono", roomType: "Deluxe Twin", assign: true },
+        ],
+      },
+      {
+        name: "Java Jazz Pre-Tour Crew",
+        status: "In-house",
+        startOffset: -1,
+        nights: 3,
+        cutoffOffset: -8,
+        contractLabel: "Signed",
+        salesManager: "Rangga Putra",
+        billing: "Master folio — room only",
+        depositStatus: "Received",
+        depositAmount: "Rp 12,000,000",
+        concessions: "Early check-in, storage room for equipment.",
+        contact: "Tour Logistics · logistics@jjfest.id",
+        subs: [{ roomType: "Double Queen", blocked: 10, rate: "Rp 1,600,000" }],
+        rooming: [
+          { guest: "Andre Situmorang", roomType: "Double Queen", assign: true },
+          { guest: "Kevin Halim", roomType: "Double Queen", assign: true },
+          { guest: "Marcus Tan", roomType: "Double Queen", assign: true },
+          { guest: "Denny Sumargo", roomType: "Double Queen", assign: true },
+        ],
+      },
+      {
+        name: "TechCorp APAC Summit",
+        status: "Tentative",
+        startOffset: 28,
+        nights: 3,
+        cutoffOffset: 21,
+        contractLabel: "Awaiting signature",
+        salesManager: "Sari Melati",
+        billing: "Master folio — all charges",
+        depositStatus: "Not received",
+        depositAmount: "Rp 0 of Rp 60,000,000",
+        concessions:
+          "Pending contract — proposed 2 comp rooms and a hospitality suite.",
+        contact: "Michael Chen · m.chen@techcorp.com · +65 8123 4567",
+        subs: [
+          { roomType: "King Suite", blocked: 20, rate: "Rp 2,300,000" },
+          { roomType: "Presidential Suite", blocked: 10, rate: "Rp 6,200,000" },
+        ],
+        rooming: [
+          { guest: "Michael Chen (TechCorp)", roomType: "Presidential Suite", assign: false },
+          { guest: "Sandra Lim", roomType: "King Suite", assign: false },
+        ],
+      },
+    ];
+
+    const usedRoomIds = new Set(
+      (await ctx.db.query("reservations").collect())
+        .map((r) => r.roomId)
+        .filter(Boolean)
+    );
+    const freeRoomsByType: Record<string, typeof roomRows> = {};
+    for (const rt of ROOM_TYPES) {
+      freeRoomsByType[rt] = roomRows.filter(
+        (r) => r.type === rt && !usedRoomIds.has(r._id)
+      );
+    }
+
+    for (const gs of groupSeed) {
+      const startDate = iso(addDays(TODAY, gs.startOffset));
+      const groupId = await ctx.db.insert("group_blocks", {
+        propertyId,
+        name: gs.name,
+        status: gs.status,
+        startDate,
+        nights: gs.nights,
+        cutoffDate: iso(addDays(TODAY, gs.cutoffOffset)),
+        contractLabel: gs.contractLabel,
+        salesManager: gs.salesManager,
+        billing: gs.billing,
+        depositStatus: gs.depositStatus,
+        depositAmount: gs.depositAmount,
+        concessions: gs.concessions,
+        contact: gs.contact,
+      });
+      const rateByType: Record<string, string> = {};
+      for (const s of gs.subs) {
+        rateByType[s.roomType] = s.rate;
+        await ctx.db.insert("group_subblocks", {
+          groupId,
+          propertyId,
+          roomType: s.roomType,
+          blocked: s.blocked,
+          rate: s.rate,
+        });
+      }
+      for (const rm of gs.rooming) {
+        const gId = await ctx.db.insert("guests", {
+          name: rm.guest,
+          email: `${rm.guest.toLowerCase().replace(/[^a-z]+/g, ".")}@group.example.com`,
+          phone: "+62 811 700 0000",
+          loyaltyTier: "Silver",
+        });
+        let roomId: (typeof roomRows)[number]["_id"] | undefined;
+        let roomNumber: string | undefined;
+        if (rm.assign) {
+          const pool = freeRoomsByType[rm.roomType] ?? [];
+          const room = pool.shift();
+          if (room) {
+            roomId = room._id;
+            roomNumber = room.roomNumber;
+          }
+        }
+        await ctx.db.insert("reservations", {
+          guestId: gId,
+          propertyId,
+          roomId,
+          roomNumber,
+          checkIn: startDate,
+          checkOut: iso(addDays(new Date(startDate + "T00:00:00Z"), gs.nights)),
+          status: gs.status === "In-house" ? "inhouse" : "confirmed",
+          rate: rateByType[rm.roomType] ?? "Rp 1,850,000",
+          totalAmount: rateByType[rm.roomType] ?? "Rp 1,850,000",
+          channel: "Group",
+          roomType: rm.roomType,
+          adults: 1,
+          children: 0,
+          groupId,
+        });
       }
     }
 

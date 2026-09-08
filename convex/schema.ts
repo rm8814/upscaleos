@@ -100,7 +100,10 @@ export default defineSchema({
     children: v.optional(v.number()),
     etaLabel: v.optional(v.string()), // e.g. '14:20'
     roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
-  }).index("by_property", ["propertyId"]),
+    groupId: v.optional(v.id("group_blocks")), // part of a group block's rooming list
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_group", ["groupId"]),
   folios: defineTable({
     propertyId: v.id("properties"),
     reservationId: v.id("reservations"),
@@ -160,4 +163,26 @@ export default defineSchema({
     roomsBooked: v.number(),
     roomsContracted: v.number(),
   }).index("by_agreement", ["agreementId"]),
+  group_blocks: defineTable({
+    propertyId: v.id("properties"),
+    name: v.string(),
+    status: v.string(), // 'Definite' | 'Tentative' | 'In-house'
+    startDate: v.string(),
+    nights: v.number(),
+    cutoffDate: v.string(),
+    contractLabel: v.string(), // 'Signed' | 'Awaiting signature'
+    salesManager: v.string(),
+    billing: v.string(),
+    depositStatus: v.string(),
+    depositAmount: v.string(),
+    concessions: v.string(),
+    contact: v.string(),
+  }).index("by_property", ["propertyId"]),
+  group_subblocks: defineTable({
+    groupId: v.id("group_blocks"),
+    propertyId: v.id("properties"),
+    roomType: v.string(),
+    blocked: v.number(),
+    rate: v.string(),
+  }).index("by_group", ["groupId"]),
 });

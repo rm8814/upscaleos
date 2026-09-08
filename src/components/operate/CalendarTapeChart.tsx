@@ -429,9 +429,16 @@ export default function CalendarTapeChart() {
                           {list.map((res) => {
                             const shift =
                               drag && drag.resId === res._id ? drag.dxDays : 0;
-                            const start = Math.max(0, dayIndex(res.checkIn) + shift);
-                            const end = Math.min(DAYS, dayIndex(res.checkOut) + shift);
-                            if (end <= 0 || start >= DAYS || end <= start) return null;
+                            const s = dayIndex(res.checkIn) + shift;
+                            const e = dayIndex(res.checkOut) + shift;
+                            // Blocks straddle columns: from the middle of the
+                            // check-in day to the middle of the check-out day.
+                            const leftPct =
+                              Math.max(0, Math.min(1, (s + 0.5) / DAYS)) * 100;
+                            const rightPct =
+                              Math.max(0, Math.min(1, (e + 0.5) / DAYS)) * 100;
+                            const widthPct = rightPct - leftPct;
+                            if (widthPct <= 0) return null;
                             const color = blockColor(res);
                             const dragging = drag?.resId === res._id;
                             return (
@@ -452,8 +459,8 @@ export default function CalendarTapeChart() {
                                 }}
                                 className="absolute top-1.5 bottom-1.5 flex select-none items-center overflow-hidden whitespace-nowrap rounded-[6px] border px-2 text-12 text-ice"
                                 style={{
-                                  left: `${(start / DAYS) * 100}%`,
-                                  width: `${((end - start) / DAYS) * 100}%`,
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
                                   background: `color-mix(in srgb, ${color} 26%, var(--bg-deep))`,
                                   borderColor: color,
                                   cursor: dragging ? "grabbing" : "grab",

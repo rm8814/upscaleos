@@ -2,6 +2,14 @@
 
 import React from "react";
 import { Star, ShieldCheck, BadgeCheck, Undo2, Waves, Wifi, Coffee, Dumbbell, Car } from "lucide-react";
+import { useProperty } from "@/components/providers/PropertyProvider";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fmtDate = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
 
 const ROOMS = [
   { name: "Deluxe Twin", blurb: "Garden view · 32m²", ota: "Rp 1,680,000", price: "Rp 1,450,000", left: 3 },
@@ -37,6 +45,9 @@ const FAQS = [
 ];
 
 export default function BookingLandingPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+
   return (
     <div
       className="mx-auto max-w-[1040px] overflow-hidden rounded-[20px]"
@@ -103,8 +114,8 @@ export default function BookingLandingPage() {
           style={{ boxShadow: "0 10px 30px rgba(20,33,62,.12)" }}
         >
           {[
-            ["Check-in", "12 Sep 2026"],
-            ["Check-out", "15 Sep 2026"],
+            ["Check-in", fmtDate(businessDate, 4)],
+            ["Check-out", fmtDate(businessDate, 7)],
             ["Guests", "2 adults"],
           ].map(([k, v]) => (
             <div key={k} className="flex-1 rounded-[10px] p-2.5 text-left" style={{ background: "#F3F1EC" }}>

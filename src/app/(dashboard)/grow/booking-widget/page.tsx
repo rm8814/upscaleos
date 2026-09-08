@@ -2,16 +2,35 @@
 
 import React, { useState } from "react";
 import { Star, Tag, BadgeCheck, ChevronDown, Flame, Mail } from "lucide-react";
+import { useProperty } from "@/components/providers/PropertyProvider";
 
-const PRICE_CAL = [
-  { label: "Fri 12", price: "1,200,000", cheapest: false },
-  { label: "Sat 13", price: "1,400,000", cheapest: false },
-  { label: "Sun 14", price: "980,000", cheapest: true },
-  { label: "Mon 15", price: "1,000,000", cheapest: false },
-  { label: "Tue 16", price: "1,000,000", cheapest: false },
-  { label: "Wed 17", price: "1,100,000", cheapest: false },
-  { label: "Thu 18", price: "1,200,000", cheapest: false },
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const shiftDay = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+};
+const fmtDate = (iso: string, n: number) => {
+  const d = shiftDay(iso, n);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const calLabel = (iso: string, n: number) => {
+  const d = shiftDay(iso, n);
+  return `${DOW3[d.getUTCDay()]} ${d.getUTCDate()}`;
+};
+
+const PRICE_CAL_PRICES = [
+  { price: "1,200,000", cheapest: false },
+  { price: "1,400,000", cheapest: false },
+  { price: "980,000", cheapest: true },
+  { price: "1,000,000", cheapest: false },
+  { price: "1,000,000", cheapest: false },
+  { price: "1,100,000", cheapest: false },
+  { price: "1,200,000", cheapest: false },
 ];
+const buildPriceCal = (businessDate: string) =>
+  PRICE_CAL_PRICES.map((p, i) => ({ label: calLabel(businessDate, i + 4), ...p }));
 
 const ROOMS = [
   { name: "Deluxe Twin", blurb: "Garden view · 32m²", price: "Rp 1,450,000", left: 3 },
@@ -26,6 +45,10 @@ const ADDONS = [
 ];
 
 export default function BookingWidgetPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const PRICE_CAL = buildPriceCal(businessDate);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [promo, setPromo] = useState("DIRECT10");
 
@@ -78,8 +101,8 @@ export default function BookingWidgetPage() {
 
       <div className="mb-3 flex gap-2.5">
         {[
-          ["Check-in", "12 Sep 2026"],
-          ["Check-out", "15 Sep 2026"],
+          ["Check-in", fmtDate(businessDate, 4)],
+          ["Check-out", fmtDate(businessDate, 7)],
           ["Rooms · guests", "1 room · 2 adults"],
         ].map(([k, v]) => (
           <div key={k} className="flex-1 rounded-[12px] px-3.5 py-3" style={{ background: "#F3F1EC" }}>

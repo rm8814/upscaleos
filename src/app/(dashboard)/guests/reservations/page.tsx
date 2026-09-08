@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { FileSpreadsheet } from "lucide-react";
@@ -25,6 +25,9 @@ export default function ReservationListPage() {
     activeProperty ? { propertyId: activeProperty._id } : "skip"
   );
 
+  const assignRooms = useMutation(api.reservations.assignRooms);
+  const [assigning, setAssigning] = useState(false);
+
   const [tab, setTab] = useState<Tab>("all");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -34,6 +37,20 @@ export default function ReservationListPage() {
 
   const TODAY = activeProperty?.businessDate ?? "2026-09-08";
   const list = reservations ?? [];
+  const unassigned = list.filter(
+    (r) =>
+      r.roomNumber === "—" &&
+      r.status !== "cancelled" &&
+      r.status !== "departed" &&
+      r.checkOut > TODAY
+  ).length;
+
+  const runAssign = async () => {
+    if (!activeProperty || assigning) return;
+    setAssigning(true);
+    await assignRooms({ propertyId: activeProperty._id });
+    setAssigning(false);
+  };
   const tabCounts = {
     arrivals: list.filter((r) => r.checkIn === TODAY).length,
     inhouse: list.filter((r) => r.status === "inhouse").length,
@@ -109,7 +126,22 @@ export default function ReservationListPage() {
         <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong">
           <FileSpreadsheet className="h-[13px] w-[13px]" /> Export
         </button>
-        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+        {unassigned > 0 && (
+          <button
+            onClick={runAssign}
+            disabled={assigning}
+            className="ml-auto rounded-sm border border-accent-violet bg-violet-wash px-3 py-2 text-[12.5px] font-medium text-ice hover:bg-elevated disabled:opacity-40"
+          >
+            {assigning
+              ? "Assigning…"
+              : `Auto-assign ${unassigned} room${unassigned > 1 ? "s" : ""}`}
+          </button>
+        )}
+        <button
+          className={`${
+            unassigned > 0 ? "" : "ml-auto"
+          } rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi`}
+        >
           + New reservation
         </button>
       </div>

@@ -12,4 +12,13 @@ crons.interval(
   {}
 );
 
+// Assign rooms to unassigned reservations (OTA / channel-manager pushes, API
+// imports) for every property that has auto-assign switched on.
+crons.interval(
+  "auto-assign rooms",
+  { minutes: 15 },
+  internal.reservations.autoAssignSweep,
+  {}
+);
+
 export default crons;

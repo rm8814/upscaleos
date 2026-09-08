@@ -243,7 +243,7 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
           <Eyebrow>Operations</Eyebrow>
           <ToggleRow
             label="Auto-assign rooms"
-            hint="When a reservation is created without a room, pick the first free room of the booked type."
+            hint="Give any unassigned reservation the first free room of its type — OTA and channel-manager bookings included. Runs on new bookings and re-sweeps every 15 min."
             checked={form.autoAssignRooms}
             onChange={(v) => set("autoAssignRooms", v)}
           />

@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { authorize } from "./authz";
 
 export const list = query({
   args: { propertyId: v.id("properties") },
@@ -14,6 +15,12 @@ export const list = query({
 export const remove = mutation({
   args: { id: v.id("waitlist") },
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) return;
+    await authorize(ctx, {
+      propertyId: row.propertyId,
+      requireProperty: "front_office",
+    });
     await ctx.db.delete(args.id);
   },
 });

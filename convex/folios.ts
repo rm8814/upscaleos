@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { authorize } from "./authz";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { nightlyRateFor } from "./revenue";
@@ -270,6 +271,10 @@ export const recordPayment = mutation({
   handler: async (ctx, args) => {
     const folio = await folioForReservation(ctx, args.reservationId);
     if (!folio) throw new Error("No folio for that reservation");
+    await authorize(ctx, {
+      propertyId: folio.propertyId,
+      requireProperty: "front_office",
+    });
     const amt = Math.abs(Math.round(args.amount));
     if (!amt) throw new Error("Amount must be greater than zero");
     await ctx.db.insert("folio_lines", {
@@ -298,6 +303,10 @@ export const postCharge = mutation({
   handler: async (ctx, args) => {
     const folio = await folioForReservation(ctx, args.reservationId);
     if (!folio) throw new Error("No folio for that reservation");
+    await authorize(ctx, {
+      propertyId: folio.propertyId,
+      requireProperty: "front_office",
+    });
     const amt = Math.abs(Math.round(args.amount));
     if (!amt) throw new Error("Amount must be greater than zero");
     await ctx.db.insert("folio_lines", {
@@ -317,6 +326,12 @@ export const postCharge = mutation({
 export const voidLine = mutation({
   args: { lineId: v.id("folio_lines") },
   handler: async (ctx, args) => {
+    const line = await ctx.db.get(args.lineId);
+    if (!line) throw new Error("Line not found");
+    await authorize(ctx, {
+      propertyId: line.propertyId,
+      requireProperty: "front_office",
+    });
     await ctx.db.patch(args.lineId, { voided: true });
   },
 });

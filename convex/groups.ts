@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { authorize } from "./authz";
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -150,6 +151,10 @@ export const create = mutation({
     contact: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
     const groupId = await ctx.db.insert("group_blocks", {
       propertyId: args.propertyId,
       name: args.name,
@@ -186,6 +191,10 @@ export const addRoomingGuest = mutation({
   handler: async (ctx, args) => {
     const g = await ctx.db.get(args.groupId);
     if (!g) throw new Error("Group not found");
+    await authorize(ctx, {
+      propertyId: g.propertyId,
+      requireProperty: "front_office",
+    });
     const sub = (
       await ctx.db
         .query("group_subblocks")

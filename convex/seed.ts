@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
 /**
  * Wipes and reseeds the demo property. Idempotent — safe to run repeatedly.
@@ -25,7 +25,7 @@ const HK_STATUSES = [
 ];
 const ATTENDANTS = ["Sri Wahyuni", "Dewi Lestari", "Putu Ayu", "Ni Made", "—"];
 
-export const seed = mutation({
+export const seed = internalMutation({
   args: {},
   handler: async (ctx) => {
     // ---- wipe --------------------------------------------------------------

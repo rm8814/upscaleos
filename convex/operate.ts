@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { authorize } from "./authz";
 
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -26,6 +27,12 @@ export const getRooms = query({
 export const updateRoomStatus = mutation({
   args: { id: v.id("rooms"), status: v.string() },
   handler: async (ctx, args) => {
+    const room = await ctx.db.get(args.id);
+    if (!room) throw new Error("Room not found");
+    await authorize(ctx, {
+      propertyId: room.propertyId,
+      requireProperty: "housekeeping",
+    });
     await ctx.db.patch(args.id, { status: args.status, updatedLabel: "just now" });
   },
 });
@@ -50,6 +57,10 @@ export const createTicket = mutation({
     assignee: v.string(),
   },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "maintenance",
+    });
     const count = (
       await ctx.db
         .query("maintenance_tickets")

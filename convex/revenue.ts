@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { authorize } from "./authz";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -106,6 +107,12 @@ export const getAgreementProduction = query({
 export const applyRateSuggestion = mutation({
   args: { agreementId: v.id("corporate_agreements"), newRate: v.string() },
   handler: async (ctx, args) => {
+    const agreement = await ctx.db.get(args.agreementId);
+    if (!agreement) throw new Error("Agreement not found");
+    await authorize(ctx, {
+      propertyId: agreement.propertyId,
+      requireProperty: "gm",
+    });
     await ctx.db.patch(args.agreementId, { rate: args.newRate });
     return { success: true };
   },

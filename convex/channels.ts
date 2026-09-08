@@ -4,6 +4,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms, findOrCreateGuest } from "./reservations";
 import { nightlyRateFor } from "./revenue";
+import { authorize } from "./authz";
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -103,7 +104,13 @@ export const ingestChannelBooking = mutation({
     adults: v.optional(v.number()),
     children: v.optional(v.number()),
   },
-  handler: (ctx, args) => ingestOne(ctx, args),
+  handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
+    return ingestOne(ctx, args);
+  },
 });
 
 const FIRST = [
@@ -129,6 +136,10 @@ export const pullBookings = mutation({
     count: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
     const property = await ctx.db.get(args.propertyId);
     const anchor = property?.businessDate ?? "2026-09-08";
     const n = Math.min(Math.max(args.count ?? 2, 1), 5);

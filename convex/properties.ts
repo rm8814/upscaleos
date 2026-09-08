@@ -257,6 +257,10 @@ async function rollUpTo(
 export const rollBusinessDate = mutation({
   args: { id: v.id("properties"), toDate: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.id,
+      requireProperty: "night_auditor",
+    });
     const property = await ctx.db.get(args.id);
     const biz = property?.businessDate ?? "2026-09-08";
 

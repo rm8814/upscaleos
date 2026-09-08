@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { authorize } from "./authz";
 
 export const listTaxes = query({
   args: { propertyId: v.id("properties") },
@@ -20,6 +21,10 @@ export const addTax = mutation({
     inclusive: v.string(),
   },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "gm",
+    });
     return await ctx.db.insert("taxes", args);
   },
 });
@@ -35,6 +40,9 @@ export const updateTax = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) throw new Error("Tax not found");
+    await authorize(ctx, { propertyId: row.propertyId, requireProperty: "gm" });
     await ctx.db.patch(args.id, args.patch);
     return { success: true };
   },
@@ -43,6 +51,9 @@ export const updateTax = mutation({
 export const deleteTax = mutation({
   args: { id: v.id("taxes") },
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) return { success: true };
+    await authorize(ctx, { propertyId: row.propertyId, requireProperty: "gm" });
     await ctx.db.delete(args.id);
     return { success: true };
   },

@@ -9,6 +9,7 @@ import {
   voidFolioIfUnpaid,
 } from "./folios";
 import { nightlyRateFor } from "./revenue";
+import { authorize } from "./authz";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -213,6 +214,10 @@ export const create = mutation({
     children: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
     const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
 
     let roomId = args.roomId;
@@ -269,6 +274,10 @@ export const updateDates = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return;
+    await authorize(ctx, {
+      propertyId: res.propertyId,
+      requireProperty: "front_office",
+    });
 
     const patch: Record<string, unknown> = {
       checkIn: args.checkIn,
@@ -303,6 +312,10 @@ export const setStatus = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return;
+    await authorize(ctx, {
+      propertyId: res.propertyId,
+      requireProperty: "front_office",
+    });
     const prev = res.status;
     const next = args.status;
     if (prev === next) return;
@@ -348,7 +361,13 @@ export const setStatus = mutation({
 /** Manual trigger for the property-wide sweep (button on the reservation list). */
 export const assignRooms = mutation({
   args: { propertyId: v.id("properties") },
-  handler: (ctx, args) => assignPropertyRooms(ctx, args.propertyId),
+  handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
+    return assignPropertyRooms(ctx, args.propertyId);
+  },
 });
 
 /** Auto-assign a room to one reservation (calendar "Unassigned bookings" row). */
@@ -357,6 +376,10 @@ export const assignOne = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return { assigned: false as const };
+    await authorize(ctx, {
+      propertyId: res.propertyId,
+      requireProperty: "front_office",
+    });
     if (res.roomId) return { assigned: true as const, roomNumber: res.roomNumber };
     const roomId = await pickFreeRoom(
       ctx,

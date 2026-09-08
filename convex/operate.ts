@@ -1,7 +1,16 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-const TODAY = "2026-09-08"; // prototype "today"
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+
+const FALLBACK_TODAY = "2026-09-08";
+
+/** The PMS business date for a property (advances only on night audit). */
+async function businessDate(ctx: QueryCtx, propertyId: Id<"properties">) {
+  const p = await ctx.db.get(propertyId);
+  return p?.businessDate ?? FALLBACK_TODAY;
+}
 
 export const getRooms = query({
   args: { propertyId: v.id("properties") },
@@ -50,7 +59,7 @@ export const createTicket = mutation({
     return await ctx.db.insert("maintenance_tickets", {
       ...args,
       status: "Open",
-      created: TODAY,
+      created: await businessDate(ctx, args.propertyId),
       oooLinked: false,
       cost: "0",
       slaText: "3d left",
@@ -84,6 +93,7 @@ export const getRoomStatusSummary = query({
 export const getDashboardStats = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
+    const today = await businessDate(ctx, args.propertyId);
     const [rooms, reservations, tickets] = await Promise.all([
       ctx.db
         .query("rooms")
@@ -110,10 +120,11 @@ export const getDashboardStats = query({
       occupancyPct: sellable ? Math.round((occupied / sellable) * 100) : 0,
       dirty: rooms.filter((r) => r.status === "Vacant Dirty").length,
       ooo: rooms.filter((r) => r.status === "OOO").length,
-      arrivalsToday: reservations.filter((r) => r.checkIn === TODAY).length,
-      departuresToday: reservations.filter((r) => r.checkOut === TODAY).length,
+      arrivalsToday: reservations.filter((r) => r.checkIn === today).length,
+      departuresToday: reservations.filter((r) => r.checkOut === today).length,
       inHouse,
       openTickets: tickets.filter((t) => t.status !== "Resolved").length,
+      businessDate: today,
     };
   },
 });

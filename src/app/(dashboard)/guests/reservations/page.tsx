@@ -12,7 +12,6 @@ import {
 } from "@/components/upx/primitives";
 import ReservationSlideOver from "@/components/guests/ReservationSlideOver";
 
-const TODAY = "2026-09-08";
 const PAGE_SIZE = 8;
 const GRID =
   "grid grid-cols-[1.3fr_0.9fr_0.8fr_0.8fr_1.1fr_0.9fr_0.5fr_0.8fr_0.9fr_0.8fr] gap-2 px-3.5 min-w-[1000px]";
@@ -33,6 +32,7 @@ export default function ReservationListPage() {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
 
+  const TODAY = activeProperty?.businessDate ?? "2026-09-08";
   const list = reservations ?? [];
   const tabCounts = {
     arrivals: list.filter((r) => r.checkIn === TODAY).length,
@@ -55,7 +55,7 @@ export default function ReservationListPage() {
     if (status !== "All") rows = rows.filter((r) => r.status === status);
     if (channel !== "All") rows = rows.filter((r) => (r.channel ?? "Direct") === channel);
     return rows;
-  }, [list, tab, search, status, channel]);
+  }, [list, tab, search, status, channel, TODAY]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);

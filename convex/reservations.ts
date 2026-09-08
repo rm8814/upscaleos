@@ -3,7 +3,12 @@ import { v } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
-const TODAY = "2026-09-08";
+const FALLBACK_TODAY = "2026-09-08";
+
+async function businessDate(ctx: QueryCtx, propertyId: Id<"properties">) {
+  const p = await ctx.db.get(propertyId);
+  return p?.businessDate ?? FALLBACK_TODAY;
+}
 
 const NIGHTLY: Record<string, number> = {
   "Deluxe Twin": 1_450_000,
@@ -57,13 +62,14 @@ export const getByProperty = query({
 export const getArrivalsToday = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
+    const today = await businessDate(ctx, args.propertyId);
     const rows = await ctx.db
       .query("reservations")
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect();
     return joinGuestAndRoom(
       ctx,
-      rows.filter((r) => r.checkIn === TODAY)
+      rows.filter((r) => r.checkIn === today)
     );
   },
 });

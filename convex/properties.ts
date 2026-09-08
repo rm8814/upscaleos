@@ -115,3 +115,33 @@ export const update = mutation({
     return { success: true };
   },
 });
+
+/**
+ * Night-audit only: advance the PMS business date by one day and post the
+ * day's departures (in-house guests whose checkout was the old business date).
+ */
+export const rollBusinessDate = mutation({
+  args: { id: v.id("properties") },
+  handler: async (ctx, args) => {
+    const property = await ctx.db.get(args.id);
+    if (!property) throw new Error("Property not found");
+    const oldDate = property.businessDate ?? "2026-09-08";
+    const d = new Date(oldDate + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    const newDate = d.toISOString().slice(0, 10);
+
+    await ctx.db.patch(args.id, { businessDate: newDate });
+
+    const reservations = await ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.id))
+      .collect();
+    for (const r of reservations) {
+      if (r.status === "inhouse" && r.checkOut <= newDate) {
+        await ctx.db.patch(r._id, { status: "departed" });
+      }
+    }
+
+    return { businessDate: newDate, previous: oldDate };
+  },
+});

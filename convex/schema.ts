@@ -14,6 +14,7 @@ export default defineSchema({
     timezone: v.optional(v.string()), // 'Asia/Makassar'
     checkInTime: v.optional(v.string()), // '14:00'
     checkOutTime: v.optional(v.string()), // '12:00'
+    businessDate: v.optional(v.string()), // PMS "today" — only advances on night audit
     status: v.optional(v.string()), // 'onboarding' | 'active' | 'archived' (absent = active/legacy)
     policies: v.optional(
       v.object({

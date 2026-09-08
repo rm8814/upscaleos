@@ -59,6 +59,7 @@ export const seed = mutation({
       timezone: "Asia/Makassar",
       checkInTime: "14:00",
       checkOutTime: "12:00",
+      businessDate: "2026-09-08",
       status: "active",
       policies: {
         cancellation: "Free cancellation up to 48h before arrival.",

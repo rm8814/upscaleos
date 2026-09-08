@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useProperty } from "@/components/providers/PropertyProvider";
 import {
   AlertTriangle,
   Check,
@@ -14,14 +17,16 @@ import {
 } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 
-const STEPS = [
-  { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", done: true },
-  { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", done: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380,000 unmatched — posted to house account" }] },
-  { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", done: true },
-  { icon: RefreshCw, label: "Roll business date", detail: "Advance system date from 4 Sep to 5 Sep 2026.", done: false },
-  { icon: FileSpreadsheet, label: "Generate revenue journal", detail: "Trial balance and revenue journal exported to accounting.", done: false },
-  { icon: Check, label: "Close audit & notify", detail: "Lock the day, email the manager report.", done: false },
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fmtDate = (isoDate: string) => {
+  const d = new Date(isoDate + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const nextDay = (isoDate: string) => {
+  const d = new Date(isoDate + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
 
 const WARNINGS = [
   "2 folios have a negative balance — review before rolling the date.",
@@ -45,23 +50,51 @@ const PROPERTY_STATUS = [
 ];
 
 export default function NightAuditPage() {
+  const { activeProperty } = useProperty();
+  const rollBusinessDate = useMutation(api.properties.rollBusinessDate);
+
   const [expanded, setExpanded] = useState<string | null>("Reconcile POS postings");
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
+  const [ranAll, setRanAll] = useState(false);
+  const [running, setRunning] = useState(false);
 
-  const doneCount = STEPS.filter((s) => s.done).length;
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+
+  const STEPS = [
+    { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", alwaysDone: true, affected: undefined as { room: string; text: string }[] | undefined },
+    { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", alwaysDone: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380,000 unmatched — posted to house account" }] },
+    { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", alwaysDone: true, affected: undefined },
+    { icon: RefreshCw, label: "Roll business date", detail: `Advance system date from ${fmtDate(businessDate)} to ${fmtDate(nextDay(businessDate))}.`, alwaysDone: false, affected: undefined },
+    { icon: FileSpreadsheet, label: "Generate revenue journal", detail: "Trial balance and revenue journal exported to accounting.", alwaysDone: false, affected: undefined },
+    { icon: Check, label: "Close audit & notify", detail: "Lock the day, email the manager report.", alwaysDone: false, affected: undefined },
+  ];
+  const stepDone = (s: (typeof STEPS)[number]) => s.alwaysDone || ranAll;
+  const doneCount = STEPS.filter(stepDone).length;
+
+  const runRemaining = async () => {
+    if (!activeProperty || running || ranAll) return;
+    setRunning(true);
+    await rollBusinessDate({ id: activeProperty._id });
+    setRanAll(true);
+    setRunning(false);
+  };
 
   return (
     <div className="mx-auto max-w-content">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="text-13 text-fg-3">Business date: 4 Sep 2026</div>
+        <div className="text-13 text-fg-3">Business date: {fmtDate(businessDate)}</div>
         <div className="text-12 text-fg-3">
           Scheduled auto-run in <span className="font-mono font-semibold text-ice">02:41:18</span>
         </div>
         <div className="ml-auto text-12 text-fg-3">
           {doneCount} of {STEPS.length} steps complete
         </div>
-        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
-          Run remaining steps
+        <button
+          onClick={runRemaining}
+          disabled={!activeProperty || running || ranAll}
+          className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+        >
+          {running ? "Running…" : ranAll ? "Audit complete" : "Run remaining steps"}
         </button>
       </div>
 
@@ -82,6 +115,7 @@ export default function NightAuditPage() {
       <Card className="mb-3.5 overflow-hidden p-0">
         {STEPS.map((s) => {
           const isOpen = expanded === s.label;
+          const done = stepDone(s);
           return (
             <div key={s.label} className="border-b border-line-soft last:border-0">
               <button
@@ -90,7 +124,7 @@ export default function NightAuditPage() {
               >
                 <s.icon
                   className="h-[17px] w-[17px] flex-none"
-                  style={{ color: s.done ? "var(--accent-cyan)" : "var(--fg-3)" }}
+                  style={{ color: done ? "var(--accent-cyan)" : "var(--fg-3)" }}
                 />
                 <div className="flex-1">
                   <div className="text-13 font-medium">{s.label}</div>
@@ -98,11 +132,11 @@ export default function NightAuditPage() {
                 </div>
                 <span
                   className="text-[11px]"
-                  style={{ color: s.done ? "var(--accent-cyan)" : "var(--fg-3)" }}
+                  style={{ color: done ? "var(--accent-cyan)" : "var(--fg-3)" }}
                 >
-                  {s.done ? "Done" : "Pending"}
+                  {done ? "Done" : "Pending"}
                 </span>
-                {s.done && (
+                {done && (
                   <span className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px] text-fg-1">
                     Re-run
                   </span>

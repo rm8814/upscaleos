@@ -2,9 +2,9 @@
 
 import React, { useMemo, useState } from "react";
 import { Sparkles, ArrowRight } from "lucide-react";
+import { useProperty } from "@/components/providers/PropertyProvider";
 import { Card, Eyebrow, Segmented } from "@/components/upx/primitives";
 
-const START = new Date("2026-09-08T00:00:00Z");
 const DAYS = 14;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
@@ -44,17 +44,19 @@ const QUEUE = [
 const fmt = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
 export default function RatesPage() {
+  const { activeProperty } = useProperty();
   const [view, setView] = useState<"grid" | "seasons" | "rules">("grid");
   const [dynamicDays, setDynamicDays] = useState<Set<number>>(new Set([5, 6, 12, 13]));
 
+  const todayIso = activeProperty?.businessDate ?? "2026-09-08";
   const days = useMemo(
     () =>
       Array.from({ length: DAYS }, (_, i) => {
-        const d = new Date(START);
+        const d = new Date(todayIso + "T00:00:00Z");
         d.setUTCDate(d.getUTCDate() + i);
         return d;
       }),
-    []
+    [todayIso]
   );
 
   const toggleDynamic = (i: number) =>

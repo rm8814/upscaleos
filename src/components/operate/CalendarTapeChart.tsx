@@ -20,15 +20,9 @@ import ReservationSlideOver, {
   type SlideOverReservation,
 } from "@/components/guests/ReservationSlideOver";
 
-// Prototype "today" — matches the seed anchor. The window opens 3 days
-// before it so today sits in the 4th column.
-const TODAY_ISO = "2026-09-08";
 const DAYS = 10;
-const WINDOW_START = (() => {
-  const d = new Date(TODAY_ISO + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() - 3);
-  return d;
-})();
+const LEAD = 3; // days of the window that sit before the business date
+const FALLBACK_TODAY = "2026-09-08";
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
 const NIGHTLY: Record<string, number> = {
@@ -54,11 +48,11 @@ const addDays = (base: Date, n: number) => {
   d.setUTCDate(d.getUTCDate() + n);
   return d;
 };
-const dayIndex = (isoDate: string) =>
-  Math.round((new Date(isoDate + "T00:00:00Z").getTime() - WINDOW_START.getTime()) / 86400000);
+const diffDays = (a: string, b: string) =>
+  Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
 const money = (n: number) => Math.round(n).toLocaleString("en-US");
 const rp = (n: number) => `Rp ${money(n)}`;
-const nightsBetween = (a: string, b: string) => Math.max(1, dayIndex(b) - dayIndex(a));
+const nightsBetween = (a: string, b: string) => Math.max(1, diffDays(a, b));
 
 type Rooms = FunctionReturnType<typeof api.operate.getRooms>;
 type Reservations = FunctionReturnType<typeof api.reservations.getByProperty>;
@@ -88,10 +82,15 @@ export default function CalendarTapeChart() {
   const [newRes, setNewRes] = useState<Partial<NewResInit> | null>(null);
   const [assignWaitlistId, setAssignWaitlistId] = useState<string | null>(null);
 
-  const days = useMemo(
-    () => Array.from({ length: DAYS }, (_, i) => addDays(WINDOW_START, i)),
-    []
-  );
+  // The PMS business date drives "today" — not the wall clock. It only
+  // advances when the night audit runs (see /finance/night-audit).
+  const todayIso = activeProperty?.businessDate ?? FALLBACK_TODAY;
+  const days = useMemo(() => {
+    const t = new Date(todayIso + "T00:00:00Z");
+    return Array.from({ length: DAYS }, (_, i) => addDays(t, i - LEAD));
+  }, [todayIso]);
+  const windowStartIso = iso(days[0]);
+  const dayCol = (isoDate: string) => diffDays(windowStartIso, isoDate);
 
   const roomTypeNames = useMemo(
     () => Array.from(new Set((rooms ?? []).map((r) => r.type))),
@@ -346,7 +345,7 @@ export default function CalendarTapeChart() {
               <div
                 key={iso(d)}
                 className="border-b border-l border-line py-2 text-center font-mono text-[11px] text-fg-3"
-                style={{ background: iso(d) === TODAY_ISO ? "var(--violet-wash)" : undefined }}
+                style={{ background: iso(d) === todayIso ? "var(--violet-wash)" : undefined }}
               >
                 <div className="text-[9px] font-semibold uppercase text-fg-2">
                   {DOW[d.getUTCDay()]}
@@ -437,8 +436,8 @@ export default function CalendarTapeChart() {
                           {list.map((res) => {
                             const shift =
                               drag && drag.resId === res._id ? drag.dxDays : 0;
-                            const s = dayIndex(res.checkIn) + shift;
-                            const e = dayIndex(res.checkOut) + shift;
+                            const s = dayCol(res.checkIn) + shift;
+                            const e = dayCol(res.checkOut) + shift;
                             // Blocks straddle columns: from the middle of the
                             // check-in day to the middle of the check-out day.
                             const leftPct =
@@ -604,6 +603,7 @@ export default function CalendarTapeChart() {
       {newRes && activeProperty && (
         <NewReservationModal
           init={newRes}
+          today={todayIso}
           rooms={rooms ?? []}
           roomTypeNames={roomTypeNames}
           onClose={() => {
@@ -652,12 +652,14 @@ interface CreatePayload {
 
 function NewReservationModal({
   init,
+  today,
   rooms,
   roomTypeNames,
   onClose,
   onCreate,
 }: {
   init: Partial<NewResInit>;
+  today: string;
   rooms: Rooms;
   roomTypeNames: string[];
   onClose: () => void;
@@ -670,8 +672,8 @@ function NewReservationModal({
     guestName: init.guestName ?? "",
     email: "",
     phone: "",
-    checkIn: init.checkIn ?? iso(addDays(WINDOW_START, dayIndex(TODAY_ISO))),
-    checkOut: init.checkOut ?? iso(addDays(WINDOW_START, dayIndex(TODAY_ISO) + 2)),
+    checkIn: init.checkIn ?? today,
+    checkOut: init.checkOut ?? iso(addDays(new Date(today + "T00:00:00Z"), 2)),
     roomType: init.roomType ?? roomTypeNames[0] ?? "Double Queen",
     roomId: (init.roomId ?? "") as string,
     adults: 2,
@@ -684,14 +686,14 @@ function NewReservationModal({
     setF((s) => ({ ...s, [k]: v }));
 
   const roomOptions = rooms.filter((r) => r.type === f.roomType);
-  const nights = Math.max(1, dayIndex(f.checkOut) - dayIndex(f.checkIn));
+  const nights = Math.max(1, diffDays(f.checkIn, f.checkOut));
   const estimate =
     (NIGHTLY[f.roomType] ?? 1_850_000) *
     nights *
     (DOW_MULT[new Date(f.checkIn + "T00:00:00Z").getUTCDay()] ?? 1);
 
   const canSubmit =
-    f.guestName.trim() && dayIndex(f.checkOut) > dayIndex(f.checkIn) && !busy;
+    f.guestName.trim() && diffDays(f.checkIn, f.checkOut) > 0 && !busy;
 
   if (!mounted) return null;
 

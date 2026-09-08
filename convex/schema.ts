@@ -16,6 +16,7 @@ export default defineSchema({
     checkOutTime: v.optional(v.string()), // '12:00'
     businessDate: v.optional(v.string()), // PMS "today" — only advances on night audit
     status: v.optional(v.string()), // 'onboarding' | 'active' | 'archived' (absent = active/legacy)
+    accountId: v.optional(v.id("accounts")), // the management company that owns this property
     // Operations settings
     autoAssignRooms: v.optional(v.boolean()), // pick a free room on reservation create
     autoNightAudit: v.optional(v.boolean()), // roll the business date on a schedule
@@ -38,13 +39,45 @@ export default defineSchema({
   }).index("by_email", ["email"]),
   property_members: defineTable({
     propertyId: v.id("properties"),
+    accountId: v.optional(v.id("accounts")), // denormalized owner account
     email: v.string(),
     name: v.string(),
-    role: v.string(), // 'General Manager' | 'Front office' | 'Housekeeping lead' | ...
+    role: v.string(), // 'gm' | 'front_office' | 'housekeeping' | 'night_auditor' | 'maintenance' | 'read_only'
     status: v.string(), // 'active' | 'invited'
   })
     .index("by_property", ["propertyId"])
+    .index("by_email", ["email"])
+    .index("by_account", ["accountId"]),
+
+  // ---- tenancy: a management company (account) owns properties and users ----
+  accounts: defineTable({
+    name: v.string(),
+    slug: v.string(),
+    plan: v.string(), // 'trial' | 'standard' | 'enterprise'
+    ownerEmail: v.string(),
+  }).index("by_slug", ["slug"]),
+
+  account_members: defineTable({
+    accountId: v.id("accounts"),
+    email: v.string(),
+    name: v.string(),
+    role: v.string(), // 'owner' | 'admin' | 'analyst' | 'member'
+    status: v.string(), // 'active' | 'invited'
+  })
+    .index("by_account", ["accountId"])
     .index("by_email", ["email"]),
+
+  audit_log: defineTable({
+    accountId: v.id("accounts"),
+    propertyId: v.optional(v.id("properties")),
+    actorEmail: v.string(),
+    action: v.string(), // 'property.create' | 'member.add' | 'member.role' | ...
+    target: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_account", ["accountId", "at"])
+    .index("by_property", ["propertyId"]),
   taxes: defineTable({
     propertyId: v.id("properties"),
     name: v.string(),

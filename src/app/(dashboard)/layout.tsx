@@ -47,12 +47,14 @@ export default function DashboardLayout({
     if (!isLoading && !user) router.replace("/login");
   }, [isLoading, user, router]);
 
-  // The properties this user manages. Feed them into the provider, which owns
-  // the (persisted) active-property selection.
-  const memberProperties = useQuery(
-    api.properties.listForMember,
+  // The account this user belongs to and the properties they can open. Account
+  // owner / admin / analyst get every property in the account; property staff
+  // get just the ones they have a role on.
+  const account = useQuery(
+    api.accounts.me,
     user ? { email: user.email } : "skip"
   );
+  const memberProperties = account?.properties;
 
   useEffect(() => {
     if (memberProperties) setProperties(memberProperties);

@@ -7,6 +7,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { X } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useAccount } from "@/components/providers/useAccount";
 import { useProperty } from "@/components/providers/PropertyProvider";
 
 const CURRENCIES = ["IDR", "USD", "SGD", "MYR", "AUD"];
@@ -35,6 +36,8 @@ export function AddPropertyButton({
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const { canOnboardProperties } = useAccount();
+  if (!canOnboardProperties) return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={className}>

@@ -35,6 +35,8 @@ import {
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useCurrentMember, initialsOf } from "@/components/providers/useCurrentMember";
+import { useAccount } from "@/components/providers/useAccount";
+import { roleLabel } from "@/lib/roles";
 import { AddPropertyButton } from "@/components/property/AddPropertyDialog";
 
 interface NavItem {
@@ -122,9 +124,16 @@ export default function Sidebar({
   const { user, logout } = useAuth();
   const { properties, activeProperty, setActivePropertyId } = useProperty();
   const member = useCurrentMember();
+  const { accountRole } = useAccount();
 
   const displayName = member?.name ?? user?.name ?? "—";
-  const displayRole = member?.role ?? (member === null ? "No access" : "…");
+  const displayRole = member?.role
+    ? roleLabel(member.role)
+    : accountRole
+      ? `${roleLabel(accountRole)} · account`
+      : member === null
+        ? "No access"
+        : "…";
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   // Active = the single most specific nav href the current path falls under.

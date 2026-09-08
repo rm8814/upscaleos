@@ -7,7 +7,7 @@ const PROPERTY_ID = "04812";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("gm@grandsamudra.upscale.id");
+  const [email, setEmail] = useState("anin@upscale.asia");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -38,10 +38,10 @@ export default function LoginPage() {
 
         <div>
           <div className="mb-1.5 font-display text-[22px] font-bold tracking-display">
-            Sign in to your property
+            Sign in to UpscaleOS
           </div>
           <div className="text-13 text-fg-3">
-            Grand Samudra Bali &middot; Property ID {PROPERTY_ID}
+            Your account&rsquo;s properties load after sign-in.
           </div>
         </div>
 

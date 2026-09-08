@@ -5,11 +5,21 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Plus, Trash2, Rocket } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useAccount } from "@/components/providers/useAccount";
+import {
+  PROPERTY_ROLES,
+  PROPERTY_ROLE_LABEL,
+  ACCOUNT_ROLES,
+  ACCOUNT_ROLE_LABEL,
+  ACCOUNT_ROLE_HINT,
+  roleLabel,
+} from "@/lib/roles";
 
-type Tab = "property" | "team" | "taxes" | "integrations";
+type Tab = "property" | "team" | "taxes" | "integrations" | "account";
 
 const CURRENCIES = ["IDR", "USD", "SGD", "MYR", "AUD"];
 const TIMEZONES = [
@@ -19,15 +29,7 @@ const TIMEZONES = [
   "Asia/Singapore",
   "Asia/Kuala_Lumpur",
 ];
-const ROLES = [
-  "General Manager",
-  "Front office",
-  "Housekeeping lead",
-  "Engineering",
-  "Night auditor",
-  "Revenue manager",
-  "Reservations",
-];
+const ROLES = PROPERTY_ROLES;
 const BASES = ["Room + F&B", "Room only", "F&B only", "Per room-night", "Per stay"];
 
 const INTEGRATIONS = [
@@ -40,23 +42,25 @@ const INTEGRATIONS = [
 
 export default function ConfigurePage() {
   const { activeProperty } = useProperty();
+  const { canManageAccount } = useAccount();
   const [tab, setTab] = useState<Tab>("property");
 
   if (!activeProperty) {
     return <div className="p-1 text-13 text-fg-3">Loading…</div>;
   }
 
+  const tabs: [Tab, string][] = [
+    ["property", "Property"],
+    ["team", "Team & roles"],
+    ["taxes", "Taxes & fees"],
+    ["integrations", "Integrations"],
+  ];
+  if (canManageAccount) tabs.push(["account", "Account & access"]);
+
   return (
     <div className="mx-auto max-w-content">
       <div className="mb-4 flex flex-wrap gap-2">
-        {(
-          [
-            ["property", "Property"],
-            ["team", "Team & roles"],
-            ["taxes", "Taxes & fees"],
-            ["integrations", "Integrations"],
-          ] as [Tab, string][]
-        ).map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -75,6 +79,244 @@ export default function ConfigurePage() {
       {tab === "team" && <TeamTab propertyId={activeProperty._id} />}
       {tab === "taxes" && <TaxesTab propertyId={activeProperty._id} />}
       {tab === "integrations" && <IntegrationsTab />}
+      {tab === "account" && <AccountTab />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- Account & access */
+
+function AccountTab() {
+  const { account, accountRole, email: myEmail } = useAccount();
+  const { setActivePropertyId } = useProperty();
+  const toast = useToast();
+
+  const members = useQuery(api.accounts.listMembers, { email: myEmail ?? undefined });
+  const props = useQuery(api.properties.listForUser, { email: myEmail ?? undefined });
+  const audit = useQuery(api.accounts.auditLog, { email: myEmail ?? undefined, limit: 40 });
+
+  const addMember = useMutation(api.accounts.addMember);
+  const updateRole = useMutation(api.accounts.updateMemberRole);
+  const removeMember = useMutation(api.accounts.removeMember);
+
+  const [form, setForm] = useState({ name: "", email: "", role: "admin" });
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!form.email.trim()) return;
+    setErr(null);
+    try {
+      await addMember({
+        email: myEmail ?? undefined,
+        memberEmail: form.email.trim(),
+        memberName: form.name.trim(),
+        role: form.role,
+      });
+      setForm({ name: "", email: "", role: "admin" });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not add member.");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="p-4">
+        <Eyebrow className="mb-2">Account</Eyebrow>
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-13">
+          <div>
+            <span className="text-fg-3">Name </span>
+            <span className="font-semibold">{account?.name ?? "—"}</span>
+          </div>
+          <div>
+            <span className="text-fg-3">Plan </span>
+            <span className="font-mono capitalize">{account?.plan ?? "—"}</span>
+          </div>
+          <div>
+            <span className="text-fg-3">Your role </span>
+            <span className="font-semibold capitalize">{accountRole ?? "—"}</span>
+          </div>
+        </div>
+        <p className="mt-2 text-[11.5px] text-fg-3">
+          Owner and admin see every property in the account and can onboard new
+          ones. Analyst gets read-only access everywhere. Everyone else only sees
+          properties they hold a role on.
+        </p>
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <Eyebrow>Account members</Eyebrow>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 border-b border-line bg-deep px-4 py-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-fg-3">Name</span>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-40 rounded-sm border border-line bg-ink px-2.5 py-1.5 text-12 text-ice outline-none focus:border-accent-violet"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-fg-3">Email</span>
+            <input
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              className="w-56 rounded-sm border border-line bg-ink px-2.5 py-1.5 text-12 text-ice outline-none focus:border-accent-violet"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-fg-3">Role</span>
+            <select
+              value={form.role}
+              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+              className="rounded-sm border border-line bg-ink px-2.5 py-1.5 text-12 text-fg-2"
+            >
+              {ACCOUNT_ROLES.filter((r) => r !== "owner").map((r) => (
+                <option key={r} value={r}>
+                  {ACCOUNT_ROLE_LABEL[r]} — {ACCOUNT_ROLE_HINT[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={submit}
+            className="rounded-sm bg-accent-violet px-3 py-1.5 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+          >
+            Add member
+          </button>
+          {err && <span className="text-12 text-room-ooo">{err}</span>}
+        </div>
+
+        <div className="grid grid-cols-[1.4fr_1fr_0.7fr_40px] border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3">
+          <div>Member</div>
+          <div>Role</div>
+          <div>Status</div>
+          <div />
+        </div>
+        {!members && <div className="px-4 py-4 text-13 text-fg-3">Loading…</div>}
+        {members?.map((m) => (
+          <div
+            key={m._id}
+            className="grid grid-cols-[1.4fr_1fr_0.7fr_40px] items-center border-b border-line-soft px-4 py-3 text-13 last:border-0"
+          >
+            <div>
+              <div className="font-semibold">{m.name}</div>
+              <div className="text-[11px] text-fg-3">{m.email}</div>
+            </div>
+            {m.role === "owner" ? (
+              <div className="text-12 font-semibold">Owner</div>
+            ) : (
+              <select
+                value={m.role}
+                onChange={(e) =>
+                  updateRole({
+                    email: myEmail ?? undefined,
+                    id: m._id,
+                    role: e.target.value,
+                  })
+                }
+                className="w-full max-w-[140px] rounded-sm border border-line bg-ink px-2 py-1.5 text-12 text-fg-2"
+              >
+                {ACCOUNT_ROLES.filter((r) => r !== "owner").map((r) => (
+                  <option key={r} value={r}>
+                    {ACCOUNT_ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div
+              className="text-[11.5px]"
+              style={{
+                color:
+                  m.status === "active"
+                    ? "var(--accent-cyan)"
+                    : "var(--res-tentative)",
+              }}
+            >
+              {m.status === "active" ? "Active" : "Invited"}
+            </div>
+            {m.role === "owner" ? (
+              <span />
+            ) : (
+              <button
+                onClick={() =>
+                  removeMember({ email: myEmail ?? undefined, id: m._id })
+                }
+                className="justify-self-end text-fg-3 hover:text-room-ooo"
+                aria-label={`Remove ${m.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-line px-4 py-3">
+          <Eyebrow>Properties in this account</Eyebrow>
+        </div>
+        {(props ?? []).map((p) => (
+          <div
+            key={p._id}
+            className="flex items-center justify-between border-b border-line-soft px-4 py-3 text-13 last:border-0"
+          >
+            <div>
+              <div className="font-semibold">{p.name}</div>
+              <div className="text-[11px] text-fg-3">
+                {p.location} · ID {p.id}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span
+                className="text-[11.5px] capitalize"
+                style={{
+                  color:
+                    p.status === "active"
+                      ? "var(--accent-cyan)"
+                      : "var(--res-tentative)",
+                }}
+              >
+                {p.status ?? "active"}
+              </span>
+              <button
+                onClick={() => {
+                  setActivePropertyId(p._id);
+                  toast(`Switched to ${p.name}`);
+                }}
+                className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px] hover:border-line-strong"
+              >
+                Open
+              </button>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-line px-4 py-3">
+          <Eyebrow>Recent account activity</Eyebrow>
+        </div>
+        {!audit && <div className="px-4 py-4 text-13 text-fg-3">Loading…</div>}
+        {audit?.length === 0 && (
+          <div className="px-4 py-4 text-13 text-fg-3">No activity yet.</div>
+        )}
+        {audit?.map((a) => (
+          <div
+            key={a._id}
+            className="flex items-baseline justify-between gap-3 border-b border-line-soft px-4 py-2.5 text-12 last:border-0"
+          >
+            <div>
+              <span className="font-mono text-fg-2">{a.action}</span>
+              {a.target && <span className="text-fg-3"> · {a.target}</span>}
+              {a.detail && <span className="text-fg-3"> ({a.detail})</span>}
+            </div>
+            <div className="whitespace-nowrap text-[11px] text-fg-3">
+              {a.actorEmail} · {new Date(a.at).toLocaleString()}
+            </div>
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
@@ -85,6 +327,7 @@ type PropertyDoc = ReturnType<typeof useProperty>["activeProperty"];
 
 function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
   const update = useMutation(api.properties.update);
+  const { user } = useAuth();
 
   const initial = useMemo(
     () => ({
@@ -125,6 +368,7 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
     setSaving(true);
     await update({
       id: property._id,
+      email: user?.email,
       patch: {
         name: form.name,
         externalId: form.externalId,
@@ -153,7 +397,7 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
   };
 
   const activate = () =>
-    update({ id: property._id, patch: { status: "active" } });
+    update({ id: property._id, email: user?.email, patch: { status: "active" } });
 
   return (
     <div className="flex flex-col gap-4">
@@ -398,13 +642,15 @@ function ToggleRow({
 /* ---------------------------------------------------------------------- Team */
 
 function TeamTab({ propertyId }: { propertyId: Id<"properties"> }) {
+  const { user } = useAuth();
+  const callerEmail = user?.email;
   const members = useQuery(api.team.listMembers, { propertyId });
   const addMember = useMutation(api.team.addMember);
   const updateRole = useMutation(api.team.updateMemberRole);
   const removeMember = useMutation(api.team.removeMember);
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [invite, setInvite] = useState({ name: "", email: "", role: ROLES[1] });
+  const [invite, setInvite] = useState({ name: "", email: "", role: "front_office" });
   const [error, setError] = useState<string | null>(null);
 
   const submitInvite = async () => {
@@ -413,11 +659,12 @@ function TeamTab({ propertyId }: { propertyId: Id<"properties"> }) {
     try {
       await addMember({
         propertyId,
-        email: invite.email.trim(),
-        name: invite.name.trim(),
+        email: callerEmail,
+        memberEmail: invite.email.trim(),
+        memberName: invite.name.trim(),
         role: invite.role,
       });
-      setInvite({ name: "", email: "", role: ROLES[1] });
+      setInvite({ name: "", email: "", role: "front_office" });
       setInviteOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not invite.");
@@ -462,7 +709,9 @@ function TeamTab({ propertyId }: { propertyId: Id<"properties"> }) {
               className="rounded-sm border border-line bg-ink px-2.5 py-1.5 text-12 text-fg-2"
             >
               {ROLES.map((r) => (
-                <option key={r}>{r}</option>
+                <option key={r} value={r}>
+                  {PROPERTY_ROLE_LABEL[r]}
+                </option>
               ))}
             </select>
           </label>
@@ -498,11 +747,15 @@ function TeamTab({ propertyId }: { propertyId: Id<"properties"> }) {
           </div>
           <select
             value={m.role}
-            onChange={(e) => updateRole({ id: m._id, role: e.target.value })}
+            onChange={(e) =>
+              updateRole({ id: m._id, email: callerEmail, role: e.target.value })
+            }
             className="w-full max-w-[180px] rounded-sm border border-line bg-ink px-2 py-1.5 text-12 text-fg-2"
           >
-            {[...new Set([m.role, ...ROLES])].map((r) => (
-              <option key={r}>{r}</option>
+            {[...new Set<string>([m.role, ...ROLES])].map((r) => (
+              <option key={r} value={r}>
+                {roleLabel(r)}
+              </option>
             ))}
           </select>
           <div
@@ -514,7 +767,7 @@ function TeamTab({ propertyId }: { propertyId: Id<"properties"> }) {
             {m.status === "active" ? "Active" : "Invited"}
           </div>
           <button
-            onClick={() => removeMember({ id: m._id })}
+            onClick={() => removeMember({ id: m._id, email: callerEmail })}
             className="justify-self-end text-fg-3 hover:text-room-ooo"
             aria-label={`Remove ${m.name}`}
           >

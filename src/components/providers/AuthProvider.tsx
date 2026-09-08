@@ -49,11 +49,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Simulate API call to auth provider
     await new Promise(resolve => setTimeout(resolve, 800));
 
+    // Derive a display name from the address until a real auth provider gives us
+    // a profile. Account role is resolved server-side from account_members.
+    const local = email.split("@")[0] ?? email;
+    const name = local
+      .split(/[.\-_]+/)
+      .filter(Boolean)
+      .map((w) => w[0].toUpperCase() + w.slice(1))
+      .join(" ");
+
     const mockUser: User = {
-      id: "user_1",
-      name: "Amira K.",
-      email: email,
-      role: "Admin",
+      id: `user_${local}`,
+      name: name || email,
+      email: email.trim().toLowerCase(),
+      role: "member",
       propertyId: propertyId,
     };
 

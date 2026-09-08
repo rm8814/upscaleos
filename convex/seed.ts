@@ -43,7 +43,10 @@ export const seed = mutation({
       "corporate_production",
       "corporate_agreements",
       "taxes",
+      "audit_log",
       "property_members",
+      "account_members",
+      "accounts",
       "users",
       "properties",
     ] as const) {
@@ -51,7 +54,24 @@ export const seed = mutation({
       await Promise.all(rows.map((r) => ctx.db.delete(r._id)));
     }
 
-    // ---- property + user + members ------------------------------------
+    // ---- account (the management company) ----------------------------
+    const OWNER_EMAIL = "anin@upscale.asia";
+    const accountId = await ctx.db.insert("accounts", {
+      name: "UPSCALE Management",
+      slug: "upscale-management",
+      plan: "enterprise",
+      ownerEmail: OWNER_EMAIL,
+    });
+    const accountMembers = [
+      { email: OWNER_EMAIL, name: "Anin", role: "owner", status: "active" },
+      { email: "ops@upscale.asia", name: "Regional Ops", role: "admin", status: "active" },
+      { email: "analyst@upscale.asia", name: "Revenue Analyst", role: "analyst", status: "active" },
+    ];
+    for (const m of accountMembers) {
+      await ctx.db.insert("account_members", { ...m, accountId });
+    }
+
+    // ---- property + members -----------------------------------------
     const propertyId = await ctx.db.insert("properties", {
       name: "Grand Samudra Bali",
       location: "Seminyak, Bali",
@@ -65,6 +85,7 @@ export const seed = mutation({
       checkOutTime: "12:00",
       businessDate: "2026-09-08",
       status: "active",
+      accountId,
       autoAssignRooms: true,
       autoNightAudit: true,
       nightAuditTime: "03:00",
@@ -77,22 +98,32 @@ export const seed = mutation({
       },
     });
 
-    await ctx.db.insert("users", {
-      name: "Amira K.",
-      email: "gm@grandsamudra.upscale.id",
-      role: "Admin",
-      propertyId,
+    // A second property the company is mid-onboarding — demonstrates the
+    // account owner seeing every property without a per-property role.
+    await ctx.db.insert("properties", {
+      name: "Samudra Ubud Retreat",
+      location: "Ubud, Bali",
+      id: "04813",
+      initials: "SUR",
+      address: "Jl. Raya Sanggingan, Ubud, Gianyar, Bali 80571",
+      contactEmail: "hello@samudraubud.upscale.id",
+      currency: "IDR",
+      timezone: "Asia/Makassar",
+      checkInTime: "14:00",
+      checkOutTime: "12:00",
+      status: "onboarding",
+      accountId,
     });
 
     const members = [
-      { email: "gm@grandsamudra.upscale.id", name: "Amira K.", role: "General Manager", status: "active" },
-      { email: "fo@grandsamudra.upscale.id", name: "Rangga Putra", role: "Front office", status: "active" },
-      { email: "hk@grandsamudra.upscale.id", name: "Wayan Sari", role: "Housekeeping lead", status: "active" },
-      { email: "eng@grandsamudra.upscale.id", name: "Budi Santoso", role: "Engineering", status: "active" },
-      { email: "night@grandsamudra.upscale.id", name: "Sri Wahyuni", role: "Night auditor", status: "invited" },
+      { email: "gm@grandsamudra.upscale.id", name: "Amira K.", role: "gm", status: "active" },
+      { email: "fo@grandsamudra.upscale.id", name: "Rangga Putra", role: "front_office", status: "active" },
+      { email: "hk@grandsamudra.upscale.id", name: "Wayan Sari", role: "housekeeping", status: "active" },
+      { email: "eng@grandsamudra.upscale.id", name: "Budi Santoso", role: "maintenance", status: "active" },
+      { email: "night@grandsamudra.upscale.id", name: "Sri Wahyuni", role: "night_auditor", status: "invited" },
     ];
     for (const m of members) {
-      await ctx.db.insert("property_members", { ...m, propertyId });
+      await ctx.db.insert("property_members", { ...m, accountId, propertyId });
     }
 
     const taxes = [

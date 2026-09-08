@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useCurrentMember } from "@/components/providers/useCurrentMember";
+import { useAccount } from "@/components/providers/useAccount";
 import {
   AlertTriangle,
   Check,
@@ -63,11 +64,16 @@ const PROPERTY_STATUS = [
 export default function NightAuditPage() {
   const { activeProperty } = useProperty();
   const member = useCurrentMember();
+  const { accountRole } = useAccount();
   const rollBusinessDate = useMutation(api.properties.rollBusinessDate);
 
-  const AUDIT_ROLES = ["Night auditor", "General Manager"];
+  // Account owner/admin, or a property GM / night auditor, may run the audit.
+  const AUDIT_PROPERTY_ROLES = ["gm", "night_auditor"];
   const role = member?.role ?? null;
-  const canRun = role ? AUDIT_ROLES.includes(role) : false;
+  const canRun =
+    accountRole === "owner" ||
+    accountRole === "admin" ||
+    (role ? AUDIT_PROPERTY_ROLES.includes(role) : false);
 
   const [expanded, setExpanded] = useState<string | null>("Reconcile POS postings");
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));

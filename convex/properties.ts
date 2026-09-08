@@ -4,6 +4,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
+import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
 const policyValidator = v.object({
   cancellation: v.string(),
@@ -30,19 +31,54 @@ export const getFirst = query({
   },
 });
 
-/** Properties the signed-in user is a member of, sorted by name. */
-export const listForMember = query({
-  args: { email: v.string() },
+/**
+ * Properties the signed-in user can open. Account owner / admin / analyst see
+ * every property in their account; everyone else sees only the properties they
+ * have an explicit `property_members` row for.
+ */
+export const listForUser = query({
+  args: { email: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const email = await currentEmail(ctx, args.email);
+    if (!email) return [];
+    const scope = await resolveScope(ctx, email);
+
+    if (scope.accountId && scope.seesAllAccountProperties) {
+      return (await ctx.db.query("properties").collect())
+        .filter((p) => p.accountId === scope.accountId)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     const memberships = await ctx.db
       .query("property_members")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .collect();
-
     const props = await Promise.all(
       memberships.map((m) => ctx.db.get(m.propertyId))
     );
+    return props
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
 
+/** @deprecated use listForUser — kept so an old client doesn't hard-fail. */
+export const listForMember = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const scope = await resolveScope(ctx, args.email.toLowerCase());
+    if (scope.accountId && scope.seesAllAccountProperties) {
+      return (await ctx.db.query("properties").collect())
+        .filter((p) => p.accountId === scope.accountId)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    const memberships = await ctx.db
+      .query("property_members")
+      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .collect();
+    const props = await Promise.all(
+      memberships.map((m) => ctx.db.get(m.propertyId))
+    );
     return props
       .filter((p): p is NonNullable<typeof p> => p !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -61,10 +97,17 @@ export const create = mutation({
     timezone: v.string(),
     checkInTime: v.string(),
     checkOutTime: v.string(),
-    creatorEmail: v.string(),
-    creatorName: v.string(),
+    creatorEmail: v.optional(v.string()), // identity; ignored once real auth is wired
+    creatorName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Only an account owner or admin can onboard a property.
+    const scope = await authorize(ctx, {
+      email: args.creatorEmail,
+      requireAccount: "admin",
+    });
+    if (!scope.accountId) throw new Error("You are not part of an account.");
+
     const propertyId = await ctx.db.insert("properties", {
       name: args.name,
       id: args.externalId,
@@ -77,17 +120,23 @@ export const create = mutation({
       checkInTime: args.checkInTime,
       checkOutTime: args.checkOutTime,
       status: "onboarding",
+      accountId: scope.accountId,
     });
 
-    // The creator manages the property from the start.
+    // The person who onboarded it manages it from the start.
     await ctx.db.insert("property_members", {
       propertyId,
-      email: args.creatorEmail,
-      name: args.creatorName,
-      role: "General Manager",
+      accountId: scope.accountId,
+      email: scope.email,
+      name: args.creatorName ?? scope.email,
+      role: "gm",
       status: "active",
     });
 
+    await writeAudit(ctx, scope, "property.create", {
+      propertyId,
+      target: args.name,
+    });
     return propertyId;
   },
 });
@@ -95,6 +144,7 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("properties"),
+    email: v.optional(v.string()),
     patch: v.object({
       name: v.optional(v.string()),
       externalId: v.optional(v.string()),
@@ -114,11 +164,20 @@ export const update = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const scope = await authorize(ctx, {
+      email: args.email,
+      propertyId: args.id,
+      requireProperty: "gm",
+    });
     const { externalId, initials, ...rest } = args.patch;
     const doc: Record<string, unknown> = { ...rest };
     if (externalId !== undefined) doc.id = externalId;
     if (initials !== undefined) doc.initials = initials.toUpperCase().slice(0, 4);
     await ctx.db.patch(args.id, doc);
+    await writeAudit(ctx, scope, "property.update", {
+      propertyId: args.id,
+      detail: Object.keys(doc).join(", "),
+    });
     return { success: true };
   },
 });

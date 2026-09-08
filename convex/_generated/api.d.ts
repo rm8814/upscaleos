@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accounts from "../accounts.js";
+import type * as authz from "../authz.js";
 import type * as channels from "../channels.js";
 import type * as crons from "../crons.js";
 import type * as folios from "../folios.js";
@@ -30,6 +32,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accounts: typeof accounts;
+  authz: typeof authz;
   channels: typeof channels;
   crons: typeof crons;
   folios: typeof folios;

@@ -16,6 +16,10 @@ export default defineSchema({
     checkOutTime: v.optional(v.string()), // '12:00'
     businessDate: v.optional(v.string()), // PMS "today" — only advances on night audit
     status: v.optional(v.string()), // 'onboarding' | 'active' | 'archived' (absent = active/legacy)
+    // Operations settings
+    autoAssignRooms: v.optional(v.boolean()), // pick a free room on reservation create
+    autoNightAudit: v.optional(v.boolean()), // roll the business date on a schedule
+    nightAuditTime: v.optional(v.string()), // 'HH:MM' in the property's timezone
     policies: v.optional(
       v.object({
         cancellation: v.string(),

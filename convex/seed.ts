@@ -61,6 +61,9 @@ export const seed = mutation({
       checkOutTime: "12:00",
       businessDate: "2026-09-08",
       status: "active",
+      autoAssignRooms: true,
+      autoNightAudit: true,
+      nightAuditTime: "03:00",
       policies: {
         cancellation: "Free cancellation up to 48h before arrival.",
         deposit: "Card guarantee, no prepayment.",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -59,6 +59,26 @@ export default function NightAuditPage() {
   const [running, setRunning] = useState(false);
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const autoAudit = !!activeProperty?.autoNightAudit;
+  const auditTime = activeProperty?.nightAuditTime ?? "03:00";
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!autoAudit) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [autoAudit]);
+  const countdown = useMemo(() => {
+    const [h, m] = auditTime.split(":").map(Number);
+    const target = new Date(nowMs);
+    target.setHours(h || 0, m || 0, 0, 0);
+    if (target.getTime() <= nowMs) target.setDate(target.getDate() + 1);
+    const diff = target.getTime() - nowMs;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(Math.floor(diff / 3600000))}:${pad(
+      Math.floor((diff % 3600000) / 60000)
+    )}:${pad(Math.floor((diff % 60000) / 1000))}`;
+  }, [nowMs, auditTime]);
 
   const STEPS = [
     { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", alwaysDone: true, affected: undefined as { room: string; text: string }[] | undefined },
@@ -83,9 +103,16 @@ export default function NightAuditPage() {
     <div className="mx-auto max-w-content">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="text-13 text-fg-3">Business date: {fmtDate(businessDate)}</div>
-        <div className="text-12 text-fg-3">
-          Scheduled auto-run in <span className="font-mono font-semibold text-ice">02:41:18</span>
-        </div>
+        {autoAudit ? (
+          <div className="text-12 text-fg-3">
+            Auto-run at <span className="font-mono text-fg-2">{auditTime}</span> — in{" "}
+            <span className="font-mono font-semibold text-ice">{countdown}</span>
+          </div>
+        ) : (
+          <div className="text-12 text-fg-3">
+            Automatic night audit is <span className="text-fg-2">off</span> — run it manually
+          </div>
+        )}
         <div className="ml-auto text-12 text-fg-3">
           {doneCount} of {STEPS.length} steps complete
         </div>

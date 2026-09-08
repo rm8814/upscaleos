@@ -114,9 +114,46 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
+
+    let roomId = args.roomId;
+
+    // Auto-assign: if no room was chosen and the property has it switched on,
+    // pick the first bookable room of the right type with no overlapping stay.
+    if (!roomId) {
+      const property = await ctx.db.get(args.propertyId);
+      if (property?.autoAssignRooms) {
+        const [rooms, existing] = await Promise.all([
+          ctx.db
+            .query("rooms")
+            .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+            .collect(),
+          ctx.db
+            .query("reservations")
+            .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+            .collect(),
+        ]);
+        const overlaps = (r: Doc<"reservations">) =>
+          r.status !== "cancelled" &&
+          r.status !== "departed" &&
+          r.checkIn < args.checkOut &&
+          r.checkOut > args.checkIn;
+        const taken = new Set(
+          existing.filter(overlaps).map((r) => r.roomId)
+        );
+        const free = rooms.find(
+          (rm) =>
+            rm.type === args.roomType &&
+            rm.status !== "OOO" &&
+            rm.status !== "OOS" &&
+            !taken.has(rm._id)
+        );
+        if (free) roomId = free._id;
+      }
+    }
+
     let roomNumber: string | undefined;
-    if (args.roomId) {
-      const room = await ctx.db.get(args.roomId);
+    if (roomId) {
+      const room = await ctx.db.get(roomId);
       roomNumber = room?.roomNumber;
     }
     const rate = NIGHTLY[args.roomType] ?? 1_850_000;
@@ -124,7 +161,7 @@ export const create = mutation({
     return await ctx.db.insert("reservations", {
       guestId,
       propertyId: args.propertyId,
-      roomId: args.roomId,
+      roomId,
       checkIn: args.checkIn,
       checkOut: args.checkOut,
       status: args.status,

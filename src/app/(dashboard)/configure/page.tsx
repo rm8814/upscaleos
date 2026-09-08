@@ -97,6 +97,9 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
       timezone: property.timezone ?? "Asia/Makassar",
       checkInTime: property.checkInTime ?? "14:00",
       checkOutTime: property.checkOutTime ?? "12:00",
+      autoAssignRooms: property.autoAssignRooms ?? false,
+      autoNightAudit: property.autoNightAudit ?? false,
+      nightAuditTime: property.nightAuditTime ?? "03:00",
       cancellation: property.policies?.cancellation ?? "",
       deposit: property.policies?.deposit ?? "",
       children: property.policies?.children ?? "",
@@ -111,7 +114,7 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
   const [saved, setSaved] = useState(false);
   useEffect(() => setForm(initial), [initial]);
 
-  const set = (k: keyof typeof form, v: string) => {
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
     setSaved(false);
   };
@@ -132,6 +135,9 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
         timezone: form.timezone,
         checkInTime: form.checkInTime,
         checkOutTime: form.checkOutTime,
+        autoAssignRooms: form.autoAssignRooms,
+        autoNightAudit: form.autoNightAudit,
+        nightAuditTime: form.nightAuditTime,
         policies: {
           cancellation: form.cancellation,
           deposit: form.deposit,
@@ -232,6 +238,32 @@ function PropertyTab({ property }: { property: NonNullable<PropertyDoc> }) {
           <TextRow label="Pets" value={form.pets} onChange={(v) => set("pets", v)} />
           <TextRow label="Smoking" value={form.smoking} onChange={(v) => set("smoking", v)} />
         </Card>
+
+        <Card className="flex flex-col gap-3 p-5">
+          <Eyebrow>Operations</Eyebrow>
+          <ToggleRow
+            label="Auto-assign rooms"
+            hint="When a reservation is created without a room, pick the first free room of the booked type."
+            checked={form.autoAssignRooms}
+            onChange={(v) => set("autoAssignRooms", v)}
+          />
+          <div className="h-px bg-line-soft" />
+          <ToggleRow
+            label="Automatic night audit"
+            hint="Roll the business date and post departures on a schedule, with no manual run."
+            checked={form.autoNightAudit}
+            onChange={(v) => set("autoNightAudit", v)}
+          />
+          {form.autoNightAudit && (
+            <div className="pl-1">
+              <TimeRow
+                label={`Run time (${form.timezone})`}
+                value={form.nightAuditTime}
+                onChange={(v) => set("nightAuditTime", v)}
+              />
+            </div>
+          )}
+        </Card>
       </div>
 
       <div className="flex items-center gap-3">
@@ -320,6 +352,45 @@ function TimeRow({
         className="rounded-sm border border-line bg-ink px-2.5 py-2 font-mono text-13 text-ice outline-none focus:border-accent-violet"
       />
     </label>
+  );
+}
+
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex-1">
+        <div className="text-13 text-ice">{label}</div>
+        <div className="mt-0.5 text-[11.5px] text-fg-3">{hint}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative mt-0.5 h-[22px] w-[38px] flex-none rounded-pill border transition-colors ${
+          checked
+            ? "border-accent-violet bg-accent-violet"
+            : "border-line bg-elevated"
+        }`}
+      >
+        <span
+          className={`absolute top-[2px] h-[16px] w-[16px] rounded-pill bg-ice transition-all ${
+            checked ? "left-[18px]" : "left-[2px]"
+          }`}
+        />
+      </button>
+    </div>
   );
 }
 

@@ -1,5 +1,7 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 const policyValidator = v.object({
   cancellation: v.string(),
@@ -103,6 +105,9 @@ export const update = mutation({
       checkInTime: v.optional(v.string()),
       checkOutTime: v.optional(v.string()),
       status: v.optional(v.string()),
+      autoAssignRooms: v.optional(v.boolean()),
+      autoNightAudit: v.optional(v.boolean()),
+      nightAuditTime: v.optional(v.string()),
       policies: v.optional(policyValidator),
     }),
   },
@@ -117,31 +122,85 @@ export const update = mutation({
 });
 
 /**
- * Night-audit only: advance the PMS business date by one day and post the
- * day's departures (in-house guests whose checkout was the old business date).
+ * Advance one property's PMS business date by a day and post that day's
+ * departures (in-house guests whose checkout has now passed).
  */
+async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
+  const property = await ctx.db.get(id);
+  if (!property) throw new Error("Property not found");
+  const oldDate = property.businessDate ?? "2026-09-08";
+  const d = new Date(oldDate + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  const newDate = d.toISOString().slice(0, 10);
+
+  await ctx.db.patch(id, { businessDate: newDate });
+
+  const reservations = await ctx.db
+    .query("reservations")
+    .withIndex("by_property", (q) => q.eq("propertyId", id))
+    .collect();
+  for (const r of reservations) {
+    if (r.status === "inhouse" && r.checkOut <= newDate) {
+      await ctx.db.patch(r._id, { status: "departed" });
+    }
+  }
+
+  return { businessDate: newDate, previous: oldDate };
+}
+
+/** Night-audit "Run remaining steps" calls this to roll the date manually. */
 export const rollBusinessDate = mutation({
   args: { id: v.id("properties") },
-  handler: async (ctx, args) => {
-    const property = await ctx.db.get(args.id);
-    if (!property) throw new Error("Property not found");
-    const oldDate = property.businessDate ?? "2026-09-08";
-    const d = new Date(oldDate + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + 1);
-    const newDate = d.toISOString().slice(0, 10);
+  handler: (ctx, args) => rollOne(ctx, args.id),
+});
 
-    await ctx.db.patch(args.id, { businessDate: newDate });
+/**
+ * Cron entry point. For every property with automatic night audit enabled,
+ * roll the business date once per day, on or after its scheduled local time,
+ * and only when it is exactly one day behind the wall-clock date (so a stale
+ * demo dataset never "runs away" catching up).
+ */
+export const runScheduledNightAudits = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = new Date();
+    const properties = await ctx.db.query("properties").collect();
+    const rolled: string[] = [];
 
-    const reservations = await ctx.db
-      .query("reservations")
-      .withIndex("by_property", (q) => q.eq("propertyId", args.id))
-      .collect();
-    for (const r of reservations) {
-      if (r.status === "inhouse" && r.checkOut <= newDate) {
-        await ctx.db.patch(r._id, { status: "departed" });
+    for (const p of properties) {
+      if (!p.autoNightAudit || !p.nightAuditTime) continue;
+      const tz = p.timezone ?? "Asia/Makassar";
+
+      let wallDate: string;
+      let wallTime: string;
+      try {
+        const parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(now);
+        const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+        wallDate = `${get("year")}-${get("month")}-${get("day")}`;
+        wallTime = `${get("hour")}:${get("minute")}`;
+      } catch {
+        continue; // unknown timezone — skip rather than roll on a wrong clock
+      }
+
+      const yesterday = new Date(wallDate + "T00:00:00Z");
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const yesterdayIso = yesterday.toISOString().slice(0, 10);
+
+      const bizDate = p.businessDate ?? "2026-09-08";
+      if (bizDate === yesterdayIso && wallTime >= p.nightAuditTime) {
+        await rollOne(ctx, p._id);
+        rolled.push(p.name);
       }
     }
 
-    return { businessDate: newDate, previous: oldDate };
+    return { rolled };
   },
 });

@@ -4,6 +4,8 @@ import React, { useMemo, useState } from "react";
 import { AlertTriangle, X, FileSpreadsheet } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { downloadCsv } from "@/lib/csv";
 
 interface Account {
   account: string;
@@ -117,6 +119,7 @@ const GRID =
 
 export default function ArLedgerPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const ACCOUNTS = useMemo(
     () => buildAccounts(activeProperty?.businessDate ?? "2026-09-08"),
     [activeProperty?.businessDate]
@@ -153,8 +156,25 @@ export default function ArLedgerPage() {
           <option>Travel agent</option>
           <option>OTA settlement</option>
         </select>
-        <button className="ml-auto flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi">
-          <FileSpreadsheet className="h-3.5 w-3.5" /> Export XLSX
+        <button
+          onClick={() =>
+            downloadCsv(
+              "ar-ledger.csv",
+              ACCOUNTS.map((a) => ({
+                account: a.account,
+                type: a.type,
+                balance: a.balance,
+                creditLimit: a.creditLimit,
+                aged_0_30: a.a030,
+                aged_31_60: a.a3160,
+                aged_60_plus: a.a60,
+                lastPayment: a.lastPayment,
+              }))
+            )
+          }
+          className="ml-auto flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV
         </button>
       </div>
 
@@ -224,7 +244,10 @@ export default function ArLedgerPage() {
               >
                 Record payment
               </button>
-              <button className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong">
+              <button
+                onClick={() => toast(`Statement emailed to ${acc.account}`, "success")}
+                className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong"
+              >
                 Send statement
               </button>
             </div>
@@ -242,7 +265,13 @@ export default function ArLedgerPage() {
                   <option>Credit card</option>
                 </select>
                 <div className="flex gap-2">
-                  <button className="flex-1 rounded-sm bg-accent-violet py-2 text-12 font-medium text-ice">
+                  <button
+                    onClick={() => {
+                      setPayOpen(false);
+                      toast("Payment recorded against the account", "success");
+                    }}
+                    className="flex-1 rounded-sm bg-accent-violet py-2 text-12 font-medium text-ice"
+                  >
                     Confirm
                   </button>
                   <button

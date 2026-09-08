@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Plus } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useToast } from "@/components/providers/ToastProvider";
 
 interface Plan {
   code: string;
@@ -121,6 +122,7 @@ const STATUS_COLOR: Record<Plan["status"], string> = {
 };
 
 export default function RateSetupPage() {
+  const toast = useToast();
   const [selectedCode, setSelectedCode] = useState(PLANS[0].code);
   const plan = PLANS.find((p) => p.code === selectedCode)!;
 
@@ -128,7 +130,10 @@ export default function RateSetupPage() {
     <div className="mx-auto max-w-content">
       <div className="mb-3.5 flex flex-wrap items-center gap-2">
         <Eyebrow>Rate plans</Eyebrow>
-        <button className="ml-auto flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi">
+        <button
+          onClick={() => toast("Rate-plan creation isn’t wired in this preview")}
+          className="ml-auto flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+        >
           <Plus className="h-3.5 w-3.5" /> New rate plan
         </button>
       </div>

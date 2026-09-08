@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, FileSpreadsheet, ExternalLink } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { downloadCsv } from "@/lib/csv";
 
 const OUTLETS = [
   { name: "Ombak Restaurant", type: "All-day dining", status: "Online", color: "var(--accent-cyan)", revenue: "Rp 14,200,000", postings: 62, sync: "2m ago" },
@@ -90,8 +91,23 @@ export default function PosDashboardPage() {
         >
           <ExternalLink className="h-[13px] w-[13px]" /> Open guest terminal
         </Link>
-        <button className="flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi">
-          <FileSpreadsheet className="h-3.5 w-3.5" /> Export XLSX
+        <button
+          onClick={() =>
+            downloadCsv(
+              `pos-outlets-${businessDate}.csv`,
+              OUTLETS.map((o) => ({
+                outlet: o.name,
+                type: o.type,
+                status: o.status,
+                revenue: o.revenue,
+                postings: o.postings,
+                lastSync: o.sync,
+              }))
+            )
+          }
+          className="flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" /> Export CSV
         </button>
       </div>
 

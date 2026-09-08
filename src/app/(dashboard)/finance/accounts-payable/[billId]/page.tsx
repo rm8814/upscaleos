@@ -6,10 +6,12 @@ import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { buildBills, STATUS_COLOR } from "../data";
 
 export default function BillDetailPage() {
   const { billId } = useParams<{ billId: string }>();
+  const toast = useToast();
   const { activeProperty } = useProperty();
   const bill = buildBills(activeProperty?.businessDate ?? "2026-09-08").find(
     (b) => b.id === billId
@@ -89,13 +91,22 @@ export default function BillDetailPage() {
 
         <div className="flex flex-col gap-2.5">
           <Card className="flex flex-col gap-2 p-4">
-            <button className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+            <button
+              onClick={() => toast(`${bill.vendor} bill approved`, "success")}
+              className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+            >
               Approve bill
             </button>
-            <button className="rounded-sm border border-line bg-fg-1/[0.06] py-2.5 text-[12.5px] hover:border-line-strong">
+            <button
+              onClick={() => toast(`${bill.vendor} bill marked paid`, "success")}
+              className="rounded-sm border border-line bg-fg-1/[0.06] py-2.5 text-[12.5px] hover:border-line-strong"
+            >
               Mark as paid
             </button>
-            <button className="rounded-sm border border-line bg-fg-1/[0.06] py-2.5 text-[12.5px] hover:border-line-strong">
+            <button
+              onClick={() => toast(`${bill.vendor} bill put on hold for dispute`)}
+              className="rounded-sm border border-line bg-fg-1/[0.06] py-2.5 text-[12.5px] hover:border-line-strong"
+            >
               Dispute / hold
             </button>
           </Card>

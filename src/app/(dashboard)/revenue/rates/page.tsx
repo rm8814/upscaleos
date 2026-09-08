@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
 import { Card, Eyebrow, Segmented } from "@/components/upx/primitives";
 
@@ -77,6 +78,7 @@ function RestrictBadge({ cls, children }: { cls: string; children: React.ReactNo
 
 export default function RatesPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const [view, setView] = useState<"grid" | "seasons" | "rules">("grid");
   const [dynamicDays, setDynamicDays] = useState<Set<number>>(new Set([5, 6, 12, 13]));
 
@@ -346,7 +348,10 @@ export default function RatesPage() {
             <div>
               <div className="mb-2.5 flex items-baseline justify-between">
                 <Eyebrow>Rules</Eyebrow>
-                <button className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong">
+                <button
+                  onClick={() => toast("Pricing-rule builder isn’t wired in this preview")}
+                  className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+                >
                   + New rule
                 </button>
               </div>
@@ -412,10 +417,18 @@ export default function RatesPage() {
                     {a.suggested}
                   </div>
                   <div className="min-w-[160px] flex-1 text-[11.5px] text-fg-3">{a.reason}</div>
-                  <button className="rounded-sm border border-line px-3 py-1.5 text-12 text-fg-2">
+                  <button
+                    onClick={() => toast(`Rejected the ${a.roomType} rate change`)}
+                    className="rounded-sm border border-line px-3 py-1.5 text-12 text-fg-2 hover:text-ice"
+                  >
                     Reject
                   </button>
-                  <button className="rounded-sm bg-accent-violet px-3 py-1.5 text-12 font-medium text-ice">
+                  <button
+                    onClick={() =>
+                      toast(`Approved ${a.roomType} → ${a.suggested}`, "success")
+                    }
+                    className="rounded-sm bg-accent-violet px-3 py-1.5 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+                  >
                     Approve
                   </button>
                 </div>

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
 
 type Tab = "till" | "txns" | "recon";
@@ -36,6 +37,7 @@ export default function CashierPage() {
   const { activeProperty } = useProperty();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const SHIFT_LOG = buildShiftLog(businessDate);
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>("till");
   const [closeOpen, setCloseOpen] = useState(false);
 
@@ -115,7 +117,10 @@ export default function CashierPage() {
                 <option>City ledger</option>
                 <option>Voucher/gift card</option>
               </select>
-              <button className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+              <button
+                onClick={() => toast("Payment recorded to the drawer", "success")}
+                className="rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+              >
                 Record payment
               </button>
             </div>
@@ -154,7 +159,13 @@ export default function CashierPage() {
                   <span>Variance</span>
                   <span className="font-mono font-bold text-res-tentative">− Rp 25,000</span>
                 </div>
-                <button className="mt-3 w-full rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice">
+                <button
+                  onClick={() => {
+                    setCloseOpen(false);
+                    toast("Shift closed and handed over", "success");
+                  }}
+                  className="mt-3 w-full rounded-sm bg-accent-violet py-2.5 text-[12.5px] font-medium text-ice"
+                >
                   Confirm close &amp; hand over
                 </button>
               </Card>
@@ -193,7 +204,10 @@ export default function CashierPage() {
                   {t.voided ? (
                     <span className="text-[11px] font-semibold text-room-ooo">Voided</span>
                   ) : (
-                    <button className="rounded-sm border border-line px-2 py-1 text-[11px] text-fg-3">
+                    <button
+                      onClick={() => toast(`Voided ${t.amount} — ${t.ref}`)}
+                      className="rounded-sm border border-line px-2 py-1 text-[11px] text-fg-3 hover:text-ice"
+                    >
                       Void
                     </button>
                   )}

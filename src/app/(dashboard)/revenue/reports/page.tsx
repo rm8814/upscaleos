@@ -4,6 +4,8 @@ import React, { useMemo, useState } from "react";
 import { Clock, FileSpreadsheet, FileText } from "lucide-react";
 import { Card } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { downloadCsv } from "@/lib/csv";
 import PmsDateChip from "@/components/common/PmsDateChip";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -107,9 +109,22 @@ const MONTHLY_METRICS = [
 
 export default function ReportsPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const TABLES = useMemo(() => buildTables(businessDate), [businessDate]);
   const [tab, setTab] = useState<ReportTab>("pace");
+
+  const exportCsv = () => {
+    if (tab === "monthly") {
+      toast("Switch to a table tab to export");
+      return;
+    }
+    const t = TABLES[tab];
+    downloadCsv(
+      `report-${tab}-${businessDate}.csv`,
+      t.rows.map((r) => Object.fromEntries(t.cols.map((c, i) => [c, r[i]])))
+    );
+  };
 
   return (
     <div className="mx-auto max-w-content">
@@ -131,7 +146,10 @@ export default function ReportsPage() {
         </div>
         <PmsDateChip className="ml-auto" />
         <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong">
+          <button
+            onClick={() => toast("Report scheduled — emailed daily at 07:00", "success")}
+            className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong"
+          >
             <Clock className="h-[13px] w-[13px]" /> Schedule
           </button>
         </div>
@@ -158,10 +176,16 @@ export default function ReportsPage() {
               <input type="checkbox" defaultChecked /> Compare vs. last period
             </label>
             <div className="ml-auto flex gap-2">
-              <button className="flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi">
-                <FileSpreadsheet className="h-3.5 w-3.5" /> XLSX
+              <button
+                onClick={exportCsv}
+                className="flex items-center gap-1.5 rounded-sm bg-accent-violet px-3.5 py-2 text-12 font-medium text-ice hover:bg-accent-violet-hi"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
               </button>
-              <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3.5 py-2 text-12 text-fg-1 hover:border-line-strong">
+              <button
+                onClick={() => toast("PDF export isn’t available in this preview")}
+                className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3.5 py-2 text-12 text-fg-1 hover:border-line-strong"
+              >
                 <FileText className="h-3.5 w-3.5" /> PDF
               </button>
             </div>

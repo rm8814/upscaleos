@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { buildBills, STATUS_COLOR } from "./data";
 
 type Tab = "bills" | "runs" | "vendors";
@@ -35,6 +36,7 @@ const BILL_GRID = "grid grid-cols-[1.2fr_1fr_0.9fr_0.9fr_0.9fr_0.9fr_1fr] gap-2.
 export default function AccountsPayablePage() {
   const { activeProperty } = useProperty();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const toast = useToast();
   const BILLS = useMemo(() => buildBills(businessDate), [businessDate]);
   const RUNS = RUN_SPECS.map((r) => ({ ...r, date: runDate(businessDate, r.offset) }));
 
@@ -122,7 +124,10 @@ export default function AccountsPayablePage() {
             {label}
           </button>
         ))}
-        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+        <button
+          onClick={() => toast("Bill entry isn’t wired in this preview")}
+          className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+        >
           + New bill
         </button>
       </div>

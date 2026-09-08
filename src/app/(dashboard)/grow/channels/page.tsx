@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { ChevronRight, ChevronDown, Upload, Download, ArrowRight, AlertTriangle } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import { useToast } from "@/components/providers/ToastProvider";
 
 interface Channel {
   name: string;
@@ -44,12 +45,16 @@ const MAPPING = [
 const GRID = "grid grid-cols-[1.2fr_0.9fr_0.9fr_1fr_0.9fr_0.8fr_0.7fr] gap-2.5 px-4";
 
 export default function ChannelManagerPage() {
+  const toast = useToast();
   const [expanded, setExpanded] = useState<string | null>("Expedia");
 
   return (
     <div className="mx-auto max-w-content">
       <div className="mb-3 flex justify-end">
-        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+        <button
+          onClick={() => toast("Channel onboarding isn’t wired in this preview")}
+          className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+        >
           + Add channel
         </button>
       </div>
@@ -110,14 +115,23 @@ export default function ChannelManagerPage() {
               {isOpen && (
                 <div className="flex flex-col gap-3.5 border-b border-line-soft bg-deep p-4">
                   <div className="flex flex-wrap gap-2">
-                    <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong">
+                    <button
+                      onClick={() => toast(`Pushed rates & inventory to ${c.name}`, "success")}
+                      className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+                    >
                       <Upload className="h-[13px] w-[13px]" /> Push rates &amp; inventory now
                     </button>
-                    <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong">
+                    <button
+                      onClick={() => toast(`Pulled new bookings from ${c.name}`, "success")}
+                      className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+                    >
                       <Download className="h-[13px] w-[13px]" /> Pull bookings now
                     </button>
                     {c.reconnect && (
-                      <button className="rounded-sm bg-room-ooo px-3 py-1.5 text-12 text-white">
+                      <button
+                        onClick={() => toast(`Re-authentication link sent for ${c.name}`)}
+                        className="rounded-sm bg-room-ooo px-3 py-1.5 text-12 text-white"
+                      >
                         Reconnect / re-authenticate
                       </button>
                     )}
@@ -157,7 +171,10 @@ export default function ChannelManagerPage() {
                       <div className="flex items-center gap-2.5 py-1.5 text-[12.5px] text-res-tentative">
                         <AlertTriangle className="h-[13px] w-[13px] flex-none" />
                         <span className="flex-1">{c.errorLog}</span>
-                        <button className="rounded-sm border border-line px-2.5 py-1 text-[11px] text-fg-1">
+                        <button
+                          onClick={() => toast(`Marked the ${c.name} sync error resolved`, "success")}
+                          className="rounded-sm border border-line px-2.5 py-1 text-[11px] text-fg-1 hover:border-line-strong"
+                        >
                           Resolve
                         </button>
                       </div>

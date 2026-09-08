@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Printer, CheckCircle2 } from "lucide-react";
+import { useToast } from "@/components/providers/ToastProvider";
 
 const CATS = ["Mains", "Small plates", "Drinks", "Desserts"] as const;
 type Cat = (typeof CATS)[number];
@@ -35,6 +36,7 @@ const MENU: Record<Cat, { name: string; price: number }[]> = {
 const fmt = (n: number) => `Rp ${n.toLocaleString("en-US")}`;
 
 export default function GuestPosPage() {
+  const toast = useToast();
   const [cat, setCat] = useState<Cat>("Mains");
   const [cart, setCart] = useState<Record<string, { price: number; qty: number }>>({});
   const [sent, setSent] = useState(false);
@@ -76,6 +78,7 @@ export default function GuestPosPage() {
             <span className="h-1.5 w-1.5 rounded-pill bg-current" /> Shift open
           </span>
           <button
+            onClick={() => toast("Last receipt sent to the printer")}
             className="ml-auto flex items-center gap-1.5 rounded-[8px] bg-white px-3 py-1.5 text-[11.5px]"
             style={{ border: "1px solid #D8D2C4" }}
           >
@@ -164,12 +167,14 @@ export default function GuestPosPage() {
 
             <div className="flex gap-2">
               <button
+                onClick={() => toast("Discount / comp applied to the bill")}
                 className="flex-1 rounded-[8px] bg-white p-2 text-12"
                 style={{ border: "1px solid #E7E3D8" }}
               >
                 Discount / comp
               </button>
               <button
+                onClick={() => toast("Split-bill isn’t wired in this preview")}
                 className="flex-1 rounded-[8px] bg-white p-2 text-12"
                 style={{ border: "1px solid #E7E3D8" }}
               >

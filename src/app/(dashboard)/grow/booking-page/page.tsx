@@ -3,6 +3,7 @@
 import React from "react";
 import { Star, ShieldCheck, BadgeCheck, Undo2, Waves, Wifi, Coffee, Dumbbell, Car } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const fmtDate = (iso: string, n: number) => {
@@ -46,6 +47,9 @@ const FAQS = [
 
 export default function BookingLandingPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
+  const previewNote = () =>
+    toast("This is a preview — the live booking page takes real bookings");
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
 
   return (
@@ -74,6 +78,7 @@ export default function BookingLandingPage() {
           <span>FAQ</span>
         </div>
         <button
+          onClick={previewNote}
           className="ml-auto rounded-[10px] px-4 py-2 text-13 font-semibold text-white"
           style={{ background: "#5B3FD9" }}
         >
@@ -126,6 +131,7 @@ export default function BookingLandingPage() {
             </div>
           ))}
           <button
+            onClick={previewNote}
             className="rounded-[10px] px-5 text-13 font-semibold text-white"
             style={{ background: "#5B3FD9" }}
           >
@@ -180,6 +186,7 @@ export default function BookingLandingPage() {
                   </span>
                 </div>
                 <button
+                  onClick={previewNote}
                   className="mt-2.5 w-full rounded-[10px] p-2.5 text-13 font-semibold text-white"
                   style={{ background: "#14213E" }}
                 >
@@ -232,6 +239,7 @@ export default function BookingLandingPage() {
                 </div>
               </div>
               <button
+                onClick={previewNote}
                 className="whitespace-nowrap rounded-[10px] px-3.5 py-2 text-[12.5px] font-semibold text-white"
                 style={{ background: "#5B3FD9" }}
               >
@@ -338,6 +346,7 @@ export default function BookingLandingPage() {
           / night · free cancellation
         </div>
         <button
+          onClick={previewNote}
           className="rounded-[10px] px-5 py-2.5 text-13 font-semibold text-white"
           style={{ background: "#5B3FD9" }}
         >

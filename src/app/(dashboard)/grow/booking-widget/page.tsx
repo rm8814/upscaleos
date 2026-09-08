@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Star, Tag, BadgeCheck, ChevronDown, Flame, Mail } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -46,6 +47,9 @@ const ADDONS = [
 
 export default function BookingWidgetPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
+  const previewNote = () =>
+    toast("This is a preview — the embedded widget takes real bookings");
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const PRICE_CAL = buildPriceCal(businessDate);
 
@@ -113,6 +117,7 @@ export default function BookingWidgetPage() {
           </div>
         ))}
         <button
+          onClick={previewNote}
           className="rounded-[12px] px-6 text-14 font-semibold text-white"
           style={{ background: "var(--accent-violet)" }}
         >
@@ -221,6 +226,7 @@ export default function BookingWidgetPage() {
 
       <div className="mt-4 flex items-center justify-between text-12" style={{ color: "#8A93AC" }}>
         <button
+          onClick={previewNote}
           className="flex items-center gap-1.5 text-[12.5px] font-semibold"
           style={{ color: "#5B3FD9" }}
         >
@@ -242,6 +248,7 @@ export default function BookingWidgetPage() {
             total
           </div>
           <button
+            onClick={previewNote}
             className="rounded-[10px] px-5 py-2.5 text-13 font-semibold text-white"
             style={{ background: "#5B3FD9" }}
           >

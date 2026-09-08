@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { Plus, Trash2, Rocket } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 
@@ -619,6 +620,7 @@ function TaxesTab({ propertyId }: { propertyId: Id<"properties"> }) {
 /* -------------------------------------------------------------- Integrations */
 
 function IntegrationsTab() {
+  const toast = useToast();
   return (
     <div className="flex flex-col gap-2.5">
       {INTEGRATIONS.map((it) => (
@@ -636,7 +638,16 @@ function IntegrationsTab() {
           >
             {it.status}
           </span>
-          <button className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong">
+          <button
+            onClick={() =>
+              toast(
+                it.status === "Connected"
+                  ? `Opening ${it.name} settings isn’t wired in this preview`
+                  : `${it.name} connection isn’t wired in this preview`
+              )
+            }
+            className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12 hover:border-line-strong"
+          >
             {it.status === "Connected" ? "Manage" : "Connect"}
           </button>
         </Card>

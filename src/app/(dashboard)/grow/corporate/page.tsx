@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { Clock, X, Paperclip } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import PmsDateChip from "@/components/common/PmsDateChip";
@@ -20,6 +21,7 @@ const GRID =
 
 export default function CorporateRatesPage() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const agreements = useQuery(api.revenue.getCorporateAgreements, arg);
 
@@ -77,7 +79,10 @@ export default function CorporateRatesPage() {
           <option>Travel Agent</option>
         </select>
         <PmsDateChip className="ml-auto" />
-        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+        <button
+          onClick={() => toast("Agreement creation isn’t wired in this preview")}
+          className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi"
+        >
           + New agreement
         </button>
       </div>
@@ -150,6 +155,7 @@ function CorpDrawer({
   onClose: () => void;
 }) {
   const production = useQuery(api.revenue.getAgreementProduction, { agreementId });
+  const toast = useToast();
   const pct = production
     ? Math.round((production.roomsBooked / production.roomsContracted) * 100)
     : 0;
@@ -171,10 +177,16 @@ function CorpDrawer({
         </div>
 
         <div className="flex gap-2">
-          <button className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong">
+          <button
+            onClick={() => toast(`Drafted a renewal of the ${agreement.accountName} agreement`, "success")}
+            className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong"
+          >
             Clone for renewal
           </button>
-          <button className="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong">
+          <button
+            onClick={() => toast("Contract PDF isn’t available in this preview")}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-[12.5px] hover:border-line-strong"
+          >
             <Paperclip className="h-[13px] w-[13px]" /> Contract PDF
           </button>
         </div>

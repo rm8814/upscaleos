@@ -7,6 +7,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { Clock, X, Paperclip } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
+import PmsDateChip from "@/components/common/PmsDateChip";
 
 const STATUS_COLOR: Record<string, string> = {
   Active: "var(--accent-cyan)",
@@ -33,9 +34,13 @@ export default function CorporateRatesPage() {
     return list;
   }, [agreements, statusFilter, typeFilter]);
 
+  // "Today" is the PMS business date, not the wall clock.
+  const todayMs = Date.parse(
+    (activeProperty?.businessDate ?? "2026-09-08") + "T00:00:00Z"
+  );
   const expiring = (agreements ?? []).filter((a) => {
     const end = new Date(a.contractEnd).getTime();
-    return end - Date.now() < 90 * 86400000 && end > Date.now();
+    return end - todayMs < 90 * 86400000 && end > todayMs;
   }).length;
 
   const open = (agreements ?? []).find((a) => a._id === openId) ?? null;
@@ -71,7 +76,8 @@ export default function CorporateRatesPage() {
           <option>Corporate</option>
           <option>Travel Agent</option>
         </select>
-        <button className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
+        <PmsDateChip className="ml-auto" />
+        <button className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi">
           + New agreement
         </button>
       </div>

@@ -302,7 +302,7 @@ export const seed = mutation({
     const corporates = [
       { accountName: "Accor Global", type: "Corporate", rate: "Rp 1,800,000", vsBar: "−20%", commission: "10%", roomType: "King Suite", contractStart: "2026-01-01", contractEnd: "2026-12-31", status: "Active", blackoutDates: "Dec 24–31" },
       { accountName: "La Compagnie", type: "Corporate", rate: "Rp 2,100,000", vsBar: "−15%", commission: "8%", roomType: "Double Queen", contractStart: "2026-03-15", contractEnd: "2027-03-14", status: "Active", blackoutDates: "Aug 10–15" },
-      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1,600,000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-06-01", contractEnd: "2026-12-31", status: "Expired", blackoutDates: "None" },
+      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1,600,000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-03-01", contractEnd: "2026-08-31", status: "Expired", blackoutDates: "None" },
     ];
     const corpIds = await Promise.all(
       corporates.map((c) => ctx.db.insert("corporate_agreements", { ...c, propertyId }))

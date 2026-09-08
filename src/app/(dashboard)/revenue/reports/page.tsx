@@ -1,8 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Clock, FileSpreadsheet, FileText } from "lucide-react";
 import { Card } from "@/components/upx/primitives";
+import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const shift = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+};
+const dm = (iso: string, n: number) => {
+  const d = shift(iso, n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
+};
+const wk = (iso: string, n: number) => {
+  const a = shift(iso, n);
+  const b = shift(iso, n + 6);
+  return a.getUTCMonth() === b.getUTCMonth()
+    ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[a.getUTCMonth()]}`
+    : `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]}–${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`;
+};
 
 type ReportTab = "pace" | "pickup" | "source" | "roomType" | "forecast" | "monthly";
 
@@ -15,28 +35,29 @@ const TABS: { id: ReportTab; label: string }[] = [
   { id: "monthly", label: "Monthly P&L" },
 ];
 
-const TABLES: Record<Exclude<ReportTab, "monthly">, { cols: string[]; rows: string[][] }> = {
-  pace: {
-    cols: ["Stay date", "OTB rooms", "Pace vs. LY", "ADR", "Revenue OTB", "Pickup 7d"],
-    rows: [
-      ["12 Sep", "24", "+8%", "Rp 2,060,000", "Rp 49,400,000", "+6"],
-      ["13 Sep", "27", "+14%", "Rp 2,310,000", "Rp 62,400,000", "+9"],
-      ["14 Sep", "19", "−4%", "Rp 1,880,000", "Rp 35,700,000", "+2"],
-      ["15 Sep", "22", "+3%", "Rp 1,970,000", "Rp 43,300,000", "+4"],
-      ["16 Sep", "20", "−1%", "Rp 1,910,000", "Rp 38,200,000", "+3"],
-      ["17 Sep", "25", "+11%", "Rp 2,140,000", "Rp 53,500,000", "+7"],
-    ],
-  },
-  pickup: {
-    cols: ["Date booked", "Rooms", "Room-nights", "ADR", "Revenue", "Cxl"],
-    rows: [
-      ["07 Sep", "11", "24", "Rp 2,020,000", "Rp 48,500,000", "1"],
-      ["06 Sep", "9", "19", "Rp 1,960,000", "Rp 37,200,000", "0"],
-      ["05 Sep", "13", "31", "Rp 2,110,000", "Rp 65,400,000", "2"],
-      ["04 Sep", "7", "14", "Rp 1,880,000", "Rp 26,300,000", "1"],
-      ["03 Sep", "10", "22", "Rp 2,040,000", "Rp 44,900,000", "0"],
-    ],
-  },
+const PACE_VALUES = [
+  ["24", "+8%", "Rp 2,060,000", "Rp 49,400,000", "+6"],
+  ["27", "+14%", "Rp 2,310,000", "Rp 62,400,000", "+9"],
+  ["19", "−4%", "Rp 1,880,000", "Rp 35,700,000", "+2"],
+  ["22", "+3%", "Rp 1,970,000", "Rp 43,300,000", "+4"],
+  ["20", "−1%", "Rp 1,910,000", "Rp 38,200,000", "+3"],
+  ["25", "+11%", "Rp 2,140,000", "Rp 53,500,000", "+7"],
+];
+const PICKUP_VALUES = [
+  ["11", "24", "Rp 2,020,000", "Rp 48,500,000", "1"],
+  ["9", "19", "Rp 1,960,000", "Rp 37,200,000", "0"],
+  ["13", "31", "Rp 2,110,000", "Rp 65,400,000", "2"],
+  ["7", "14", "Rp 1,880,000", "Rp 26,300,000", "1"],
+  ["10", "22", "Rp 2,040,000", "Rp 44,900,000", "0"],
+];
+const FORECAST_VALUES = [
+  ["79%", "Rp 2,080,000", "Rp 1,640,000", "High", "+4.2%"],
+  ["74%", "Rp 2,010,000", "Rp 1,490,000", "Medium", "+1.1%"],
+  ["68%", "Rp 1,940,000", "Rp 1,320,000", "Medium", "−2.4%"],
+  ["72%", "Rp 1,980,000", "Rp 1,430,000", "Low", "+0.3%"],
+];
+
+const STATIC_TABLES = {
   source: {
     cols: ["Source", "Rooms", "Room-nights", "ADR", "Revenue", "Commission"],
     rows: [
@@ -56,16 +77,26 @@ const TABLES: Record<Exclude<ReportTab, "monthly">, { cols: string[]; rows: stri
       ["Presidential Suite", "18", "60%", "Rp 7,100,000", "Rp 4,260,000", "Rp 127,800,000"],
     ],
   },
-  forecast: {
-    cols: ["Week", "Fcst occ", "Fcst ADR", "Fcst RevPAR", "Confidence", "Delta vs. budget"],
-    rows: [
-      ["15–21 Sep", "79%", "Rp 2,080,000", "Rp 1,640,000", "High", "+4.2%"],
-      ["22–28 Sep", "74%", "Rp 2,010,000", "Rp 1,490,000", "Medium", "+1.1%"],
-      ["29 Sep–5 Oct", "68%", "Rp 1,940,000", "Rp 1,320,000", "Medium", "−2.4%"],
-      ["6–12 Oct", "72%", "Rp 1,980,000", "Rp 1,430,000", "Low", "+0.3%"],
-    ],
-  },
 };
+
+/** Tables whose dates are relative to the PMS business date. */
+function buildTables(businessDate: string) {
+  return {
+    pace: {
+      cols: ["Stay date", "OTB rooms", "Pace vs. LY", "ADR", "Revenue OTB", "Pickup 7d"],
+      rows: PACE_VALUES.map((v, i) => [dm(businessDate, i + 4), ...v]),
+    },
+    pickup: {
+      cols: ["Date booked", "Rooms", "Room-nights", "ADR", "Revenue", "Cxl"],
+      rows: PICKUP_VALUES.map((v, i) => [dm(businessDate, -(i + 1)), ...v]),
+    },
+    forecast: {
+      cols: ["Week", "Fcst occ", "Fcst ADR", "Fcst RevPAR", "Confidence", "Delta vs. budget"],
+      rows: FORECAST_VALUES.map((v, i) => [wk(businessDate, 7 + i * 7), ...v]),
+    },
+    ...STATIC_TABLES,
+  };
+}
 
 const MONTHLY_METRICS = [
   { label: "Room-nights sold", value: "3,412" },
@@ -75,6 +106,9 @@ const MONTHLY_METRICS = [
 ];
 
 export default function ReportsPage() {
+  const { activeProperty } = useProperty();
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const TABLES = useMemo(() => buildTables(businessDate), [businessDate]);
   const [tab, setTab] = useState<ReportTab>("pace");
 
   return (
@@ -95,7 +129,8 @@ export default function ReportsPage() {
             </button>
           ))}
         </div>
-        <div className="ml-auto flex gap-2">
+        <PmsDateChip className="ml-auto" />
+        <div className="flex gap-2">
           <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong">
             <Clock className="h-[13px] w-[13px]" /> Schedule
           </button>
@@ -106,8 +141,9 @@ export default function ReportsPage() {
         <>
           <div className="mb-3.5 flex flex-wrap items-center gap-2">
             <input
+              key={businessDate}
               type="date"
-              defaultValue="2026-09-12"
+              defaultValue={businessDate}
               className="rounded-sm border border-line bg-deep px-2.5 py-1.5 font-mono text-12 text-fg-2"
             />
             <select className="rounded-sm border border-line bg-deep px-2.5 py-2 text-12 text-fg-2">

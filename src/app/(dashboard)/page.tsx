@@ -86,7 +86,43 @@ export default function DashboardPage() {
     (a) => a.roomNumber && a.roomNumber !== "—"
   ).length;
 
+  // PMS business date vs the real wall-clock date in the property's timezone.
+  const bizDate = activeProperty?.businessDate ?? null;
+  const wallToday = (() => {
+    const tz = activeProperty?.timezone ?? "Asia/Makassar";
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+  const dateDrift =
+    bizDate && bizDate !== wallToday
+      ? Math.round(
+          (Date.parse(wallToday + "T00:00:00Z") - Date.parse(bizDate + "T00:00:00Z")) /
+            86400000
+        )
+      : 0;
+  const dateDriftAlert =
+    dateDrift > 0
+      ? `PMS business date is ${bizDate} — ${dateDrift} day${dateDrift > 1 ? "s" : ""} behind the real date (${wallToday}). ${
+          dateDrift === 1
+            ? "Tonight's night audit will advance it."
+            : "Run the night audit to catch up."
+        }`
+      : dateDrift < 0
+        ? `PMS business date is ${bizDate} — ${-dateDrift} day${
+            dateDrift < -1 ? "s" : ""
+          } ahead of the real date (${wallToday}). Check the night-audit schedule.`
+        : null;
+
   const alerts = [
+    dateDriftAlert,
     stats && stats.ooo > 0
       ? `${stats.ooo} room${stats.ooo > 1 ? "s" : ""} out of order — maintenance in progress`
       : null,

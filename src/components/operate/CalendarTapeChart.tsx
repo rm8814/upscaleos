@@ -7,7 +7,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
-import { ChevronRight, ChevronDown, X, LogIn, Move, XCircle } from "lucide-react";
+import { ChevronRight, ChevronDown, X, LogIn, Move, XCircle, Zap } from "lucide-react";
 import {
   Card,
   Eyebrow,
@@ -304,6 +304,10 @@ export default function CalendarTapeChart() {
             {l.label}
           </div>
         ))}
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <Zap className="h-3 w-3 text-fg-2" />
+          Room auto-assigned
+        </div>
         <button
           onClick={() => setNewRes({})}
           className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi"
@@ -448,10 +452,13 @@ export default function CalendarTapeChart() {
                             if (widthPct <= 0) return null;
                             const color = blockColor(res);
                             const dragging = drag?.resId === res._id;
+                            const autoRoom = !!res.roomAutoAssigned;
                             return (
                               <div
                                 key={res._id}
-                                title={`${res.guestName} · ${RES_STATUS_LABEL[res.status] ?? res.status} · drag to move`}
+                                title={`${res.guestName} · ${RES_STATUS_LABEL[res.status] ?? res.status}${
+                                  autoRoom ? " · room auto-assigned" : ""
+                                } · drag to move`}
                                 onMouseDown={(e) => startDrag(e, res)}
                                 onClick={() => {
                                   if (draggedRef.current) {
@@ -464,19 +471,28 @@ export default function CalendarTapeChart() {
                                   e.preventDefault();
                                   setCtxMenu({ resId: res._id, x: e.clientX, y: e.clientY });
                                 }}
-                                className="absolute top-1.5 bottom-1.5 flex select-none items-center overflow-hidden whitespace-nowrap rounded-[6px] border px-2 text-12 text-ice"
+                                className="absolute top-1.5 bottom-1.5 flex select-none items-center gap-1 overflow-hidden whitespace-nowrap rounded-[6px] border px-2 text-12 text-ice"
                                 style={{
                                   left: `${leftPct}%`,
                                   width: `${widthPct}%`,
                                   background: `color-mix(in srgb, ${color} 26%, var(--bg-deep))`,
                                   borderColor: color,
+                                  borderStyle: autoRoom ? "dashed" : "solid",
                                   cursor: dragging ? "grabbing" : "grab",
                                   transition: dragging ? "none" : "left 40ms linear",
                                   opacity: dragging ? 0.85 : 1,
                                   zIndex: dragging ? 5 : 1,
                                 }}
                               >
-                                {res.guestName}
+                                {autoRoom && (
+                                  <Zap
+                                    className="h-3 w-3 flex-none opacity-80"
+                                    style={{ color }}
+                                  />
+                                )}
+                                <span className="overflow-hidden text-ellipsis">
+                                  {res.guestName}
+                                </span>
                               </div>
                             );
                           })}

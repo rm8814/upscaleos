@@ -99,6 +99,7 @@ export default defineSchema({
     adults: v.optional(v.number()),
     children: v.optional(v.number()),
     etaLabel: v.optional(v.string()), // e.g. '14:20'
+    roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
   }).index("by_property", ["propertyId"]),
   waitlist: defineTable({
     propertyId: v.id("properties"),

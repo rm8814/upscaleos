@@ -111,6 +111,7 @@ async function assignPropertyRooms(ctx: MutationCtx, propertyId: Id<"properties"
       roomId,
       roomNumber: room?.roomNumber,
       roomType: room?.type ?? r.roomType,
+      roomAutoAssigned: true,
     });
     assigned += 1;
   }
@@ -207,6 +208,7 @@ export const create = mutation({
     const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
 
     let roomId = args.roomId;
+    let roomAutoAssigned = false;
 
     // Auto-assign: no room chosen and the property has the setting switched on.
     if (!roomId) {
@@ -219,6 +221,7 @@ export const create = mutation({
           args.checkIn,
           args.checkOut
         );
+        roomAutoAssigned = !!roomId;
       }
     }
 
@@ -243,6 +246,7 @@ export const create = mutation({
       roomType: args.roomType,
       adults: args.adults ?? 2,
       children: args.children ?? 0,
+      roomAutoAssigned,
     });
   },
 });
@@ -267,6 +271,7 @@ export const updateDates = mutation({
     };
     if (args.roomId) {
       patch.roomId = args.roomId;
+      patch.roomAutoAssigned = false; // a person picked this room
       const room = await ctx.db.get(args.roomId);
       if (room) {
         patch.roomNumber = room.roomNumber;

@@ -273,6 +273,9 @@ export const seed = mutation({
         roomType: room.type,
         adults: 1 + (i % 3),
         children: i % 4 === 0 ? 1 : 0,
+        // a few upcoming bookings came in via OTA and were auto-roomed
+        roomAutoAssigned:
+          (status === "confirmed" || status === "tentative") && i % 2 === 0,
         etaLabel: status === "confirmed" ? `${12 + (i % 8)}:${(i * 13) % 60 < 10 ? "0" : ""}${(i * 13) % 60}` : undefined,
       });
     }

@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import PmsDateChip from "@/components/common/PmsDateChip";
 import { X, Star, Wrench } from "lucide-react";
 import type { Doc } from "@/convex/_generated/dataModel";
 import {
@@ -101,6 +102,7 @@ export default function HousekeepingBoard() {
             <option key={f}>{f}</option>
           ))}
         </select>
+        <PmsDateChip className="ml-auto" />
       </div>
 
       {/* Room grid */}

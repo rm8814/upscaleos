@@ -15,19 +15,40 @@ import {
   initialsOf,
 } from "@/components/upx/primitives";
 
-const CONSENT_LOG = [
-  { date: "2026-06", text: "Opted in to email offers", color: "var(--accent-cyan)" },
-  { date: "2026-02", text: "Consent captured at check-in kiosk", color: "var(--fg-2)" },
-  { date: "2025-11", text: "Unsubscribed from SMS", color: "var(--room-ooo)" },
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dayShift = (iso: string, n: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+};
+const monthShift = (iso: string, m: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCMonth(d.getUTCMonth() + m);
+  return d;
+};
+const dMon = (iso: string, n: number) => {
+  const d = dayShift(iso, n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
+};
+const dMonYr = (iso: string, n: number) => {
+  const d = dayShift(iso, n);
+  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+const ymKey = (iso: string, m: number) => monthShift(iso, m).toISOString().slice(0, 7);
+
+const buildConsentLog = (bd: string) => [
+  { date: ymKey(bd, -3), text: "Opted in to email offers", color: "var(--accent-cyan)" },
+  { date: ymKey(bd, -7), text: "Consent captured at check-in kiosk", color: "var(--fg-2)" },
+  { date: ymKey(bd, -10), text: "Unsubscribed from SMS", color: "var(--room-ooo)" },
 ];
-const COMMS = [
-  { date: "05 Sep", text: "Called to request early check-in — noted for front desk." },
-  { date: "28 Aug", text: "Emailed spa package upsell; opened, no reply." },
-  { date: "12 Jul", text: "Left 5★ review mentioning housekeeping by name." },
+const buildComms = (bd: string) => [
+  { date: dMon(bd, -3), text: "Called to request early check-in — noted for front desk." },
+  { date: dMon(bd, -11), text: "Emailed spa package upsell; opened, no reply." },
+  { date: dMon(bd, -58), text: "Left 5★ review mentioning housekeeping by name." },
 ];
-const DOCS = [
-  { name: "Passport scan.pdf", date: "12 Jul 2026" },
-  { name: "Signed registration card.pdf", date: "12 Jul 2026" },
+const buildDocs = (bd: string) => [
+  { name: "Passport scan.pdf", date: dMonYr(bd, -58) },
+  { name: "Signed registration card.pdf", date: dMonYr(bd, -58) },
 ];
 
 export default function GuestProfilePage() {
@@ -39,6 +60,11 @@ export default function GuestProfilePage() {
       ? { guestId: params.guestId, propertyId: activeProperty._id }
       : "skip"
   );
+
+  const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+  const CONSENT_LOG = buildConsentLog(businessDate);
+  const COMMS = buildComms(businessDate);
+  const DOCS = buildDocs(businessDate);
 
   if (profile === undefined)
     return <div className="p-1 text-13 text-fg-3">Loading profile…</div>;

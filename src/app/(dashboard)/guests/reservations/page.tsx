@@ -11,6 +11,7 @@ import {
   RES_STATUS_LABEL,
 } from "@/components/upx/primitives";
 import ReservationSlideOver from "@/components/guests/ReservationSlideOver";
+import PmsDateChip from "@/components/common/PmsDateChip";
 
 const PAGE_SIZE = 8;
 const GRID =
@@ -126,6 +127,7 @@ export default function ReservationListPage() {
         <button className="flex items-center gap-1.5 rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-12 text-fg-1 hover:border-line-strong">
           <FileSpreadsheet className="h-[13px] w-[13px]" /> Export
         </button>
+        <PmsDateChip className="ml-auto" />
         {unassigned > 0 && (
           <button
             onClick={runAssign}

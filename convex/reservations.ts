@@ -264,14 +264,14 @@ export const updateDates = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return;
-    const rate =
-      NIGHTLY[res.roomType ?? ""] ??
-      (Number(res.rate.replace(/[^\d]/g, "")) || 1_850_000);
+
     const patch: Record<string, unknown> = {
       checkIn: args.checkIn,
       checkOut: args.checkOut,
-      totalAmount: fmtRp(rate * nights(args.checkIn, args.checkOut)),
     };
+
+    // Moved to a different room — take that room's number and type.
+    let effectiveType = res.roomType ?? "";
     if (args.roomId) {
       patch.roomId = args.roomId;
       patch.roomAutoAssigned = false; // a person picked this room
@@ -279,8 +279,17 @@ export const updateDates = mutation({
       if (room) {
         patch.roomNumber = room.roomNumber;
         patch.roomType = room.type;
+        effectiveType = room.type;
       }
     }
+
+    // Re-price against the (possibly new) room type.
+    const rate =
+      NIGHTLY[effectiveType] ??
+      (Number(res.rate.replace(/[^\d]/g, "")) || 1_850_000);
+    patch.rate = fmtRp(rate);
+    patch.totalAmount = fmtRp(rate * nights(args.checkIn, args.checkOut));
+
     await ctx.db.patch(args.id, patch);
   },
 });

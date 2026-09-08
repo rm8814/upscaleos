@@ -7,6 +7,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
 import { ChevronRight, ChevronDown, X, LogIn, Move, XCircle, Zap } from "lucide-react";
 import {
@@ -61,6 +62,7 @@ type Reservations = FunctionReturnType<typeof api.reservations.getByProperty>;
 
 export default function CalendarTapeChart() {
   const { activeProperty } = useProperty();
+  const toast = useToast();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const rooms = useQuery(api.operate.getRooms, arg);
   const reservations = useQuery(api.reservations.getByProperty, arg);
@@ -182,7 +184,7 @@ export default function CalendarTapeChart() {
       ? CHANNEL_COLOR[r.channel ?? "Direct"] ?? "var(--accent-violet)"
       : RES_STATUS_COLOR[r.status] ?? "var(--res-confirmed)";
 
-  // ---- drag to move -----------------------------------------------------
+  // ---- drag to move (across dates and rooms) --------------------------
   const [drag, setDrag] = useState<{
     resId: string;
     startX: number;
@@ -190,8 +192,28 @@ export default function CalendarTapeChart() {
     origCheckIn: string;
     nights: number;
     dxDays: number;
+    origRoomId?: string;
+    origRoomNumber: string;
+    origRoomType: string;
+    targetRoomId?: string;
   } | null>(null);
   const draggedRef = useRef(false);
+
+  // A completed drag that needs confirmation before it is written.
+  const [pendingMove, setPendingMove] = useState<{
+    resId: string;
+    guestName: string;
+    fromLabel: string;
+    fromType: string;
+    toLabel: string;
+    toType: string;
+    fromDates: string;
+    toDates: string;
+    checkIn: string;
+    checkOut: string;
+    roomId?: string;
+    typeChanged: boolean;
+  } | null>(null);
 
   const startDrag = (e: React.MouseEvent, res: Reservations[number]) => {
     if (e.button !== 0) return;
@@ -206,6 +228,9 @@ export default function CalendarTapeChart() {
       origCheckIn: res.checkIn,
       nights: nightsBetween(res.checkIn, res.checkOut),
       dxDays: 0,
+      origRoomId: res.roomId as string | undefined,
+      origRoomNumber: res.roomNumber ?? "—",
+      origRoomType: res.roomType ?? "—",
     });
   };
 
@@ -213,17 +238,49 @@ export default function CalendarTapeChart() {
     if (!drag) return;
     const onMove = (e: MouseEvent) => {
       const dx = Math.round((e.clientX - drag.startX) / drag.cellW);
-      if (dx !== 0) draggedRef.current = true;
-      setDrag((d) => (d ? { ...d, dxDays: dx } : d));
+      const rowEl = document
+        .elementFromPoint(e.clientX, e.clientY)
+        ?.closest<HTMLElement>("[data-room-id]");
+      const overRoomId = rowEl?.dataset.roomId;
+      if (dx !== 0 || (overRoomId && overRoomId !== drag.origRoomId)) {
+        draggedRef.current = true;
+      }
+      setDrag((d) =>
+        d ? { ...d, dxDays: dx, targetRoomId: overRoomId ?? d.targetRoomId } : d
+      );
     };
-    const onUp = async () => {
+    const onUp = () => {
       const d = drag;
       setDrag(null);
-      if (d && d.dxDays !== 0) {
-        const start = iso(addDays(new Date(d.origCheckIn + "T00:00:00Z"), d.dxDays));
-        const end = iso(addDays(new Date(start + "T00:00:00Z"), d.nights));
-        await updateDates({ id: d.resId as Id<"reservations">, checkIn: start, checkOut: end });
-      }
+      if (!d) return;
+      const roomChanged = !!d.targetRoomId && d.targetRoomId !== d.origRoomId;
+      if (d.dxDays === 0 && !roomChanged) return;
+
+      const start = iso(
+        addDays(new Date(d.origCheckIn + "T00:00:00Z"), d.dxDays)
+      );
+      const end = iso(addDays(new Date(start + "T00:00:00Z"), d.nights));
+      const targetRoom = roomChanged
+        ? (rooms ?? []).find((r) => r._id === d.targetRoomId)
+        : undefined;
+      const res = (reservations ?? []).find((r) => r._id === d.resId);
+
+      setPendingMove({
+        resId: d.resId,
+        guestName: res?.guestName ?? "Reservation",
+        fromLabel: d.origRoomNumber,
+        fromType: d.origRoomType,
+        toLabel: targetRoom?.roomNumber ?? d.origRoomNumber,
+        toType: targetRoom?.type ?? d.origRoomType,
+        fromDates: `${dmIso(d.origCheckIn)} → ${dmIso(
+          iso(addDays(new Date(d.origCheckIn + "T00:00:00Z"), d.nights))
+        )}`,
+        toDates: `${dmIso(start)} → ${dmIso(end)}`,
+        checkIn: start,
+        checkOut: end,
+        roomId: roomChanged ? d.targetRoomId : undefined,
+        typeChanged: !!targetRoom && targetRoom.type !== d.origRoomType,
+      });
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -231,7 +288,25 @@ export default function CalendarTapeChart() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [drag, updateDates]);
+  }, [drag, rooms, reservations]);
+
+  const confirmMove = async () => {
+    if (!pendingMove) return;
+    const p = pendingMove;
+    setPendingMove(null);
+    await updateDates({
+      id: p.resId as Id<"reservations">,
+      checkIn: p.checkIn,
+      checkOut: p.checkOut,
+      ...(p.roomId ? { roomId: p.roomId as Id<"rooms"> } : {}),
+    });
+    toast(
+      p.roomId
+        ? `Moved ${p.guestName} to ${p.toLabel} · ${p.toType}`
+        : `Rescheduled ${p.guestName}`,
+      "success"
+    );
+  };
 
   const selectedRes =
     (reservations ?? []).find((r) => r._id === openResId) ?? null;
@@ -443,8 +518,17 @@ export default function CalendarTapeChart() {
                           <span className="font-mono text-12 text-fg-2">{room.roomNumber}</span>
                         </div>
                         <div
-                          className="relative grid"
-                          style={{ gridTemplateColumns: `repeat(${DAYS}, 1fr)` }}
+                          data-room-id={room._id}
+                          className="relative grid transition-colors"
+                          style={{
+                            gridTemplateColumns: `repeat(${DAYS}, 1fr)`,
+                            background:
+                              drag &&
+                              drag.targetRoomId === room._id &&
+                              drag.targetRoomId !== drag.origRoomId
+                                ? "var(--violet-wash)"
+                                : undefined,
+                          }}
                         >
                           {days.map((d, i) => (
                             <div
@@ -642,6 +726,78 @@ export default function CalendarTapeChart() {
           onClose={() => setOpenResId(null)}
         />
       )}
+
+      {/* Move confirmation */}
+      {pendingMove &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-deepest/70 backdrop-blur-[4px]"
+            onClick={() => setPendingMove(null)}
+          >
+            <div
+              className="w-[380px] max-w-[92vw] rounded-lg border border-line bg-elevated p-5 shadow-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-1 font-display text-16 font-bold text-ice">
+                Move reservation
+              </div>
+              <div className="mb-3 text-12 text-fg-3">{pendingMove.guestName}</div>
+
+              <div className="flex flex-col gap-2 rounded-md border border-line bg-deep p-3 text-13">
+                <Row2 label="Room">
+                  <span className="text-fg-3">
+                    {pendingMove.fromLabel} · {pendingMove.fromType}
+                  </span>
+                  {pendingMove.roomId && (
+                    <>
+                      <span className="mx-1.5 text-fg-3">→</span>
+                      <span className="font-semibold text-ice">
+                        {pendingMove.toLabel} · {pendingMove.toType}
+                      </span>
+                    </>
+                  )}
+                  {!pendingMove.roomId && (
+                    <span className="ml-1.5 text-fg-3">(unchanged)</span>
+                  )}
+                </Row2>
+                <Row2 label="Dates">
+                  {pendingMove.fromDates === pendingMove.toDates ? (
+                    <span className="text-fg-3">{pendingMove.fromDates} (unchanged)</span>
+                  ) : (
+                    <>
+                      <span className="text-fg-3">{pendingMove.fromDates}</span>
+                      <span className="mx-1.5 text-fg-3">→</span>
+                      <span className="font-semibold text-ice">{pendingMove.toDates}</span>
+                    </>
+                  )}
+                </Row2>
+              </div>
+
+              {pendingMove.typeChanged && (
+                <div className="mt-2.5 rounded-md border border-res-tentative bg-elevated px-3 py-2 text-[11.5px] text-fg-2">
+                  Room type changes to {pendingMove.toType} — the rate and folio
+                  total will be recalculated.
+                </div>
+              )}
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setPendingMove(null)}
+                  className="flex-1 rounded-sm border border-line bg-fg-1/[0.06] py-2 text-12 hover:border-line-strong"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmMove}
+                  className="flex-1 rounded-sm bg-accent-violet py-2 text-12 font-semibold text-ice hover:bg-accent-violet-hi"
+                >
+                  Confirm move
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Context menu */}
       {ctxMenu &&
@@ -980,5 +1136,16 @@ function Labelled({ label, children }: { label: string; children: React.ReactNod
       <span className="text-[11px] text-fg-3">{label}</span>
       {children}
     </label>
+  );
+}
+
+function Row2({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-[46px] flex-none text-[11px] uppercase tracking-wide text-fg-3">
+        {label}
+      </span>
+      <span className="flex-1">{children}</span>
+    </div>
   );
 }

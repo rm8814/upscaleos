@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
+import { postNightlyToOpenFolios, closeFolio } from "./folios";
 
 const policyValidator = v.object({
   cancellation: v.string(),
@@ -136,6 +137,9 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
 
   await ctx.db.patch(id, { businessDate: newDate });
 
+  // Post the night that just ended to every open folio.
+  await postNightlyToOpenFolios(ctx, id, oldDate);
+
   const reservations = await ctx.db
     .query("reservations")
     .withIndex("by_property", (q) => q.eq("propertyId", id))
@@ -143,6 +147,12 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
   for (const r of reservations) {
     if (r.status === "inhouse" && r.checkOut <= newDate) {
       await ctx.db.patch(r._id, { status: "departed" });
+      if (r.roomId)
+        await ctx.db.patch(r.roomId, {
+          status: "Vacant Dirty",
+          updatedLabel: "just now",
+        });
+      await closeFolio(ctx, r._id, newDate);
     }
   }
 

@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { X, Calendar, MapPin, CreditCard, User, Star } from "lucide-react";
@@ -74,6 +74,10 @@ export default function ReservationSlideOver({
     res.checkIn,
     businessDate
   );
+
+  const folio = useQuery(api.folios.getForReservation, {
+    reservationId: res._id as Id<"reservations">,
+  });
 
   const apply = async (a: ResAction) => {
     await setStatus({ id: res._id as Id<"reservations">, status: a.next });
@@ -183,16 +187,69 @@ export default function ReservationSlideOver({
 
         {/* Billing */}
         <div className="rounded-md border border-line bg-ink p-3.5">
-          <div className="mb-2 flex items-center gap-1.5">
-            <CreditCard className="h-3 w-3 text-fg-3" />
-            <Eyebrow>Billing</Eyebrow>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <CreditCard className="h-3 w-3 text-fg-3" />
+              <Eyebrow>{folio ? "Folio" : "Billing"}</Eyebrow>
+            </div>
+            {folio && (
+              <span
+                className="rounded-pill border px-2 py-0.5 text-[10px] font-semibold"
+                style={{
+                  borderColor:
+                    folio.status === "open"
+                      ? "var(--accent-cyan)"
+                      : "var(--fg-3)",
+                  color:
+                    folio.status === "open"
+                      ? "var(--accent-cyan)"
+                      : "var(--fg-3)",
+                }}
+              >
+                {folio.status === "open" ? "Open" : "Closed"}
+              </span>
+            )}
           </div>
-          <div className="flex items-center justify-between border-t border-line pt-2 text-13">
-            <span className="font-semibold text-ice">Total</span>
-            <span className="font-mono text-16 font-semibold text-accent-cyan">
-              {res.totalAmount}
-            </span>
-          </div>
+
+          {folio ? (
+            <>
+              <div className="flex max-h-[180px] flex-col gap-1 overflow-y-auto">
+                {folio.lines.length === 0 && (
+                  <div className="py-1 text-12 text-fg-3">No charges posted yet.</div>
+                )}
+                {folio.lines.map((l) => (
+                  <div
+                    key={l._id}
+                    className="flex items-baseline justify-between gap-3 text-12"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-fg-2">
+                      {l.description}
+                    </span>
+                    <span
+                      className={`font-mono ${
+                        l.raw < 0 ? "text-accent-cyan" : "text-fg-1"
+                      }`}
+                    >
+                      {l.amount}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-line pt-2 text-13">
+                <span className="font-semibold text-ice">Balance</span>
+                <span className="font-mono text-16 font-semibold text-accent-cyan">
+                  {folio.balance}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between border-t border-line pt-2 text-13">
+              <span className="font-semibold text-ice">Total</span>
+              <span className="font-mono text-16 font-semibold text-accent-cyan">
+                {res.totalAmount}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="mt-auto flex flex-col gap-2">

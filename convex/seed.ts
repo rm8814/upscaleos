@@ -30,6 +30,8 @@ export const seed = mutation({
   handler: async (ctx) => {
     // ---- wipe --------------------------------------------------------------
     for (const table of [
+      "folio_lines",
+      "folios",
       "waitlist",
       "reservations",
       "rooms",
@@ -261,7 +263,7 @@ export const seed = mutation({
       const rupiah = Number(rate.replace(/[^\d]/g, ""));
       // A couple of upcoming bookings arrived without a room assigned.
       const roomless = i === 5 || i === 13;
-      await ctx.db.insert("reservations", {
+      const resId = await ctx.db.insert("reservations", {
         guestId: guestIds[i],
         propertyId,
         roomId: roomless ? undefined : room._id,
@@ -280,6 +282,54 @@ export const seed = mutation({
           !roomless && (status === "confirmed" || status === "tentative") && i % 2 === 0,
         etaLabel: status === "confirmed" ? `${12 + (i % 8)}:${(i * 13) % 60 < 10 ? "0" : ""}${(i * 13) % 60}` : undefined,
       });
+
+      // In-house / departed reservations already have an open (or closed) folio
+      // with the stay's nights posted.
+      if ((status === "inhouse" || status === "departed") && !roomless) {
+        const businessDate = iso(TODAY);
+        const lastNight =
+          status === "departed"
+            ? iso(addDays(checkOut, -1))
+            : iso(
+                addDays(
+                  checkIn,
+                  Math.min(
+                    nights - 1,
+                    Math.round((TODAY.getTime() - checkIn.getTime()) / 86400000)
+                  )
+                )
+              );
+        const folioId = await ctx.db.insert("folios", {
+          propertyId,
+          reservationId: resId,
+          guestId: guestIds[i],
+          status: status === "departed" ? "closed" : "open",
+          openedOn: iso(checkIn),
+          closedOn: status === "departed" ? iso(checkOut) : undefined,
+        });
+        for (
+          let d = iso(checkIn);
+          d <= lastNight && d <= businessDate;
+          d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
+        ) {
+          await ctx.db.insert("folio_lines", {
+            folioId,
+            propertyId,
+            date: d,
+            kind: "room",
+            description: `Room — ${room.type} · night of ${d}`,
+            amount: rupiah,
+          });
+          await ctx.db.insert("folio_lines", {
+            folioId,
+            propertyId,
+            date: d,
+            kind: "tax",
+            description: "Service + government tax (21%)",
+            amount: Math.round(rupiah * 0.21),
+          });
+        }
+      }
     }
 
     // ---- expenses (finance milestone) ------------------------------

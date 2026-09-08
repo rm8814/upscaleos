@@ -2,6 +2,12 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import {
+  openFolioForReservation,
+  closeFolio,
+  reopenFolio,
+  voidFolioIfUnpaid,
+} from "./folios";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -297,7 +303,47 @@ export const updateDates = mutation({
 export const setStatus = mutation({
   args: { id: v.id("reservations"), status: v.string() },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { status: args.status });
+    const res = await ctx.db.get(args.id);
+    if (!res) return;
+    const prev = res.status;
+    const next = args.status;
+    if (prev === next) return;
+
+    await ctx.db.patch(args.id, { status: next });
+
+    const bd = await businessDate(ctx, res.propertyId);
+    const setRoom = async (roomStatus: string) => {
+      if (res.roomId)
+        await ctx.db.patch(res.roomId, {
+          status: roomStatus,
+          updatedLabel: "just now",
+        });
+    };
+
+    // Check in: occupy the room and open the folio.
+    if (next === "inhouse" && prev !== "inhouse") {
+      await setRoom("Occupied");
+      await openFolioForReservation(ctx, { ...res, status: next }, bd);
+    }
+    // Check out: release the room to housekeeping and close the folio.
+    else if (next === "departed" && prev === "inhouse") {
+      await setRoom("Vacant Dirty");
+      await closeFolio(ctx, args.id, bd);
+    }
+    // Undo check-in.
+    else if (prev === "inhouse" && next === "confirmed") {
+      await setRoom("Vacant Clean");
+      await voidFolioIfUnpaid(ctx, args.id);
+    }
+    // Undo check-out.
+    else if (prev === "departed" && next === "inhouse") {
+      await setRoom("Occupied");
+      await reopenFolio(ctx, args.id);
+    }
+    // Cancellation: drop an unpaid folio if one was opened.
+    else if (next === "cancelled") {
+      await voidFolioIfUnpaid(ctx, args.id);
+    }
   },
 });
 

@@ -101,6 +101,26 @@ export default defineSchema({
     etaLabel: v.optional(v.string()), // e.g. '14:20'
     roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
   }).index("by_property", ["propertyId"]),
+  folios: defineTable({
+    propertyId: v.id("properties"),
+    reservationId: v.id("reservations"),
+    guestId: v.id("guests"),
+    status: v.string(), // 'open' | 'closed'
+    openedOn: v.string(), // business date it was opened
+    closedOn: v.optional(v.string()),
+  })
+    .index("by_reservation", ["reservationId"])
+    .index("by_property", ["propertyId"]),
+  folio_lines: defineTable({
+    folioId: v.id("folios"),
+    propertyId: v.id("properties"),
+    date: v.string(), // business date the line posted for
+    kind: v.string(), // 'room' | 'tax' | 'service' | 'fnb' | 'payment' | 'adjustment'
+    description: v.string(),
+    amount: v.number(), // positive = charge, negative = payment / credit
+  })
+    .index("by_folio", ["folioId"])
+    .index("by_property", ["propertyId"]),
   waitlist: defineTable({
     propertyId: v.id("properties"),
     guest: v.string(),

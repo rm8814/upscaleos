@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as folios from "../folios.js";
 import type * as guests from "../guests.js";
 import type * as maintenance from "../maintenance.js";
 import type * as operate from "../operate.js";
@@ -28,6 +29,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  folios: typeof folios;
   guests: typeof guests;
   maintenance: typeof maintenance;
   operate: typeof operate;

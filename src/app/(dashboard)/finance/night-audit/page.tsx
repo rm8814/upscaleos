@@ -63,9 +63,12 @@ export default function NightAuditPage() {
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
   const [ranAll, setRanAll] = useState(false);
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ from: string; to: string; days: number } | null>(
-    null
-  );
+  const [result, setResult] = useState<{
+    from: string;
+    to: string;
+    days: number;
+    roomsAssigned: number;
+  } | null>(null);
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const autoAudit = !!activeProperty?.autoNightAudit;
@@ -159,7 +162,13 @@ export default function NightAuditPage() {
           {result
             ? `Rolled ${fmtDate(result.from)} → ${fmtDate(result.to)} (${result.days} day${
                 result.days === 1 ? "" : "s"
-              })`
+              })${
+                result.roomsAssigned
+                  ? ` · ${result.roomsAssigned} room${
+                      result.roomsAssigned === 1 ? "" : "s"
+                    } auto-assigned`
+                  : ""
+              }`
             : `${doneCount} of ${STEPS.length} steps complete`}
         </div>
         <button

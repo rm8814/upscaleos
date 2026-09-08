@@ -77,7 +77,10 @@ async function pickFreeRoom(
  * the property-wide "auto-assign" setting cover bookings that never touched the
  * New Reservation form — OTA / channel-manager pushes, API imports, etc.
  */
-async function assignPropertyRooms(ctx: MutationCtx, propertyId: Id<"properties">) {
+export async function assignPropertyRooms(
+  ctx: MutationCtx,
+  propertyId: Id<"properties">
+) {
   const today = await businessDate(ctx, propertyId);
   const rows = await ctx.db
     .query("reservations")

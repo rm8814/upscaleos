@@ -2,6 +2,7 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { assignPropertyRooms } from "./reservations";
 
 const policyValidator = v.object({
   cancellation: v.string(),
@@ -180,17 +181,34 @@ async function rollUpTo(
 /**
  * Night-audit "Run remaining steps" calls this. On schedule it advances one
  * day; if the last close was several days ago it catches up to `toDate`,
- * posting each intervening day.
+ * posting each intervening day. Afterwards it runs the room auto-assign sweep
+ * (when the property has that setting on) so newly-current arrivals that came
+ * in without a room get one.
  */
 export const rollBusinessDate = mutation({
   args: { id: v.id("properties"), toDate: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const biz = (await ctx.db.get(args.id))?.businessDate ?? "2026-09-08";
-    if (args.toDate && args.toDate > biz) {
-      return rollUpTo(ctx, args.id, args.toDate, 60);
-    }
-    const res = await rollOne(ctx, args.id);
-    return { from: res.previous, to: res.businessDate, days: 1, behind: false };
+    const property = await ctx.db.get(args.id);
+    const biz = property?.businessDate ?? "2026-09-08";
+
+    const rolled =
+      args.toDate && args.toDate > biz
+        ? await rollUpTo(ctx, args.id, args.toDate, 60)
+        : await (async () => {
+            const res = await rollOne(ctx, args.id);
+            return {
+              from: res.previous,
+              to: res.businessDate,
+              days: 1,
+              behind: false,
+            };
+          })();
+
+    const roomsAssigned = property?.autoAssignRooms
+      ? (await assignPropertyRooms(ctx, args.id)).assigned
+      : 0;
+
+    return { ...rolled, roomsAssigned };
   },
 });
 
@@ -241,7 +259,12 @@ export const runScheduledNightAudits = internalMutation({
       }
 
       const r = await rollUpTo(ctx, p._id, wallDate, MAX_AUTO_CATCHUP);
-      rolled.push(`${p.name} (+${r.days}d)`);
+      const assigned = p.autoAssignRooms
+        ? (await assignPropertyRooms(ctx, p._id)).assigned
+        : 0;
+      rolled.push(
+        `${p.name} (+${r.days}d${assigned ? `, ${assigned} rooms` : ""})`
+      );
     }
 
     return { rolled, needsManualCatchup };

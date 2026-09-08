@@ -26,12 +26,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronsUpDown,
+  Check,
+  Plus,
   LogOut,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { AddPropertyButton } from "@/components/property/AddPropertyDialog";
 
 interface NavItem {
   label: string;
@@ -116,7 +119,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { logout } = useAuth();
-  const { activeProperty } = useProperty();
+  const { properties, activeProperty, setActivePropertyId } = useProperty();
+  const [menuOpen, setMenuOpen] = React.useState(false);
 
   // Active = the single most specific nav href the current path falls under.
   const activeHref = NAV_GROUPS.flatMap((g) => g.items)
@@ -185,26 +189,74 @@ export default function Sidebar({
         </div>
 
         {/* Property switcher */}
-        <button
-          type="button"
-          title={collapsed ? activeProperty?.name ?? "No property" : undefined}
-          className={`mt-1 flex w-full items-center gap-[9px] rounded-sm border border-line bg-elevated px-[10px] py-[9px] text-left transition-colors hover:border-line-strong ${
-            collapsed ? "lg:justify-center lg:border-transparent lg:bg-transparent lg:px-0" : ""
-          }`}
-        >
-          <span className="flex h-6 w-6 flex-none items-center justify-center rounded-[6px] bg-accent-violet text-[11px] font-bold text-ice">
-            {activeProperty?.initials ?? "—"}
-          </span>
-          <span className={`flex-1 overflow-hidden ${hideWhenRail}`}>
-            <span className="block truncate text-[12.5px] font-semibold text-ice">
-              {activeProperty?.name ?? "No property"}
+        <div className="relative mt-1">
+          <button
+            type="button"
+            title={collapsed ? activeProperty?.name ?? "No property" : undefined}
+            onClick={() => {
+              if (collapsed) onToggleCollapse();
+              else setMenuOpen((o) => !o);
+            }}
+            className={`flex w-full items-center gap-[9px] rounded-sm border border-line bg-elevated px-[10px] py-[9px] text-left transition-colors hover:border-line-strong ${
+              collapsed ? "lg:justify-center lg:border-transparent lg:bg-transparent lg:px-0" : ""
+            }`}
+          >
+            <span className="flex h-6 w-6 flex-none items-center justify-center rounded-[6px] bg-accent-violet text-[11px] font-bold text-ice">
+              {activeProperty?.initials ?? "—"}
             </span>
-            <span className="block text-[10.5px] text-fg-3">
-              {activeProperty?.location ?? "Select a property"}
+            <span className={`flex-1 overflow-hidden ${hideWhenRail}`}>
+              <span className="block truncate text-[12.5px] font-semibold text-ice">
+                {activeProperty?.name ?? "No property"}
+              </span>
+              <span className="block text-[10.5px] text-fg-3">
+                {activeProperty?.location ?? "Select a property"}
+              </span>
             </span>
-          </span>
-          <ChevronsUpDown className={`h-3.5 w-3.5 flex-none text-fg-3 ${hideWhenRail}`} />
-        </button>
+            <ChevronsUpDown className={`h-3.5 w-3.5 flex-none text-fg-3 ${hideWhenRail}`} />
+          </button>
+
+          {menuOpen && !collapsed && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 flex flex-col gap-px rounded-md border border-line-strong bg-elevated p-1.5 shadow-3">
+                {properties.map((p) => (
+                  <button
+                    key={p._id}
+                    type="button"
+                    onClick={() => {
+                      setActivePropertyId(p._id);
+                      setMenuOpen(false);
+                    }}
+                    className="flex items-center gap-[9px] rounded-sm p-2 text-left transition-colors hover:bg-deep"
+                  >
+                    <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-[6px] border border-line bg-deep text-[10px] font-bold">
+                      {p.initials}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] font-medium text-ice">
+                        {p.name}
+                      </span>
+                      <span className="block text-[10.5px] text-fg-3">{p.location}</span>
+                    </span>
+                    {p.status === "onboarding" && (
+                      <span className="flex-none rounded-pill border border-res-tentative px-1.5 text-[9px] font-semibold text-res-tentative">
+                        Setup
+                      </span>
+                    )}
+                    {p._id === activeProperty?._id && (
+                      <Check className="h-3.5 w-3.5 flex-none text-accent-violet-hi" />
+                    )}
+                  </button>
+                ))}
+                <div className="mt-1 border-t border-line pt-1">
+                  <AddPropertyButton className="flex w-full items-center gap-[9px] rounded-sm p-2 text-left text-[12.5px] text-fg-2 hover:bg-deep hover:text-ice">
+                    <Plus className="h-3.5 w-3.5" /> Add property
+                  </AddPropertyButton>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Nav groups */}
         {NAV_GROUPS.map((group, i) => (

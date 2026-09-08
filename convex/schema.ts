@@ -7,6 +7,23 @@ export default defineSchema({
     location: v.string(),
     id: v.string(), // External Property ID
     initials: v.string(),
+    // Config — optional so a freshly created property can be fleshed out later.
+    address: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    currency: v.optional(v.string()), // 'IDR'
+    timezone: v.optional(v.string()), // 'Asia/Makassar'
+    checkInTime: v.optional(v.string()), // '14:00'
+    checkOutTime: v.optional(v.string()), // '12:00'
+    status: v.optional(v.string()), // 'onboarding' | 'active' | 'archived' (absent = active/legacy)
+    policies: v.optional(
+      v.object({
+        cancellation: v.string(),
+        deposit: v.string(),
+        children: v.string(),
+        pets: v.string(),
+        smoking: v.string(),
+      })
+    ),
   }).index("by_external_id", ["id"]),
   users: defineTable({
     name: v.string(),
@@ -14,6 +31,22 @@ export default defineSchema({
     role: v.string(), // e.g., 'Admin', 'Manager', 'Staff'
     propertyId: v.id("properties"),
   }).index("by_email", ["email"]),
+  property_members: defineTable({
+    propertyId: v.id("properties"),
+    email: v.string(),
+    name: v.string(),
+    role: v.string(), // 'General Manager' | 'Front office' | 'Housekeeping lead' | ...
+    status: v.string(), // 'active' | 'invited'
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_email", ["email"]),
+  taxes: defineTable({
+    propertyId: v.id("properties"),
+    name: v.string(),
+    rate: v.string(), // '11%' or 'Rp 20.000'
+    basis: v.string(), // 'Room + F&B' | 'Per room-night' | ...
+    inclusive: v.string(), // 'Inclusive' | 'Exclusive'
+  }).index("by_property", ["propertyId"]),
   rooms: defineTable({
     propertyId: v.id("properties"),
     roomNumber: v.string(),

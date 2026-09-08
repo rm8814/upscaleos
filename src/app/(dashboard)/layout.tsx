@@ -6,6 +6,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProperty } from "@/components/providers/PropertyProvider";
+import { AddPropertyButton } from "@/components/property/AddPropertyDialog";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -17,7 +18,7 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { user, isLoading } = useAuth();
-  const { activeProperty, setActiveProperty } = useProperty();
+  const { properties, setProperties } = useProperty();
   const router = useRouter();
 
   // Persisted desktop icon-rail preference.
@@ -46,31 +47,41 @@ export default function DashboardLayout({
     if (!isLoading && !user) router.replace("/login");
   }, [isLoading, user, router]);
 
-  // Resolve the real Convex property from the external ID the user signed in with.
-  // Fall back to the first property so the prototype still works if the ID doesn't match.
-  const propertyByExternalId = useQuery(
-    api.properties.getByExternalId,
-    user ? { externalId: user.propertyId } : "skip"
+  // The properties this user manages. Feed them into the provider, which owns
+  // the (persisted) active-property selection.
+  const memberProperties = useQuery(
+    api.properties.listForMember,
+    user ? { email: user.email } : "skip"
   );
-  const firstProperty = useQuery(api.properties.getFirst, user ? {} : "skip");
-  const resolvedProperty = propertyByExternalId ?? firstProperty;
 
   useEffect(() => {
-    if (resolvedProperty && !activeProperty) {
-      setActiveProperty({
-        _id: resolvedProperty._id,
-        name: resolvedProperty.name,
-        location: resolvedProperty.location,
-        id: resolvedProperty.id,
-        initials: resolvedProperty.initials,
-      });
-    }
-  }, [resolvedProperty, activeProperty, setActiveProperty]);
+    if (memberProperties) setProperties(memberProperties);
+  }, [memberProperties, setProperties]);
 
   if (isLoading || !user) {
     return (
       <div className="flex h-screen items-center justify-center bg-ink text-13 text-fg-3">
         {isLoading ? "Loading…" : "Redirecting to sign in…"}
+      </div>
+    );
+  }
+
+  if (memberProperties !== undefined && memberProperties.length === 0) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-ink px-6 text-center">
+        <div className="font-display text-22 font-bold text-ice">No properties yet</div>
+        <div className="max-w-sm text-13 text-fg-3">
+          You don&rsquo;t manage any properties. Create one to get started.
+        </div>
+        <AddPropertyButton className="rounded-md bg-accent-violet px-4 py-2.5 text-13 font-semibold text-ice hover:bg-accent-violet-hi" />
+      </div>
+    );
+  }
+
+  if (memberProperties === undefined || properties.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-ink text-13 text-fg-3">
+        Loading your properties…
       </div>
     );
   }

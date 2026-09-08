@@ -37,6 +37,8 @@ export const seed = mutation({
       "expenses",
       "corporate_production",
       "corporate_agreements",
+      "taxes",
+      "property_members",
       "users",
       "properties",
     ] as const) {
@@ -44,12 +46,26 @@ export const seed = mutation({
       await Promise.all(rows.map((r) => ctx.db.delete(r._id)));
     }
 
-    // ---- property + user -------------------------------------------------
+    // ---- property + user + members ------------------------------------
     const propertyId = await ctx.db.insert("properties", {
       name: "Grand Samudra Bali",
       location: "Seminyak, Bali",
       id: "04812",
       initials: "GSB",
+      address: "Jl. Kayu Aya No. 88, Seminyak, Badung, Bali 80361",
+      contactEmail: "reservations@grandsamudra.upscale.id",
+      currency: "IDR",
+      timezone: "Asia/Makassar",
+      checkInTime: "14:00",
+      checkOutTime: "12:00",
+      status: "active",
+      policies: {
+        cancellation: "Free cancellation up to 48h before arrival.",
+        deposit: "Card guarantee, no prepayment.",
+        children: "Under 6 stay free with an adult.",
+        pets: "Not permitted.",
+        smoking: "Designated areas only.",
+      },
     });
 
     await ctx.db.insert("users", {
@@ -58,6 +74,26 @@ export const seed = mutation({
       role: "Admin",
       propertyId,
     });
+
+    const members = [
+      { email: "gm@grandsamudra.upscale.id", name: "Amira K.", role: "General Manager", status: "active" },
+      { email: "fo@grandsamudra.upscale.id", name: "Rangga Putra", role: "Front office", status: "active" },
+      { email: "hk@grandsamudra.upscale.id", name: "Wayan Sari", role: "Housekeeping lead", status: "active" },
+      { email: "eng@grandsamudra.upscale.id", name: "Budi Santoso", role: "Engineering", status: "active" },
+      { email: "night@grandsamudra.upscale.id", name: "Sri Wahyuni", role: "Night auditor", status: "invited" },
+    ];
+    for (const m of members) {
+      await ctx.db.insert("property_members", { ...m, propertyId });
+    }
+
+    const taxes = [
+      { name: "Government tax", rate: "11%", basis: "Room + F&B", inclusive: "Exclusive" },
+      { name: "Service charge", rate: "10%", basis: "Room + F&B", inclusive: "Exclusive" },
+      { name: "City / tourism levy", rate: "Rp 20.000", basis: "Per room-night", inclusive: "Exclusive" },
+    ];
+    for (const t of taxes) {
+      await ctx.db.insert("taxes", { ...t, propertyId });
+    }
 
     // ---- rooms: 5 floors × 6 rooms = 30 --------------------------------
     const roomRows: {

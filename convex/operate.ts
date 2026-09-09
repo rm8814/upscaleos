@@ -549,6 +549,42 @@ export const getDashboardBoard = query({
     const openDeposits = reservations.filter(
       (r) => r.status === "confirmed" && r.checkIn === today
     ).length;
+
+    // ---- per-block group tasks: cut-off, unsigned contract, deposit ----
+    const groupSubs = await ctx.db.query("group_subblocks").collect();
+    const daysTo = (d: string) =>
+      Math.round(
+        (Date.parse(d + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) /
+          86400000
+      );
+    const groupTasks: string[] = [];
+    for (const gb of groups) {
+      if (gb.status === "cancelled" || gb.released === true) continue;
+      const blocked = groupSubs
+        .filter((s) => s.groupId === gb._id)
+        .reduce((s, x) => s + x.blocked, 0);
+      const picked = reservations.filter(
+        (r) => r.groupId === gb._id && !RELEASED_STATUSES.has(r.status)
+      ).length;
+      const co = daysTo(gb.cutoffDate);
+      if (co >= 0 && co <= 5 && picked < blocked) {
+        groupTasks.push(
+          `${gb.name}: cut-off ${co === 0 ? "today" : `in ${co}d`} — ${picked}/${blocked} picked, release or extend`
+        );
+      } else if (
+        gb.contractLabel === "Awaiting signature" &&
+        co >= 0 &&
+        co <= 21
+      ) {
+        groupTasks.push(
+          `${gb.name}: contract unsigned, cut-off in ${co}d`
+        );
+      }
+      if (gb.depositStatus === "Not received" && daysTo(gb.startDate) <= 30) {
+        groupTasks.push(`${gb.name}: deposit not received`);
+      }
+    }
+
     const tasks = [
       unassignedArrivals > 0 &&
         `Assign rooms to ${unassignedArrivals} arrival${
@@ -556,7 +592,9 @@ export const getDashboardBoard = query({
         } due today`,
       dirty > 0 &&
         `${dirty} vacant-dirty room${dirty > 1 ? "s" : ""} to clean before 3 PM cut-off`,
+      ...groupTasks.slice(0, 3),
       tentativeGroups > 0 &&
+        groupTasks.length === 0 &&
         `Confirm ${tentativeGroups} tentative group block${
           tentativeGroups > 1 ? "s" : ""
         }`,

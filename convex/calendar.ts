@@ -143,11 +143,40 @@ export const getCalendarBoard = query({
     ).flat();
     const groupRes = resRows.filter((r) => r.groupId);
     const groupHolds: Record<string, Record<string, number>> = {};
+    const groupLane: {
+      _id: Id<"group_blocks">;
+      name: string;
+      status: string;
+      from: string;
+      to: string;
+      cutoffDate: string;
+      blocked: number;
+      picked: number;
+      held: number;
+    }[] = [];
     for (const g of groupBlocks) {
       const active =
         g.status !== "cancelled" && g.released !== true && g.cutoffDate >= bd;
       if (!active) continue;
       const gWindowEnd = addDaysIso(g.startDate, g.nights);
+      if (g.startDate <= args.to && gWindowEnd > args.from) {
+        const mySubs = subblocks.filter((s) => s.groupId === g._id);
+        const gBlocked = mySubs.reduce((s, x) => s + x.blocked, 0);
+        const gPicked = groupRes.filter(
+          (r) => r.groupId === g._id && r.status !== "cancelled"
+        ).length;
+        groupLane.push({
+          _id: g._id,
+          name: g.name,
+          status: g.status,
+          from: g.startDate,
+          to: gWindowEnd,
+          cutoffDate: g.cutoffDate,
+          blocked: gBlocked,
+          picked: gPicked,
+          held: Math.max(0, gBlocked - gPicked),
+        });
+      }
       for (const sub of subblocks.filter((s) => s.groupId === g._id)) {
         for (const date of days) {
           if (date < g.startDate || date >= gWindowEnd) continue;
@@ -241,6 +270,7 @@ export const getCalendarBoard = query({
       rateGrid,
       blocks,
       groupHolds,
+      groupLane: groupLane.sort((a, b) => a.from.localeCompare(b.from)),
       occByDay,
       typeOcc,
     };

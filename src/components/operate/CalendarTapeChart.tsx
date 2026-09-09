@@ -96,6 +96,9 @@ export default function CalendarTapeChart() {
   const [peek, setPeek] = useState<
     { roomType: string; date: string; kind: "assigned" | "unassigned" } | null
   >(null);
+  const [groupPeek, setGroupPeek] = useState<{ id: string; name: string } | null>(
+    null
+  );
   const [newRes, setNewRes] = useState<Partial<NewResInit> | null>(null);
   const [assignWaitlistId, setAssignWaitlistId] = useState<string | null>(null);
 
@@ -639,6 +642,51 @@ export default function CalendarTapeChart() {
           </div>
 
           {!rooms && <div className="px-3 py-4 text-13 text-fg-3">Loading tape chart…</div>}
+
+          {/* Group lane — one bar per active block across its window */}
+          {(board?.groupLane ?? []).length > 0 && (
+            <div className="grid border-b border-line bg-deep" style={GRID}>
+              <div className="px-3 py-2 text-[11px] font-semibold text-res-tentative">
+                Groups
+              </div>
+              <div
+                className="relative col-span-full"
+                style={{
+                  gridColumn: `2 / span ${DAYS}`,
+                  minHeight: `${(board!.groupLane.length || 1) * 22 + 8}px`,
+                }}
+              >
+                {board!.groupLane.map((blk, row) => {
+                  const s = Math.max(0, dayCol(blk.from));
+                  const e = Math.min(DAYS, dayCol(blk.to));
+                  if (e <= 0 || s >= DAYS) return null;
+                  const leftPct = (s / DAYS) * 100;
+                  const widthPct = ((e - s) / DAYS) * 100;
+                  return (
+                    <button
+                      key={blk._id}
+                      onClick={() => setGroupPeek({ id: blk._id, name: blk.name })}
+                      title={`${blk.name} · ${blk.picked}/${blk.blocked} picked · cut-off ${dmIso(blk.cutoffDate)}`}
+                      className="absolute flex items-center overflow-hidden whitespace-nowrap rounded-[5px] border px-1.5 text-[10.5px] text-ice"
+                      style={{
+                        top: row * 22 + 4,
+                        height: 18,
+                        left: `${leftPct}%`,
+                        width: `${widthPct}%`,
+                        background:
+                          "color-mix(in srgb, var(--res-tentative) 24%, var(--bg-deep))",
+                        borderColor: "var(--res-tentative)",
+                      }}
+                    >
+                      <span className="overflow-hidden text-ellipsis">
+                        {blk.name} · {blk.held} held
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {groups.map((g) => {
             const isCollapsed = viewMode === "types" || collapsed.has(g.type);
@@ -1232,6 +1280,66 @@ export default function CalendarTapeChart() {
                 Room goes to Vacant Dirty; housekeeping inspects before it&apos;s
                 sellable again.
               </div>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* Group-lane peek */}
+      {groupPeek &&
+        createPortal(
+          <>
+            <div
+              onClick={() => setGroupPeek(null)}
+              className="fixed inset-0 z-[55] bg-deepest/70 backdrop-blur-[6px]"
+            />
+            <div className="fixed left-1/2 top-1/2 z-[56] w-[360px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-deep p-5 shadow-3">
+              {(() => {
+                const blk = (board?.groupLane ?? []).find(
+                  (b) => b._id === groupPeek.id
+                );
+                if (!blk) return null;
+                return (
+                  <>
+                    <div className="mb-1 flex items-start justify-between">
+                      <div className="font-display text-15 font-bold text-ice">
+                        {blk.name}
+                      </div>
+                      <button
+                        onClick={() => setGroupPeek(null)}
+                        className="text-fg-3 hover:text-ice"
+                        aria-label="Close"
+                      >
+                        <X className="h-[16px] w-[16px]" />
+                      </button>
+                    </div>
+                    <div className="mb-3 text-12 text-fg-3">
+                      {dmIso(blk.from)} → {dmIso(blk.to)} · {blk.status} · cut-off{" "}
+                      {dmIso(blk.cutoffDate)}
+                    </div>
+                    <div className="flex gap-4 text-13">
+                      <div>
+                        <div className="text-[10px] uppercase text-fg-3">Blocked</div>
+                        <div className="font-mono">{blk.blocked}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase text-fg-3">Picked</div>
+                        <div className="font-mono text-accent-cyan">{blk.picked}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase text-fg-3">Held</div>
+                        <div className="font-mono text-res-tentative">{blk.held}</div>
+                      </div>
+                    </div>
+                    <a
+                      href="/operate/groups"
+                      className="mt-3 block rounded-sm bg-accent-violet px-3 py-2 text-center text-12 font-semibold text-ice hover:bg-accent-violet-hi"
+                    >
+                      Open in Groups
+                    </a>
+                  </>
+                );
+              })()}
             </div>
           </>,
           document.body

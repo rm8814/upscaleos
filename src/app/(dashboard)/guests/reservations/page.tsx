@@ -16,10 +16,10 @@ import {
 import ReservationSlideOver from "@/components/guests/ReservationSlideOver";
 import PmsDateChip from "@/components/common/PmsDateChip";
 
-const PAGE_SIZES = [50, 100];
+const PAGE_SIZES = [10, 50, 100];
 // Guest · RSV · Booked · Arrival · Departure · Source · Room type · Room · Status · Value · action
 const GRID =
-  "grid grid-cols-[1.5fr_0.95fr_0.9fr_0.9fr_0.9fr_0.95fr_1fr_0.6fr_0.85fr_1fr_0.75fr] items-center gap-3 px-4 min-w-[1240px]";
+  "grid grid-cols-[1.6fr_1fr_0.95fr_0.85fr_0.85fr_1fr_1.1fr_0.6fr_0.9fr_1fr_0.8fr] items-center gap-3 px-4 min-w-[1260px]";
 
 type Tab = "arrivals" | "inhouse" | "departures" | "all";
 
@@ -259,7 +259,7 @@ function ReservationListInner() {
       <Card className="overflow-hidden p-0">
         <div className="upx-scroll overflow-x-auto">
           <div
-            className={`${GRID} whitespace-nowrap border-b border-line bg-deep/40 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-fg-3`}
+            className={`${GRID} whitespace-nowrap border-b border-line py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.05em] text-fg-3`}
           >
             <div>Guest</div>
             <div>RSV #</div>
@@ -270,7 +270,7 @@ function ReservationListInner() {
             <div>Room type</div>
             <div>Room</div>
             <div>Status</div>
-            <div className="text-right">Value</div>
+            <div>Value</div>
             <div />
           </div>
 
@@ -324,10 +324,10 @@ function ReservationListInner() {
                 >
                   {RES_STATUS_LABEL[r.status] ?? r.status}
                 </div>
-                <div className="text-right font-mono text-[11.5px] font-semibold">
+                <div className="font-mono text-[11.5px] font-semibold">
                   {r.totalAmount}
                 </div>
-                <div className="text-right">
+                <div>
                   <span className="whitespace-nowrap rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
                     {action}
                   </span>

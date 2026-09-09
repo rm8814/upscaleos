@@ -484,10 +484,40 @@ export default function CalendarTapeChart() {
             {l.label}
           </div>
         ))}
+
+        <span className="h-3 w-px bg-line" />
+
         <div className="flex items-center gap-1.5 text-12 text-fg-3">
           <Zap className="h-3 w-3 text-fg-2" />
-          Room auto-assigned
+          Auto-assigned
         </div>
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <span
+            className="h-2.5 w-3.5 rounded-[2px]"
+            style={{
+              background:
+                "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 3px,color-mix(in srgb, var(--room-ooo) 45%, transparent) 3px,color-mix(in srgb, var(--room-ooo) 45%, transparent) 6px)",
+            }}
+          />
+          Out of order / service
+        </div>
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <span
+            className="h-2 w-3.5 rounded-[2px]"
+            style={{ background: "var(--res-tentative)" }}
+          />
+          Group hold
+        </div>
+
+        <span className="h-3 w-px bg-line" />
+
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <span className="text-fg-4">Rate</span>
+          <span style={{ color: RATE_SOURCE_COLOR.rack }}>rack</span>
+          <span style={{ color: RATE_SOURCE_COLOR.dynamic }}>dynamic</span>
+          <span style={{ color: RATE_SOURCE_COLOR.manual }}>manual</span>
+        </div>
+
         <button
           onClick={() => setNewRes({})}
           className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi"

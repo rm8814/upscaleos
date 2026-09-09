@@ -1,14 +1,22 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, X } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import PmsDateChip from "@/components/common/PmsDateChip";
-import { Card, Eyebrow, Segmented } from "@/components/upx/primitives";
+import {
+  Card,
+  Eyebrow,
+  Segmented,
+  RES_STATUS_COLOR,
+  RES_STATUS_LABEL,
+} from "@/components/upx/primitives";
+import ReservationSlideOver, {
+  type SlideOverReservation,
+} from "@/components/guests/ReservationSlideOver";
 
 const DAYS = 14;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -142,6 +150,25 @@ export default function RatesPage() {
   }, [overrides]);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+
+  // Click an assigned / unassigned count to inspect the reservations behind it.
+  const [peek, setPeek] = useState<
+    { roomType: string; date: string; kind: "assigned" | "unassigned" } | null
+  >(null);
+  const [peekRes, setPeekRes] = useState<SlideOverReservation | null>(null);
+
+  const peekList = useMemo(() => {
+    if (!peek) return [];
+    return (reservations ?? []).filter(
+      (r) =>
+        r.status !== "cancelled" &&
+        r.status !== "departed" &&
+        r.roomType === peek.roomType &&
+        r.checkIn <= peek.date &&
+        r.checkOut > peek.date &&
+        (peek.kind === "assigned" ? !!r.roomId : !r.roomId)
+    );
+  }, [peek, reservations]);
 
   const saveManual = async (roomType: string, dayIso: string) => {
     if (!activeProperty) return;
@@ -358,21 +385,33 @@ export default function RatesPage() {
                           <span className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan">
                             {avail}
                           </span>
-                          <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
-                            {assigned}
-                          </span>
+                          {assigned > 0 ? (
+                            <button
+                              onClick={() =>
+                                setPeek({ roomType: rt.name, date: dayIso, kind: "assigned" })
+                              }
+                              title={`${assigned} assigned booking${assigned > 1 ? "s" : ""} — view`}
+                              className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2 hover:bg-fg-1/[0.18]"
+                            >
+                              {assigned}
+                            </button>
+                          ) : (
+                            <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
+                              {assigned}
+                            </span>
+                          )}
                           {unassigned > 0 && (
-                            <Link
-                              href={`/guests/reservations?unassigned=1&roomType=${encodeURIComponent(
-                                rt.name
-                              )}&date=${dayIso}`}
+                            <button
+                              onClick={() =>
+                                setPeek({ roomType: rt.name, date: dayIso, kind: "unassigned" })
+                              }
                               title={`${unassigned} unassigned booking${
                                 unassigned > 1 ? "s" : ""
-                              } — open list`}
+                              } — view`}
                               className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo hover:bg-room-ooo/30"
                             >
                               {unassigned}
-                            </Link>
+                            </button>
                           )}
                         </div>
                         {hasRestriction && (
@@ -549,6 +588,90 @@ export default function RatesPage() {
           </div>
         </div>
       )}
+
+      {peek && (
+        <>
+          <div
+            onClick={() => setPeek(null)}
+            className="fixed inset-0 z-[55] bg-deepest/70 backdrop-blur-[6px]"
+          />
+          <div className="fixed left-1/2 top-1/2 z-[56] w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-deep p-5 shadow-3">
+            <div className="mb-3 flex items-start justify-between">
+              <div>
+                <div className="font-display text-16 font-bold text-ice">
+                  {peek.kind === "assigned" ? "Assigned" : "Unassigned"} ·{" "}
+                  {peek.roomType}
+                </div>
+                <div className="mt-0.5 text-12 text-fg-3">
+                  Staying the night of {fmtGridDate(peek.date)} ·{" "}
+                  {peekList.length} reservation{peekList.length === 1 ? "" : "s"}
+                </div>
+              </div>
+              <button
+                onClick={() => setPeek(null)}
+                className="text-fg-3 hover:text-ice"
+                aria-label="Close"
+              >
+                <X className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+
+            <div className="upx-scroll max-h-[52vh] overflow-y-auto rounded-md border border-line">
+              {peekList.length === 0 && (
+                <div className="px-3 py-4 text-13 text-fg-3">
+                  No matching reservations.
+                </div>
+              )}
+              {peekList.map((r) => (
+                <button
+                  key={r._id}
+                  onClick={() => {
+                    setPeekRes(r as unknown as SlideOverReservation);
+                    setPeek(null);
+                  }}
+                  className="flex w-full items-center gap-3 border-b border-line-soft px-3 py-2.5 text-left last:border-0 hover:bg-elevated"
+                >
+                  <span
+                    className="h-2 w-2 flex-none rounded-pill"
+                    style={{ background: RES_STATUS_COLOR[r.status] ?? "var(--fg-3)" }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-13 font-semibold">
+                      {r.guestName}
+                    </div>
+                    <div className="text-[11px] text-fg-3">
+                      {fmtGridDate(r.checkIn)} → {fmtGridDate(r.checkOut)} ·{" "}
+                      {r.channel ?? "Direct"}
+                    </div>
+                  </div>
+                  <div className="flex-none text-right">
+                    <div className="font-mono text-12">
+                      {r.roomNumber && r.roomNumber !== "—"
+                        ? `Room ${r.roomNumber}`
+                        : "Unassigned"}
+                    </div>
+                    <div
+                      className="text-[10.5px]"
+                      style={{ color: RES_STATUS_COLOR[r.status] ?? "var(--fg-3)" }}
+                    >
+                      {RES_STATUS_LABEL[r.status] ?? r.status}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {peekRes && (
+        <ReservationSlideOver res={peekRes} onClose={() => setPeekRes(null)} />
+      )}
     </div>
   );
+}
+
+function fmtGridDate(iso: string) {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }

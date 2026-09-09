@@ -719,11 +719,167 @@ const nights = (a: string, b: string) =>
     )
   );
 
+type PartyRoom = { roomType: string; roomId?: Id<"rooms">; roomExternalRef?: string };
+type CoreArgs = {
+  propertyId: Id<"properties">;
+  guestName: string;
+  email?: string;
+  phone?: string;
+  checkIn: string;
+  checkOut: string;
+  channel: string;
+  status: string; // 'confirmed' | 'tentative'
+  externalRef?: string;
+  rooms: PartyRoom[];
+};
+
+async function sharedGuest(
+  ctx: MutationCtx,
+  name: string,
+  email?: string,
+  phone?: string
+): Promise<Id<"guests">> {
+  const guests = await ctx.db.query("guests").collect();
+  const match = guests.find(
+    (g) =>
+      (email && g.email.toLowerCase() === email.toLowerCase()) ||
+      g.name.toLowerCase() === name.toLowerCase()
+  );
+  return (
+    match?._id ??
+    (await ctx.db.insert("guests", {
+      name,
+      email: email || `${name.toLowerCase().replace(/[^a-z]+/g, ".")}@guest.upscale.id`,
+      phone: phone || "—",
+      loyaltyTier: "Silver",
+    }))
+  );
+}
+
+/** Add rooms to an existing transient group: bump/create sub-blocks, insert
+ *  one reservation per room continuing the bookingRoomIndex sequence. */
+export async function appendPartyRooms(
+  ctx: MutationCtx,
+  block: Doc<"group_blocks">,
+  guestId: Id<"guests">,
+  rooms: PartyRoom[],
+  opts: { channel: string; status: string; refBase?: string }
+): Promise<Id<"reservations">[]> {
+  const status = opts.status === "tentative" ? "tentative" : "confirmed";
+  const checkOut = addDaysIso(block.startDate, block.nights);
+  const siblings = await ctx.db
+    .query("reservations")
+    .withIndex("by_group", (q) => q.eq("groupId", block._id))
+    .collect();
+  let idx = siblings.reduce((m, r) => Math.max(m, r.bookingRoomIndex ?? 0), 0);
+  const subs = await ctx.db
+    .query("group_subblocks")
+    .withIndex("by_group", (q) => q.eq("groupId", block._id))
+    .collect();
+
+  const out: Id<"reservations">[] = [];
+  for (const room of rooms) {
+    idx += 1;
+    let sub = subs.find((s) => s.roomType === room.roomType);
+    if (!sub) {
+      const q0 = await quoteStay(ctx, {
+        propertyId: block.propertyId,
+        roomType: room.roomType,
+        checkIn: block.startDate,
+        checkOut,
+      });
+      const subId = await ctx.db.insert("group_subblocks", {
+        groupId: block._id,
+        propertyId: block.propertyId,
+        roomType: room.roomType,
+        blocked: 0,
+        rate: rpNum(q0.nights[0]?.rate ?? 0),
+      });
+      sub = (await ctx.db.get(subId))!;
+      subs.push(sub);
+    }
+    await ctx.db.patch(sub._id, { blocked: sub.blocked + 1 });
+    sub.blocked += 1;
+    const ratePlanId = await ensureSubBlockPlan(ctx, block, sub);
+    const q = await quoteStay(ctx, {
+      propertyId: block.propertyId,
+      roomType: room.roomType,
+      checkIn: block.startDate,
+      checkOut,
+      ratePlanId,
+    });
+    const roomNumber = room.roomId
+      ? (await ctx.db.get(room.roomId))?.roomNumber
+      : undefined;
+    const id = await ctx.db.insert("reservations", {
+      guestId,
+      propertyId: block.propertyId,
+      roomId: room.roomId,
+      roomNumber,
+      checkIn: block.startDate,
+      checkOut,
+      status,
+      rate: rpNum(q.nights[0]?.rate ?? 0),
+      totalAmount: rpNum(q.total),
+      channel: opts.channel,
+      roomType: room.roomType,
+      adults: 2,
+      children: 0,
+      groupId: block._id,
+      bookingRoomIndex: idx,
+      externalRef:
+        room.roomExternalRef ??
+        (opts.refBase ? `${opts.refBase}-${String(idx).padStart(2, "0")}` : undefined),
+      ratePlanId,
+    });
+    out.push(id);
+  }
+  return out;
+}
+
+/** Create a multi-room booking as a kind:"transient" group. Auth-free core. */
+export async function createTransientCore(
+  ctx: MutationCtx,
+  args: CoreArgs & { actorEmail?: string }
+): Promise<Id<"group_blocks">> {
+  if (args.rooms.length === 0) throw new Error("At least one room required");
+  const status = args.status === "tentative" ? "tentative" : "confirmed";
+  const guestId = await sharedGuest(ctx, args.guestName, args.email, args.phone);
+  const label =
+    args.rooms.length > 1
+      ? `${args.guestName} · ${args.rooms.length} rooms`
+      : `${args.guestName} party`;
+  const groupId = await ctx.db.insert("group_blocks", {
+    propertyId: args.propertyId,
+    name: label,
+    kind: "transient",
+    externalRef: args.externalRef,
+    status: status === "tentative" ? "Tentative" : "Definite",
+    startDate: args.checkIn,
+    nights: nights(args.checkIn, args.checkOut),
+    cutoffDate: args.checkIn,
+    contractLabel: "n/a",
+    salesManager: args.actorEmail ?? "front desk",
+    billing: "Individual folios",
+    billingMode: "individual",
+    depositStatus: "Not received",
+    depositAmount: "Rp 0",
+    concessions: "",
+    contact: args.email ?? args.phone ?? "",
+  });
+  const block = (await ctx.db.get(groupId))!;
+  await appendPartyRooms(ctx, block, guestId, args.rooms, {
+    channel: args.channel,
+    status,
+    refBase: args.externalRef,
+  });
+  return groupId;
+}
+
 /**
  * A multi-room booking — one guest / party / OTA confirmation holding several
  * rooms. Modelled as a `kind: "transient"` group so it shares the calendar
- * lane, folio routing and reservation-list grouping with event blocks, but
- * without cut-off / attrition / contract.
+ * lane, folio routing and reservation-list grouping with event blocks.
  */
 export const createTransient = mutation({
   args: {
@@ -734,7 +890,7 @@ export const createTransient = mutation({
     checkIn: v.string(),
     checkOut: v.string(),
     channel: v.string(),
-    status: v.string(), // 'confirmed' | 'tentative'
+    status: v.string(),
     externalRef: v.optional(v.string()),
     rooms: v.array(
       v.object({
@@ -748,115 +904,10 @@ export const createTransient = mutation({
       propertyId: args.propertyId,
       requireProperty: "front_office",
     });
-    if (args.rooms.length === 0) throw new Error("At least one room required");
-    const n = nights(args.checkIn, args.checkOut);
-    const status =
-      args.status === "tentative" ? "tentative" : "confirmed";
-
-    // Shared guest record for the whole party.
-    const guests = await ctx.db.query("guests").collect();
-    const match = guests.find(
-      (g) =>
-        (args.email && g.email.toLowerCase() === args.email.toLowerCase()) ||
-        g.name.toLowerCase() === args.guestName.toLowerCase()
-    );
-    const guestId =
-      match?._id ??
-      (await ctx.db.insert("guests", {
-        name: args.guestName,
-        email:
-          args.email ||
-          `${args.guestName.toLowerCase().replace(/[^a-z]+/g, ".")}@guest.upscale.id`,
-        phone: args.phone || "—",
-        loyaltyTier: "Silver",
-      }));
-
-    const label =
-      args.rooms.length > 1
-        ? `${args.guestName} · ${args.rooms.length} rooms`
-        : `${args.guestName} party`;
-    const groupId = await ctx.db.insert("group_blocks", {
-      propertyId: args.propertyId,
-      name: label,
-      kind: "transient",
-      externalRef: args.externalRef,
-      status: status === "tentative" ? "Tentative" : "Definite",
-      startDate: args.checkIn,
-      nights: n,
-      cutoffDate: args.checkIn, // no cut-off concept for a transient booking
-      contractLabel: "n/a",
-      salesManager: scope.email ?? "front desk",
-      billing: "Individual folios",
-      billingMode: "individual",
-      depositStatus: "Not received",
-      depositAmount: "Rp 0",
-      concessions: "",
-      contact: args.email ?? args.phone ?? "",
+    const groupId = await createTransientCore(ctx, {
+      ...args,
+      actorEmail: scope.email ?? undefined,
     });
-    const block = (await ctx.db.get(groupId))!;
-
-    // One sub-block per distinct room type (blocked == picked, so held = 0).
-    const byType = new Map<string, number>();
-    for (const r of args.rooms)
-      byType.set(r.roomType, (byType.get(r.roomType) ?? 0) + 1);
-    const planByType = new Map<string, Id<"rate_plans">>();
-    for (const [roomType, count] of byType) {
-      const q = await quoteStay(ctx, {
-        propertyId: args.propertyId,
-        roomType,
-        checkIn: args.checkIn,
-        checkOut: args.checkOut,
-      });
-      const subId = await ctx.db.insert("group_subblocks", {
-        groupId,
-        propertyId: args.propertyId,
-        roomType,
-        blocked: count,
-        rate: rpNum(q.nights[0]?.rate ?? 0),
-      });
-      const planId = await ensureSubBlockPlan(
-        ctx,
-        block,
-        (await ctx.db.get(subId))!
-      );
-      planByType.set(roomType, planId);
-    }
-
-    // One reservation per physical room.
-    let idx = 0;
-    for (const room of args.rooms) {
-      idx += 1;
-      const ratePlanId = planByType.get(room.roomType);
-      const q = await quoteStay(ctx, {
-        propertyId: args.propertyId,
-        roomType: room.roomType,
-        checkIn: args.checkIn,
-        checkOut: args.checkOut,
-        ratePlanId,
-      });
-      let roomNumber: string | undefined;
-      if (room.roomId) roomNumber = (await ctx.db.get(room.roomId))?.roomNumber;
-      await ctx.db.insert("reservations", {
-        guestId,
-        propertyId: args.propertyId,
-        roomId: room.roomId,
-        roomNumber,
-        checkIn: args.checkIn,
-        checkOut: args.checkOut,
-        status,
-        rate: rpNum(q.nights[0]?.rate ?? 0),
-        totalAmount: rpNum(q.total),
-        channel: args.channel,
-        roomType: room.roomType,
-        adults: 2,
-        children: 0,
-        groupId,
-        bookingRoomIndex: idx,
-        externalRef: args.externalRef,
-        ratePlanId,
-      });
-    }
-
     await writeAudit(ctx, scope, "booking.multiroom", {
       propertyId: args.propertyId,
       target: args.guestName,

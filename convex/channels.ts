@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms, findOrCreateGuest } from "./reservations";
 import { quoteStay } from "./rates";
 import { authorize } from "./authz";
+import { createTransientCore, appendPartyRooms } from "./groups";
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -87,6 +88,152 @@ async function ingestOne(ctx: MutationCtx, args: IngestArgs) {
   return { created: true as const, reservationId, roomsAssigned };
 }
 
+/** Strip a trailing "-01" / "-2" room suffix, returning the parent ref. */
+function parentRefOf(ref: string): { parent: string; suffixed: boolean } {
+  const m = ref.match(/^(.*?)[-_](\d{1,3})$/);
+  return m ? { parent: m[1], suffixed: true } : { parent: ref, suffixed: false };
+}
+
+/**
+ * OTA / channel-manager booking, single- or multi-room. Handles both OTA
+ * shapes:
+ *   Booking.com  — one `externalRef`, several `rooms`
+ *   Agoda/Expedia — parent ref + per-room suffix ("ABC-01", "ABC-02"),
+ *                   pushed one room at a time; each call appends to the
+ *                   same transient group.
+ * Idempotent: a repeat of the same parent ref (single room) or exact room
+ * ref is a no-op.
+ */
+type IngestBookingArgs = {
+  propertyId: Id<"properties">;
+  channel: string;
+  externalRef: string;
+  guestName: string;
+  email?: string;
+  phone?: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: {
+    roomType: string;
+    adults?: number;
+    children?: number;
+    roomExternalRef?: string;
+  }[];
+};
+
+async function ingestBookingImpl(ctx: MutationCtx, args: IngestBookingArgs) {
+  {
+    const { parent, suffixed } = parentRefOf(args.externalRef);
+
+    // Already have a transient group for this parent ref? Append the rooms.
+    const existingGroup = await ctx.db
+      .query("group_blocks")
+      .withIndex("by_external_ref", (q) => q.eq("externalRef", parent))
+      .first();
+    if (existingGroup) {
+      // Idempotency: skip rooms whose exact suffix ref already exists.
+      const have = new Set(
+        (
+          await ctx.db
+            .query("reservations")
+            .withIndex("by_group", (q) => q.eq("groupId", existingGroup._id))
+            .collect()
+        ).map((r) => r.externalRef)
+      );
+      const fresh = args.rooms.filter(
+        (r) => !r.roomExternalRef || !have.has(r.roomExternalRef)
+      );
+      if (fresh.length === 0)
+        return { created: false as const, appended: 0, groupId: existingGroup._id };
+      const guest = await findOrCreateGuest(
+        ctx,
+        args.guestName,
+        args.email,
+        args.phone
+      );
+      const ids = await appendPartyRooms(ctx, existingGroup, guest, fresh, {
+        channel: args.channel,
+        status: "confirmed",
+        refBase: parent,
+      });
+      await ctx.db.patch(existingGroup._id, {
+        name: `${args.guestName} · ${have.size + ids.length} rooms`,
+      });
+      return { created: false as const, appended: ids.length, groupId: existingGroup._id };
+    }
+
+    // Single-room, no suffix — a plain reservation (idempotent on the ref).
+    if (args.rooms.length === 1 && !suffixed) {
+      return ingestOne(ctx, {
+        propertyId: args.propertyId,
+        channel: args.channel,
+        externalRef: args.externalRef,
+        guestName: args.guestName,
+        email: args.email,
+        phone: args.phone,
+        checkIn: args.checkIn,
+        checkOut: args.checkOut,
+        roomType: args.rooms[0].roomType,
+        adults: args.rooms[0].adults,
+        children: args.rooms[0].children,
+      });
+    }
+
+    // Multi-room (or first push of a suffixed booking) — new transient group.
+    const groupId = await createTransientCore(ctx, {
+      propertyId: args.propertyId,
+      guestName: args.guestName,
+      email: args.email,
+      phone: args.phone,
+      checkIn: args.checkIn,
+      checkOut: args.checkOut,
+      channel: args.channel,
+      status: "confirmed",
+      externalRef: parent,
+      rooms: args.rooms.map((r) => ({
+        roomType: r.roomType,
+        roomExternalRef: r.roomExternalRef,
+      })),
+    });
+    const property = await ctx.db.get(args.propertyId);
+    let roomsAssigned = 0;
+    if (property?.autoAssignRooms)
+      ({ assigned: roomsAssigned } = await assignPropertyRooms(
+        ctx,
+        args.propertyId
+      ));
+    return { created: true as const, appended: args.rooms.length, groupId, roomsAssigned };
+  }
+}
+
+export const ingestBooking = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    channel: v.string(),
+    externalRef: v.string(),
+    guestName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    rooms: v.array(
+      v.object({
+        roomType: v.string(),
+        adults: v.optional(v.number()),
+        children: v.optional(v.number()),
+        roomExternalRef: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
+    return ingestBookingImpl(ctx, args);
+  },
+});
+
 /** Take one booking from a channel / OTA push and turn it into a reservation. */
 export const ingestChannelBooking = mutation({
   args: {
@@ -148,19 +295,26 @@ export const pullBookings = mutation({
     let roomsAssigned = 0;
     for (let i = 0; i < n; i++) {
       const lead = 2 + ((i * 5 + seed) % 21);
-      const nights = 1 + (i % 4);
+      const stayNights = 1 + (i % 4);
       const checkIn = addDaysIso(anchor, lead);
-      const result = await ingestOne(ctx, {
+      const checkOut = addDaysIso(checkIn, stayNights);
+      const ref = `${args.channel.slice(0, 3).toUpperCase()}-${stamp}-${i}`;
+      // every third fabricated booking is a 2–3 room party
+      const roomCount = i % 3 === 2 ? 2 + (i % 2) : 1;
+      const res = await ingestBookingImpl(ctx, {
         propertyId: args.propertyId,
         channel: args.channel,
-        externalRef: `${args.channel.slice(0, 3).toUpperCase()}-${stamp}-${i}`,
+        externalRef: ref,
         guestName: fakeName(i + seed),
         checkIn,
-        checkOut: addDaysIso(checkIn, nights),
-        roomType: ROOM_TYPES[(i + seed) % ROOM_TYPES.length],
+        checkOut,
+        rooms: Array.from({ length: roomCount }, (_, k) => ({
+          roomType: ROOM_TYPES[(i + seed + k) % ROOM_TYPES.length],
+        })),
       });
-      if (result.created) created += 1;
-      roomsAssigned += result.roomsAssigned;
+      if (res.created) created += 1;
+      if ("roomsAssigned" in res && res.roomsAssigned)
+        roomsAssigned += res.roomsAssigned;
     }
     return { created, roomsAssigned, channel: args.channel };
   },

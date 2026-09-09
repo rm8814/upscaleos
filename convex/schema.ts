@@ -249,7 +249,9 @@ export default defineSchema({
     concessions: v.string(),
     contact: v.string(),
     fbMinimum: v.optional(v.number()), // contracted F&B / meeting minimum
-  }).index("by_property", ["propertyId"]),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_external_ref", ["externalRef"]),
   group_subblocks: defineTable({
     groupId: v.id("group_blocks"),
     propertyId: v.id("properties"),

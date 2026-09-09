@@ -213,7 +213,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* AI suggestion + channel mix */}
+      {/* AI suggestion + guest sentiment */}
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-[2fr_1fr]">
         <div className="flex items-center gap-3.5 rounded-lg border border-ai-edge bg-ai-tint p-[18px]">
           <Sparkles className="h-[22px] w-[22px] flex-none text-ai-fg" />
@@ -230,26 +230,17 @@ export default function DashboardPage() {
             Apply
           </button>
         </div>
-        <Card className="flex flex-col gap-2 p-4">
-          <Eyebrow>Channel mix · next 30 nights</Eyebrow>
-          {!board && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
-          {board && board.channelMix.length === 0 && (
-            <div className="py-1.5 text-12 text-fg-3">No rooms on the books.</div>
-          )}
-          {(board?.channelMix ?? []).map((c) => (
-            <div key={c.name} className="flex items-center gap-2">
-              <span className="w-[70px] text-12 text-fg-2">{c.name}</span>
-              <span className="h-1.5 flex-1 overflow-hidden rounded-pill bg-deep">
-                <span
-                  className="block h-full bg-accent-violet"
-                  style={{ width: `${c.pct}%` }}
-                />
-              </span>
-              <span className="w-8 text-right font-mono text-[11px] text-fg-3">
-                {c.pct}%
-              </span>
+        <Card className="p-4">
+          <Eyebrow className="mb-2.5">Guest sentiment</Eyebrow>
+          <div className="flex items-baseline gap-2">
+            <div className="font-mono text-28 font-bold text-ice">4.8</div>
+            <div className="flex gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} className="h-3.5 w-3.5 text-warning" fill="currentColor" />
+              ))}
             </div>
-          ))}
+          </div>
+          <div className="mt-1 text-12 text-fg-3">1,204 reviews · +0.1 vs. last month</div>
         </Card>
       </div>
 
@@ -268,7 +259,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Revenue by source / Room status / Guest sentiment */}
+      {/* Revenue by source / Room status / Channel mix */}
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-[1.4fr_1fr_1fr]">
         <Card className="p-4">
           <Eyebrow className="mb-2.5">Revenue by source · last 30 days</Eyebrow>
@@ -301,17 +292,26 @@ export default function DashboardPage() {
           {!roomStatus && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
         </Card>
 
-        <Card className="p-4">
-          <Eyebrow className="mb-2.5">Guest sentiment</Eyebrow>
-          <div className="flex items-baseline gap-2">
-            <div className="font-mono text-28 font-bold text-ice">4.8</div>
-            <div className="flex gap-0.5">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} className="h-3.5 w-3.5 text-warning" fill="currentColor" />
-              ))}
+        <Card className="flex flex-col gap-2 p-4">
+          <Eyebrow>Channel mix · next 30 nights</Eyebrow>
+          {!board && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
+          {board && board.channelMix.length === 0 && (
+            <div className="py-1.5 text-12 text-fg-3">No rooms on the books.</div>
+          )}
+          {(board?.channelMix ?? []).map((c) => (
+            <div key={c.name} className="flex items-center gap-2">
+              <span className="w-[70px] text-12 text-fg-2">{c.name}</span>
+              <span className="h-1.5 flex-1 overflow-hidden rounded-pill bg-deep">
+                <span
+                  className="block h-full bg-accent-violet"
+                  style={{ width: `${c.pct}%` }}
+                />
+              </span>
+              <span className="w-8 text-right font-mono text-[11px] text-fg-3">
+                {c.pct}%
+              </span>
             </div>
-          </div>
-          <div className="mt-1 text-12 text-fg-3">1,204 reviews · +0.1 vs. last month</div>
+          ))}
         </Card>
       </div>
 

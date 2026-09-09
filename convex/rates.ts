@@ -336,59 +336,67 @@ export const getOverrides = query({
 });
 
 /**
- * The full rate grid: effective rate + which rule produced it, for every room
- * type across a date window. The rates screen renders this directly — it does
- * no rate math of its own.
+ * The effective rate + which rule produced it, for every room type across a
+ * date window. Shared by the rates screen and the calendar tape chart so
+ * neither does rate math of its own.
  */
+export async function buildRateGrid(
+  ctx: Ctx,
+  propertyId: Id<"properties">,
+  from: string,
+  to: string
+): Promise<{ roomType: string; date: string; rate: number; source: RateSource }[]> {
+  const [adjustments, overrides] = await Promise.all([
+    ctx.db
+      .query("rate_adjustments")
+      .withIndex("by_property_date", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+    ctx.db
+      .query("rate_overrides")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+  ]);
+  const adjByDate = new Map(
+    adjustments
+      .filter((a) => a.date >= from && a.date <= to)
+      .map((a) => [a.date, a.pct])
+  );
+  const ovByCell = new Map(
+    overrides
+      .filter((o) => o.date >= from && o.date <= to)
+      .map((o) => [`${o.roomType}|${o.date}`, o.amount])
+  );
+
+  const out: {
+    roomType: string;
+    date: string;
+    rate: number;
+    source: RateSource;
+  }[] = [];
+  for (const roomType of ROOM_TYPES) {
+    for (let d = from; d <= to; d = addDaysIso(d, 1)) {
+      const rack = nightlyRateFor(roomType, d);
+      const pct = adjByDate.get(d);
+      const manual = ovByCell.get(`${roomType}|${d}`);
+      let rate = rack;
+      let source: RateSource = "rack";
+      if (pct !== undefined) {
+        rate = Math.round(rack * (1 + pct));
+        source = "dynamic";
+      } else if (manual !== undefined) {
+        rate = manual;
+        source = "manual";
+      }
+      out.push({ roomType, date: d, rate, source });
+    }
+  }
+  return out;
+}
+
 export const getRatesGrid = query({
   args: { propertyId: v.id("properties"), from: v.string(), to: v.string() },
-  handler: async (ctx, args) => {
-    const [adjustments, overrides] = await Promise.all([
-      ctx.db
-        .query("rate_adjustments")
-        .withIndex("by_property_date", (q) => q.eq("propertyId", args.propertyId))
-        .collect(),
-      ctx.db
-        .query("rate_overrides")
-        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
-        .collect(),
-    ]);
-    const adjByDate = new Map(
-      adjustments
-        .filter((a) => a.date >= args.from && a.date <= args.to)
-        .map((a) => [a.date, a.pct])
-    );
-    const ovByCell = new Map(
-      overrides
-        .filter((o) => o.date >= args.from && o.date <= args.to)
-        .map((o) => [`${o.roomType}|${o.date}`, o.amount])
-    );
-
-    const out: {
-      roomType: string;
-      date: string;
-      rate: number;
-      source: RateSource;
-    }[] = [];
-    for (const roomType of ROOM_TYPES) {
-      for (let d = args.from; d <= args.to; d = addDaysIso(d, 1)) {
-        const rack = nightlyRateFor(roomType, d);
-        const pct = adjByDate.get(d);
-        const manual = ovByCell.get(`${roomType}|${d}`);
-        let rate = rack;
-        let source: RateSource = "rack";
-        if (pct !== undefined) {
-          rate = Math.round(rack * (1 + pct));
-          source = "dynamic";
-        } else if (manual !== undefined) {
-          rate = manual;
-          source = "manual";
-        }
-        out.push({ roomType, date: d, rate, source });
-      }
-    }
-    return out;
-  },
+  handler: async (ctx, args) =>
+    buildRateGrid(ctx, args.propertyId, args.from, args.to),
 });
 
 /** Every rate plan for a property, with a live count of linked reservations. */

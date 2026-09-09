@@ -13,6 +13,7 @@ import type * as adminUsers from "../adminUsers.js";
 import type * as ar from "../ar.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as calendar from "../calendar.js";
 import type * as channels from "../channels.js";
 import type * as commissions from "../commissions.js";
 import type * as crons from "../crons.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   ar: typeof ar;
   auth: typeof auth;
   authz: typeof authz;
+  calendar: typeof calendar;
   channels: typeof channels;
   commissions: typeof commissions;
   crons: typeof crons;

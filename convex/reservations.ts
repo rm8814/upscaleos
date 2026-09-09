@@ -345,6 +345,49 @@ export const updateDates = mutation({
       }
     }
 
+    // Refuse a move that would double-book: the target room (new one, or the
+    // one it already holds) must be free for every night of the new stay —
+    // no other live reservation, no dated OOO/OOS block.
+    const targetRoomId = args.roomId ?? res.roomId;
+    if (targetRoomId) {
+      const [siblings, blocks] = await Promise.all([
+        ctx.db
+          .query("reservations")
+          .withIndex("by_property", (q) => q.eq("propertyId", res.propertyId))
+          .collect(),
+        ctx.db
+          .query("room_blocks")
+          .withIndex("by_room", (q) => q.eq("roomId", targetRoomId))
+          .collect(),
+      ]);
+      const clash = siblings.find(
+        (o) =>
+          o._id !== res._id &&
+          o.roomId === targetRoomId &&
+          !RELEASED_STATUSES.has(o.status) &&
+          o.checkIn < args.checkOut &&
+          o.checkOut > args.checkIn
+      );
+      if (clash) {
+        const room = await ctx.db.get(targetRoomId);
+        throw new Error(
+          `Room ${room?.roomNumber ?? ""} is already booked ${clash.checkIn} → ${clash.checkOut}.`
+        );
+      }
+      const blocked = blocks.find(
+        (b) =>
+          !b.clearedOn &&
+          b.from < args.checkOut &&
+          (b.to === "" || b.to > args.checkIn)
+      );
+      if (blocked) {
+        const room = await ctx.db.get(targetRoomId);
+        throw new Error(
+          `Room ${room?.roomNumber ?? ""} is ${blocked.kind} (${blocked.reason}) over those dates.`
+        );
+      }
+    }
+
     // Re-price the cached estimate against the (possibly new) room type and
     // dates via the single pricing path.
     const q = await quoteStay(ctx, {

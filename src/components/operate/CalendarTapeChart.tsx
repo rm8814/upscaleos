@@ -23,18 +23,16 @@ import ReservationSlideOver, {
   type SlideOverReservation,
 } from "@/components/guests/ReservationSlideOver";
 
-const DAYS = 10;
-const LEAD = 3; // days of the window that sit before the business date
+const DAYS = 14;
+const STEP = 7; // days the ‹ / › buttons shift the window
 const FALLBACK_TODAY = "2026-09-08";
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
-const NIGHTLY: Record<string, number> = {
-  "Deluxe Twin": 1_450_000,
-  "Double Queen": 1_850_000,
-  "King Suite": 2_600_000,
-  "Presidential Suite": 6_900_000,
-};
 const HK_STATUSES = ["Vacant Clean", "Vacant Dirty", "Occupied", "Inspected", "OOO", "OOS"];
+const RATE_SOURCE_COLOR: Record<string, string> = {
+  rack: "var(--fg-3)",
+  dynamic: "var(--accent-cyan)",
+  manual: "var(--accent-violet-hi)",
+};
 const CHANNELS = ["Direct", "Booking.com", "Agoda", "Expedia", "Traveloka"];
 const CHANNEL_COLOR: Record<string, string> = {
   Direct: "var(--accent-cyan)",
@@ -58,15 +56,15 @@ const money = (n: number) => Math.round(n).toLocaleString("en-US");
 const rp = (n: number) => `Rp ${money(n)}`;
 const nightsBetween = (a: string, b: string) => Math.max(1, diffDays(a, b));
 
-type Rooms = FunctionReturnType<typeof api.operate.getRooms>;
-type Reservations = FunctionReturnType<typeof api.reservations.getByProperty>;
+type Board = FunctionReturnType<typeof api.calendar.getCalendarBoard>;
+type BoardRes = Board["reservations"][number];
+type BoardRoom = Board["rooms"][number];
+type BoardBlock = Board["blocks"][number];
 
 export default function CalendarTapeChart() {
   const { activeProperty } = useProperty();
   const toast = useToast();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
-  const rooms = useQuery(api.operate.getRooms, arg);
-  const reservations = useQuery(api.reservations.getByProperty, arg);
   const waitlist = useQuery(api.waitlist.list, arg);
 
   const updateDates = useMutation(api.reservations.updateDates);
@@ -93,40 +91,67 @@ export default function CalendarTapeChart() {
   // The PMS business date drives "today" — not the wall clock. It only
   // advances when the night audit runs (see /finance/night-audit).
   const todayIso = activeProperty?.businessDate ?? FALLBACK_TODAY;
+  // Window start: the business date, unless the user has paged / picked away.
+  const [anchorIso, setAnchorIso] = useState<string | null>(null);
+  const startIso = anchorIso ?? todayIso;
   const days = useMemo(() => {
-    const t = new Date(todayIso + "T00:00:00Z");
-    return Array.from({ length: DAYS }, (_, i) => addDays(t, i - LEAD));
-  }, [todayIso]);
+    const t = new Date(startIso + "T00:00:00Z");
+    return Array.from({ length: DAYS }, (_, i) => addDays(t, i));
+  }, [startIso]);
   const windowStartIso = iso(days[0]);
   const windowEndIso = iso(days[DAYS - 1]);
   const dayCol = (isoDate: string) => diffDays(windowStartIso, isoDate);
+  const shiftWindow = (deltaDays: number) =>
+    setAnchorIso(iso(addDays(new Date(startIso + "T00:00:00Z"), deltaDays)));
 
-  // Bookings with no room yet — hidden from the tape rows, surfaced below it.
-  const unassignedRes = useMemo(
-    () =>
-      (reservations ?? [])
-        .filter(
-          (r) =>
-            !r.roomId &&
-            r.status !== "cancelled" &&
-            r.status !== "departed" &&
-            r.checkOut > todayIso &&
-            r.checkIn <= windowEndIso
-        )
-        .sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
-    [reservations, todayIso, windowEndIso]
+  const board = useQuery(
+    api.calendar.getCalendarBoard,
+    activeProperty
+      ? { propertyId: activeProperty._id, from: windowStartIso, to: windowEndIso }
+      : "skip"
   );
+
+  const rooms = board?.rooms;
+  const reservations = board?.reservations;
+  // Every reservation the screen might reference (assigned rows + the
+  // sold-but-unassigned rail), for slide-over / context-menu lookups.
+  const allRes = useMemo(
+    () => [...(board?.reservations ?? []), ...(board?.unassigned ?? [])],
+    [board]
+  );
+
+  // Sold, not yet given a room number — surfaced in its own rail below.
+  const unassignedRes = board?.unassigned ?? [];
 
   const roomTypeNames = useMemo(
     () => Array.from(new Set((rooms ?? []).map((r) => r.type))),
     [rooms]
   );
 
+  // ---- rate grid + room blocks keyed for O(1) lookup --------------------
+  const rateCell = useMemo(() => {
+    const m = new Map<string, Board["rateGrid"][number]>();
+    for (const c of board?.rateGrid ?? []) m.set(`${c.roomType}|${c.date}`, c);
+    return m;
+  }, [board]);
+  const blocksByRoom = useMemo(() => {
+    const m = new Map<string, BoardBlock[]>();
+    for (const b of board?.blocks ?? []) {
+      if (!m.has(b.roomId)) m.set(b.roomId, []);
+      m.get(b.roomId)!.push(b);
+    }
+    return m;
+  }, [board]);
+  const blockOnRoomDate = (roomId: string, isoDate: string) =>
+    (blocksByRoom.get(roomId) ?? []).find(
+      (b) => b.from <= isoDate && (b.to === "" || b.to > isoDate)
+    );
+
   // ---- reservations keyed by room, after search + channel filter ----------
   const resByRoom = useMemo(() => {
-    const map = new Map<string, Reservations>();
+    const map = new Map<string, BoardRes[]>();
     for (const res of reservations ?? []) {
-      if (!res.roomId || res.status === "cancelled") continue;
+      if (!res.roomId) continue;
       if (channelFilter !== "All channels" && (res.channel ?? "Direct") !== channelFilter)
         continue;
       if (
@@ -143,44 +168,35 @@ export default function CalendarTapeChart() {
 
   // ---- groups by room type ---------------------------------------------
   const groups = useMemo(() => {
-    if (!rooms) return [];
-    const byType = new Map<string, Rooms>();
-    for (const r of rooms) {
+    if (!board) return [];
+    const byType = new Map<string, BoardRoom[]>();
+    for (const r of board.rooms) {
       if (typeFilter !== "All room types" && r.type !== typeFilter) continue;
       if (hkFilter !== "All housekeeping" && r.status !== hkFilter) continue;
       if (!byType.has(r.type)) byType.set(r.type, []);
       byType.get(r.type)!.push(r);
     }
     return Array.from(byType.entries()).map(([type, rs]) => {
-      const total = (rooms ?? []).filter((r) => r.type === type).length || 1;
-      const aggOcc = days.map((d) => {
-        const dISO = iso(d);
-        const occ = (reservations ?? []).filter(
-          (res) =>
-            res.roomType === type &&
-            res.status !== "cancelled" &&
-            res.checkIn <= dISO &&
-            res.checkOut > dISO
-        ).length;
-        return Math.round((occ / total) * 100);
-      });
-      const rates = days.map((d) =>
-        money((NIGHTLY[type] ?? 1_850_000) * DOW_MULT[d.getUTCDay()])
+      const occRow = board.typeOcc[type] ?? [];
+      const aggOcc = days.map(
+        (d) => occRow.find((x) => x.date === iso(d))?.occPct ?? 0
       );
-      return { type, rooms: rs, aggOcc, rates };
+      const rates = days.map((d) => {
+        const c = rateCell.get(`${type}|${iso(d)}`);
+        return { label: c ? money(c.rate) : "—", source: c?.source ?? "rack" };
+      });
+      const holds = days.map(
+        (d) => board.groupHolds[type]?.[iso(d)] ?? 0
+      );
+      return { type, rooms: rs, aggOcc, rates, holds };
     });
-  }, [rooms, reservations, typeFilter, hkFilter, days]);
+  }, [board, typeFilter, hkFilter, days, rateCell]);
 
-  const occByDay = days.map((d) => {
-    const dISO = iso(d);
-    const total = rooms?.length ?? 0;
-    const occ = (reservations ?? []).filter(
-      (r) => r.checkIn <= dISO && r.checkOut > dISO && r.status !== "cancelled"
-    ).length;
-    return total ? Math.round((occ / total) * 100) : 0;
-  });
+  const occByDay = days.map(
+    (d) => board?.occByDay.find((x) => x.date === iso(d)) ?? null
+  );
 
-  const blockColor = (r: Reservations[number]) =>
+  const blockColor = (r: BoardRes) =>
     colorBy === "channel"
       ? CHANNEL_COLOR[r.channel ?? "Direct"] ?? "var(--accent-violet)"
       : RES_STATUS_COLOR[r.status] ?? "var(--res-confirmed)";
@@ -216,7 +232,7 @@ export default function CalendarTapeChart() {
     typeChanged: boolean;
   } | null>(null);
 
-  const startDrag = (e: React.MouseEvent, res: Reservations[number]) => {
+  const startDrag = (e: React.MouseEvent, res: BoardRes) => {
     if (e.button !== 0) return;
     const track = (e.currentTarget as HTMLElement).parentElement;
     if (!track) return;
@@ -264,7 +280,39 @@ export default function CalendarTapeChart() {
       const targetRoom = roomChanged
         ? (rooms ?? []).find((r) => r._id === d.targetRoomId)
         : undefined;
-      const res = (reservations ?? []).find((r) => r._id === d.resId);
+      const res = allRes.find((r) => r._id === d.resId);
+      const landingRoomId = (roomChanged ? d.targetRoomId : d.origRoomId) as
+        | string
+        | undefined;
+
+      // Availability guard: the landing room must be free every night of the
+      // new stay — no other live reservation, no dated OOO/OOS block.
+      if (landingRoomId) {
+        for (
+          let nd = start;
+          nd < end;
+          nd = iso(addDays(new Date(nd + "T00:00:00Z"), 1))
+        ) {
+          const blk = blockOnRoomDate(landingRoomId, nd);
+          if (blk) {
+            toast(
+              `That room is ${blk.kind} (${blk.reason}) on ${dmIso(nd)}.`,
+              "error"
+            );
+            return;
+          }
+        }
+        const clash = (resByRoom.get(landingRoomId) ?? []).find(
+          (o) => o._id !== d.resId && o.checkIn < end && o.checkOut > start
+        );
+        if (clash) {
+          toast(
+            `${targetRoom?.roomNumber ?? d.origRoomNumber} is already booked (${clash.guestName}).`,
+            "error"
+          );
+          return;
+        }
+      }
 
       setPendingMove({
         resId: d.resId,
@@ -289,29 +337,32 @@ export default function CalendarTapeChart() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [drag, rooms, reservations]);
+  }, [drag, rooms, allRes, resByRoom, blocksByRoom]);
 
   const confirmMove = async () => {
     if (!pendingMove) return;
     const p = pendingMove;
     setPendingMove(null);
-    await updateDates({
-      id: p.resId as Id<"reservations">,
-      checkIn: p.checkIn,
-      checkOut: p.checkOut,
-      ...(p.roomId ? { roomId: p.roomId as Id<"rooms"> } : {}),
-    });
-    toast(
-      p.roomId
-        ? `Moved ${p.guestName} to ${p.toLabel} · ${p.toType}`
-        : `Rescheduled ${p.guestName}`,
-      "success"
-    );
+    try {
+      await updateDates({
+        id: p.resId as Id<"reservations">,
+        checkIn: p.checkIn,
+        checkOut: p.checkOut,
+        ...(p.roomId ? { roomId: p.roomId as Id<"rooms"> } : {}),
+      });
+      toast(
+        p.roomId
+          ? `Moved ${p.guestName} to ${p.toLabel} · ${p.toType}`
+          : `Rescheduled ${p.guestName}`,
+        "success"
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Move rejected", "error");
+    }
   };
 
-  const selectedRes =
-    (reservations ?? []).find((r) => r._id === openResId) ?? null;
-  const ctxRes = (reservations ?? []).find((r) => r._id === ctxMenu?.resId) ?? null;
+  const selectedRes = allRes.find((r) => r._id === openResId) ?? null;
+  const ctxRes = allRes.find((r) => r._id === ctxMenu?.resId) ?? null;
 
   const GRID = { gridTemplateColumns: `150px repeat(${DAYS}, 1fr)` } as React.CSSProperties;
 
@@ -394,6 +445,36 @@ export default function CalendarTapeChart() {
       {/* Range + legend */}
       <div className="mb-3 flex flex-wrap items-center gap-2.5">
         <PmsDateChip />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => shiftWindow(-STEP)}
+            className="rounded-sm border border-line bg-elevated px-2 py-1.5 text-12 text-fg-2 hover:border-line-strong"
+            aria-label="Previous week"
+          >
+            ‹
+          </button>
+          <input
+            type="date"
+            value={startIso}
+            onChange={(e) => e.target.value && setAnchorIso(e.target.value)}
+            className="rounded-sm border border-line bg-elevated px-2 py-1.5 font-mono text-12 text-ice"
+          />
+          <button
+            onClick={() => shiftWindow(STEP)}
+            className="rounded-sm border border-line bg-elevated px-2 py-1.5 text-12 text-fg-2 hover:border-line-strong"
+            aria-label="Next week"
+          >
+            ›
+          </button>
+          {anchorIso && anchorIso !== todayIso && (
+            <button
+              onClick={() => setAnchorIso(null)}
+              className="rounded-sm border border-line bg-elevated px-2 py-1.5 text-12 text-accent-violet-hi hover:border-line-strong"
+            >
+              Today
+            </button>
+          )}
+        </div>
         <div className="text-12 text-fg-3">
           {dm(days[0])} – {dm(days[DAYS - 1])}
         </div>
@@ -483,16 +564,47 @@ export default function CalendarTapeChart() {
                       · {g.rooms.length}
                     </span>
                   </div>
-                  {(isCollapsed ? g.aggOcc : g.rates).map((cell, i) => (
+                  {days.map((_, i) => (
                     <div
                       key={i}
                       className="border-l border-line-soft py-2 text-center font-mono text-[10.5px]"
-                      style={{ color: isCollapsed ? "var(--accent-cyan)" : "var(--fg-3)" }}
+                      style={{
+                        color: isCollapsed
+                          ? "var(--accent-cyan)"
+                          : RATE_SOURCE_COLOR[g.rates[i].source],
+                      }}
+                      title={
+                        isCollapsed
+                          ? `${g.aggOcc[i]}% sold`
+                          : `${g.rates[i].source} rate`
+                      }
                     >
-                      {isCollapsed ? `${cell}%` : cell}
+                      {isCollapsed ? `${g.aggOcc[i]}%` : g.rates[i].label}
                     </div>
                   ))}
                 </div>
+
+                {/* group-held inventory band — unpicked rooms in active blocks */}
+                {!isCollapsed && g.holds.some((h) => h > 0) && (
+                  <div className="grid border-b border-line-soft bg-deep/60" style={GRID}>
+                    <div className="px-3 py-1.5 text-[10.5px] font-medium text-res-tentative">
+                      Group hold
+                    </div>
+                    {g.holds.map((h, i) => (
+                      <div
+                        key={i}
+                        className="border-l border-line-soft py-1.5 text-center font-mono text-[10.5px]"
+                        style={{
+                          color: h > 0 ? "var(--res-tentative)" : "var(--fg-4)",
+                          background: h > 0 ? "var(--res-tentative-wash, transparent)" : undefined,
+                        }}
+                        title={h > 0 ? `${h} rooms held for a group block` : undefined}
+                      >
+                        {h > 0 ? h : "·"}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* rooms */}
                 {!isCollapsed &&
@@ -531,20 +643,35 @@ export default function CalendarTapeChart() {
                                 : undefined,
                           }}
                         >
-                          {days.map((d, i) => (
-                            <div
-                              key={i}
-                              onClick={() =>
-                                setNewRes({
-                                  roomId: room._id,
-                                  roomType: room.type,
-                                  checkIn: iso(d),
-                                  checkOut: iso(addDays(d, 1)),
-                                })
-                              }
-                              className="h-9 cursor-cell border-l border-line-soft transition-colors hover:bg-elevated"
-                            />
-                          ))}
+                          {days.map((d, i) => {
+                            const blk = blockOnRoomDate(room._id, iso(d));
+                            if (blk)
+                              return (
+                                <div
+                                  key={i}
+                                  title={`${blk.kind} — ${blk.reason}`}
+                                  className="h-9 border-l border-line-soft"
+                                  style={{
+                                    background:
+                                      "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 5px,color-mix(in srgb, var(--room-ooo) 22%, transparent) 5px,color-mix(in srgb, var(--room-ooo) 22%, transparent) 10px)",
+                                  }}
+                                />
+                              );
+                            return (
+                              <div
+                                key={i}
+                                onClick={() =>
+                                  setNewRes({
+                                    roomId: room._id,
+                                    roomType: room.type,
+                                    checkIn: iso(d),
+                                    checkOut: iso(addDays(d, 1)),
+                                  })
+                                }
+                                className="h-9 cursor-cell border-l border-line-soft transition-colors hover:bg-elevated"
+                              />
+                            );
+                          })}
                           {list.map((res) => {
                             const shift =
                               drag && drag.resId === res._id ? drag.dxDays : 0;
@@ -612,26 +739,44 @@ export default function CalendarTapeChart() {
             );
           })}
 
-          {/* Occupancy footer */}
+          {/* Occupancy footer — on the books, sellable-room basis, includes
+              sold rooms not yet assigned a number */}
           <div className="grid border-t border-line bg-deep" style={GRID}>
-            <div className="px-3 py-2.5 text-12 font-semibold text-ice">Total occupancy</div>
-            {occByDay.map((pct, i) => (
+            <div className="px-3 py-2.5 text-12 font-semibold text-ice">
+              Occupancy
+              <span className="ml-1 font-normal text-[10px] text-fg-4">
+                on the books
+              </span>
+            </div>
+            {occByDay.map((o, i) => (
               <div
                 key={i}
                 className="border-l border-line-soft py-2.5 text-center font-mono text-12 font-semibold text-accent-cyan"
+                title={
+                  o
+                    ? `${o.sold} of ${o.sellable} sellable${
+                        o.unassignedSold ? ` · ${o.unassignedSold} unassigned` : ""
+                      }`
+                    : undefined
+                }
               >
-                {pct}%
+                {o ? `${o.occPct}%` : "—"}
+                {o && o.unassignedSold > 0 && (
+                  <span className="ml-0.5 align-super text-[8px] text-res-tentative">
+                    +{o.unassignedSold}
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
       </Card>
 
-      {/* Unassigned bookings — confirmed/held reservations with no room */}
+      {/* Sold but not yet assigned a room number */}
       {unassignedRes.length > 0 && (
         <div className="mt-4">
           <Eyebrow className="mb-2.5">
-            Unassigned bookings · {unassignedRes.length} need a room
+            Sold, not yet assigned · {unassignedRes.length} need a room number
           </Eyebrow>
           <Card className="overflow-hidden p-0">
             {unassignedRes.map((r) => (
@@ -921,7 +1066,7 @@ function NewReservationModal({
   init: Partial<NewResInit>;
   today: string;
   propertyId: Id<"properties">;
-  rooms: Rooms;
+  rooms: BoardRoom[];
   roomTypeNames: string[];
   onClose: () => void;
   onCreate: (p: CreatePayload) => Promise<void>;

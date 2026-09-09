@@ -10,6 +10,7 @@ import {
 } from "./folios";
 import { nightlyRateFor } from "./revenue";
 import { authorize } from "./authz";
+import { issueInvoiceForFolio } from "./invoices";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -340,6 +341,11 @@ export const setStatus = mutation({
     else if (next === "departed" && prev === "inhouse") {
       await setRoom("Vacant Dirty");
       await closeFolio(ctx, args.id, bd);
+      const folio = await ctx.db
+        .query("folios")
+        .withIndex("by_reservation", (q) => q.eq("reservationId", args.id))
+        .first();
+      if (folio) await issueInvoiceForFolio(ctx, folio._id);
     }
     // Undo check-in.
     else if (prev === "inhouse" && next === "confirmed") {

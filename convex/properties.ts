@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
+import { issueInvoiceForFolio } from "./invoices";
 import { nightlyRateFor } from "./revenue";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
@@ -325,6 +326,7 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     .query("reservations")
     .withIndex("by_property", (q) => q.eq("propertyId", id))
     .collect();
+  const departedNow: Id<"reservations">[] = [];
   for (const r of reservations) {
     if (r.status === "inhouse" && r.checkOut <= newDate) {
       await ctx.db.patch(r._id, { status: "departed" });
@@ -334,12 +336,23 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
           updatedLabel: "just now",
         });
       await closeFolio(ctx, r._id, newDate);
+      departedNow.push(r._id);
     }
   }
 
   // A/R transfer: move just-closed folios that settle to a channel account
   // off the guest ledger and onto the city ledger.
   await transferClosedFoliosToCityLedger(ctx, id, newDate);
+
+  // Issue an invoice for each departed folio (after any A/R transfer, so a
+  // city-ledger folio's invoice already shows settled).
+  for (const rid of departedNow) {
+    const folio = await ctx.db
+      .query("folios")
+      .withIndex("by_reservation", (q) => q.eq("reservationId", rid))
+      .first();
+    if (folio) await issueInvoiceForFolio(ctx, folio._id);
+  }
 
   await writeNightStats(ctx, id, oldDate, newDate);
 

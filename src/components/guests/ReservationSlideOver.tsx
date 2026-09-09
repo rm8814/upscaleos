@@ -75,6 +75,9 @@ export default function ReservationSlideOver({
     businessDate
   );
 
+  const invoice = useQuery(api.invoices.getForReservation, {
+    reservationId: res._id as Id<"reservations">,
+  });
   const folio = useQuery(api.folios.getForReservation, {
     reservationId: res._id as Id<"reservations">,
   });
@@ -249,6 +252,22 @@ export default function ReservationSlideOver({
                   {folio.balance}
                 </span>
               </div>
+              {invoice && (
+                <Link
+                  href={`/finance/invoices/${invoice._id}`}
+                  className="mt-2 flex items-center justify-between rounded-sm border border-line bg-elevated px-2.5 py-1.5 text-[11.5px] hover:border-line-strong"
+                >
+                  <span className="font-mono text-fg-2">
+                    {invoice.number} ·{" "}
+                    <span className="capitalize">
+                      {invoice.status === "credit_note"
+                        ? "credit note"
+                        : invoice.status}
+                    </span>
+                  </span>
+                  <span className="text-accent-violet-hi">View invoice →</span>
+                </Link>
+              )}
             </>
           ) : (
             <div className="flex items-center justify-between border-t border-line pt-2 text-13">

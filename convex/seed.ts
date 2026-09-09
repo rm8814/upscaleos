@@ -1,6 +1,7 @@
 import { internalMutation } from "./_generated/server";
 import { nightlyRateFor } from "./revenue";
 import { roomNightTaxes } from "./taxEngine";
+import { issueInvoiceForFolio } from "./invoices";
 
 /**
  * Wipes and reseeds the demo property. Idempotent — safe to run repeatedly.
@@ -38,6 +39,8 @@ export const seed = internalMutation({
       "group_blocks",
       "daily_stats",
       "pickup_snapshots",
+      "invoices",
+      "invoice_counters",
       "ar_transactions",
       "ar_accounts",
       "waitlist",
@@ -510,6 +513,7 @@ export const seed = internalMutation({
       .query("reservations")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect();
+    const departedFolioIds: import("./_generated/dataModel").Id<"folios">[] = [];
     for (const r of allRes) {
       if (r.status !== "inhouse" && r.status !== "departed") continue;
       if (!r.roomId || !r.roomType) continue;
@@ -525,6 +529,7 @@ export const seed = internalMutation({
         openedOn: r.checkIn,
         closedOn: departed ? r.checkOut : undefined,
       });
+      if (departed) departedFolioIds.push(folioId);
       for (
         let d = r.checkIn;
         d <= lastNight && d <= businessDateIso;
@@ -555,6 +560,11 @@ export const seed = internalMutation({
           });
         }
       }
+    }
+
+    // ---- invoices for the checked-out folios ---------------------
+    for (const fId of departedFolioIds) {
+      await issueInvoiceForFolio(ctx, fId);
     }
 
     // ---- expenses (finance milestone) ------------------------------

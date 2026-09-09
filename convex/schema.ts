@@ -250,6 +250,44 @@ export default defineSchema({
     matchChannel: v.optional(v.string()), // OTA channel this account settles
   }).index("by_property", ["propertyId"]),
 
+  // ---- invoicing: sequential, gapless per property per year -------------
+  invoice_counters: defineTable({
+    propertyId: v.id("properties"),
+    year: v.number(),
+    next: v.number(),
+  }).index("by_property_year", ["propertyId", "year"]),
+
+  invoices: defineTable({
+    propertyId: v.id("properties"),
+    number: v.string(), // 'INV-2026-0007'
+    year: v.number(),
+    seq: v.number(),
+    reservationId: v.id("reservations"),
+    folioId: v.id("folios"),
+    guestId: v.id("guests"),
+    guestName: v.string(),
+    issuedOn: v.string(), // business date
+    issuedAt: v.number(),
+    status: v.string(), // 'issued' | 'paid' | 'void' | 'credit_note'
+    voidReason: v.optional(v.string()),
+    creditOf: v.optional(v.id("invoices")), // this row is a credit note for that invoice
+    charges: v.number(),
+    paid: v.number(),
+    total: v.number(),
+    balance: v.number(),
+    lines: v.array(
+      v.object({
+        description: v.string(),
+        code: v.optional(v.string()),
+        kind: v.string(),
+        amount: v.number(),
+      })
+    ),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_folio", ["folioId"])
+    .index("by_reservation", ["reservationId"]),
+
   ar_transactions: defineTable({
     accountId: v.id("ar_accounts"),
     propertyId: v.id("properties"),

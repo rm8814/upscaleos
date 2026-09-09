@@ -231,6 +231,26 @@ export const get = query({
     const picked = res.length;
     const pct = blocked ? Math.round((picked / blocked) * 100) : 0;
 
+    // Master A/R account: charges, deposits/payments, outstanding.
+    const arAcc = (
+      await ctx.db
+        .query("ar_accounts")
+        .withIndex("by_property", (q) => q.eq("propertyId", g.propertyId))
+        .collect()
+    ).find((a) => a.groupId === g._id);
+    let arCharges = 0;
+    let arPaid = 0;
+    if (arAcc) {
+      const tx = await ctx.db
+        .query("ar_transactions")
+        .withIndex("by_account", (q) => q.eq("accountId", arAcc._id))
+        .collect();
+      for (const t of tx) {
+        if (t.amount > 0) arCharges += t.amount;
+        else arPaid += -t.amount;
+      }
+    }
+
     return {
       id: g._id,
       name: g.name,
@@ -242,10 +262,22 @@ export const get = query({
       contractColor: CONTRACT_COLOR[g.contractLabel] ?? "var(--fg-2)",
       salesManager: g.salesManager,
       billing: g.billing,
+      billingMode: g.billingMode ?? "individual",
       depositStatus: g.depositStatus,
       depositAmount: g.depositAmount,
+      guaranteedPct: g.guaranteedPct ?? null,
+      fbMinimum: g.fbMinimum ?? 0,
       concessions: g.concessions,
       contact: g.contact,
+      master: {
+        hasAccount: !!arAcc,
+        charges: arCharges,
+        chargesLabel: rpNum(arCharges),
+        paid: arPaid,
+        paidLabel: rpNum(arPaid),
+        outstanding: arCharges - arPaid,
+        outstandingLabel: rpNum(arCharges - arPaid),
+      },
       released: g.released === true,
       releasedOn: g.releasedOn ?? null,
       blocked,
@@ -312,12 +344,84 @@ export const create = mutation({
     const block = (await ctx.db.get(groupId))!;
     const sub = (await ctx.db.get(subId))!;
     await ensureSubBlockPlan(ctx, block, sub);
+    if (block.billingMode === "master") await ensureGroupArAccount(ctx, block);
     await writeAudit(ctx, scope, "group.create", {
       propertyId: args.propertyId,
       target: args.name,
       detail: `${args.blocked} ${args.roomType} · ${args.startDate}`,
     });
     return groupId;
+  },
+});
+
+/**
+ * The group's master A/R account — where a "master"-billed block's member
+ * folios settle and where its deposit sits. Created lazily.
+ */
+async function ensureGroupArAccount(
+  ctx: MutationCtx,
+  block: Doc<"group_blocks">
+): Promise<Id<"ar_accounts">> {
+  const existing = (
+    await ctx.db
+      .query("ar_accounts")
+      .withIndex("by_property", (q) => q.eq("propertyId", block.propertyId))
+      .collect()
+  ).find((a) => a.groupId === block._id);
+  if (existing) return existing._id;
+  return ctx.db.insert("ar_accounts", {
+    propertyId: block.propertyId,
+    name: `${block.name} (group master)`,
+    type: "Group",
+    creditLimit: 0,
+    groupId: block._id,
+  });
+}
+
+/** Record a group deposit against the master A/R account. */
+export const recordDeposit = mutation({
+  args: {
+    groupId: v.id("group_blocks"),
+    amount: v.number(),
+    method: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const block = await ctx.db.get(args.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    const amt = Math.abs(Math.round(args.amount));
+    if (!amt) throw new Error("Amount must be greater than zero");
+    const accId = await ensureGroupArAccount(ctx, block);
+    const today =
+      (await ctx.db.get(block.propertyId))?.businessDate ?? block.startDate;
+    const count =
+      (
+        await ctx.db
+          .query("ar_transactions")
+          .withIndex("by_account", (q) => q.eq("accountId", accId))
+          .collect()
+      ).filter((t) => t.kind === "payment").length + 1;
+    await ctx.db.insert("ar_transactions", {
+      accountId: accId,
+      propertyId: block.propertyId,
+      date: today,
+      kind: "payment",
+      description: `Group deposit — ${args.method}`,
+      ref: `DEP-${block._id.slice(-4).toUpperCase()}-${count}`,
+      amount: -amt,
+    });
+    await ctx.db.patch(args.groupId, {
+      depositStatus: "Received",
+      depositAmount: rpNum(amt),
+    });
+    await writeAudit(ctx, scope, "group.deposit", {
+      propertyId: block.propertyId,
+      target: block.name,
+      detail: `${rpNum(amt)} · ${args.method}`,
+    });
   },
 });
 

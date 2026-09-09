@@ -692,6 +692,29 @@ export const seed = internalMutation({
         concessions: gs.concessions,
         contact: gs.contact,
       });
+      // Group master A/R account + deposit for master-billed blocks.
+      if ((gs.billingMode ?? "master") === "master") {
+        const depAmt = Number((gs.depositAmount.match(/[\d,]+/)?.[0] ?? "0").replace(/[^\d]/g, ""));
+        const accId = await ctx.db.insert("ar_accounts", {
+          propertyId,
+          name: `${gs.name} (group master)`,
+          type: "Group",
+          creditLimit: 0,
+          groupId,
+        });
+        if (depAmt > 0) {
+          await ctx.db.insert("ar_transactions", {
+            accountId: accId,
+            propertyId,
+            date: iso(addDays(TODAY, Math.max(gs.cutoffOffset - 7, -30))),
+            kind: "payment",
+            description: "Group deposit — bank transfer",
+            ref: `DEP-${String(groupId).slice(-4).toUpperCase()}`,
+            amount: -depAmt,
+          });
+        }
+      }
+
       const rateByType: Record<string, string> = {};
       const planByType: Record<string, import("./_generated/dataModel").Id<"rate_plans">> = {};
       for (const s of gs.subs) {

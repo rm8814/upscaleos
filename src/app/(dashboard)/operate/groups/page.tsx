@@ -55,6 +55,8 @@ export default function GroupsBlocksPage() {
   const createGroup = useMutation(api.groups.create);
   const addGuest = useMutation(api.groups.addRoomingGuest);
   const assignRoom = useMutation(api.reservations.assignOne);
+  const recordDeposit = useMutation(api.groups.recordDeposit);
+  const [depositDraft, setDepositDraft] = useState("");
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -374,12 +376,83 @@ export default function GroupsBlocksPage() {
                   <Eyebrow>Billing &amp; concessions</Eyebrow>
                   <div className="flex justify-between text-[12.5px]">
                     <span className="text-fg-3">Billing method</span>
-                    <span>{g.billing}</span>
+                    <span>
+                      {g.billing}{" "}
+                      <span className="text-fg-4">({g.billingMode})</span>
+                    </span>
                   </div>
-                  <div className="flex justify-between text-[12.5px]">
-                    <span className="text-fg-3">Deposit</span>
-                    <span className="font-mono">{g.depositAmount}</span>
+                  {g.master.hasAccount && (
+                    <div className="rounded-md border border-line bg-deep p-2.5 text-[12px]">
+                      <div className="mb-1 text-[10.5px] uppercase tracking-wide text-fg-3">
+                        Master account
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-fg-3">Charges</span>
+                        <span className="font-mono">{g.master.chargesLabel}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-fg-3">Deposit / paid</span>
+                        <span className="font-mono text-accent-cyan">
+                          {g.master.paidLabel}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex justify-between border-t border-line-soft pt-1 font-semibold">
+                        <span>Outstanding</span>
+                        <span className="font-mono">
+                          {g.master.outstandingLabel}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2 text-[12.5px]">
+                    <span className="text-fg-3">
+                      Deposit{" "}
+                      <span className="font-mono text-fg-2">
+                        {g.depositAmount}
+                      </span>{" "}
+                      · {g.depositStatus}
+                    </span>
+                    <span className="flex gap-1.5">
+                      <input
+                        value={depositDraft}
+                        onChange={(e) => setDepositDraft(e.target.value)}
+                        placeholder="Rp amount"
+                        className="w-[110px] rounded-sm border border-line bg-deep px-2 py-1 font-mono text-[11.5px] text-ice outline-none focus:border-accent-violet"
+                      />
+                      <button
+                        onClick={async () => {
+                          const amt = Number(depositDraft.replace(/[^\d]/g, ""));
+                          if (!amt) return;
+                          try {
+                            await recordDeposit({
+                              groupId: g.id,
+                              amount: amt,
+                              method: "Bank transfer",
+                            });
+                            setDepositDraft("");
+                            toast("Deposit recorded", "success");
+                          } catch (e) {
+                            toast(
+                              e instanceof Error ? e.message : "Could not record",
+                              "error"
+                            );
+                          }
+                        }}
+                        className="rounded-sm bg-accent-violet px-2.5 py-1 text-[11.5px] font-medium text-ice hover:bg-accent-violet-hi"
+                      >
+                        Record
+                      </button>
+                    </span>
                   </div>
+                  {g.guaranteedPct !== null && (
+                    <div className="text-[11.5px] text-fg-3">
+                      Attrition guarantee: {Math.round(g.guaranteedPct * 100)}% ·
+                      F&amp;B minimum{" "}
+                      {g.fbMinimum
+                        ? `Rp ${g.fbMinimum.toLocaleString("en-US")}`
+                        : "none"}
+                    </div>
+                  )}
                   <div className="mt-1 text-[12.5px] text-fg-2">{g.concessions}</div>
                 </Card>
 

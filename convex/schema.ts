@@ -268,10 +268,11 @@ export default defineSchema({
   ar_accounts: defineTable({
     propertyId: v.id("properties"),
     name: v.string(),
-    type: v.string(), // 'Corporate' | 'Travel agent' | 'OTA settlement'
+    type: v.string(), // 'Corporate' | 'Travel agent' | 'OTA settlement' | 'Group'
     creditLimit: v.number(), // 0 = no limit
     matchChannel: v.optional(v.string()), // OTA channel this account settles
     agreementId: v.optional(v.id("corporate_agreements")), // corp/TA account this settles
+    groupId: v.optional(v.id("group_blocks")), // group master account
   }).index("by_property", ["propertyId"]),
 
   // ---- invoicing: sequential, gapless per property per year -------------

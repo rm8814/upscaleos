@@ -231,9 +231,24 @@ export async function transferClosedFoliosToCityLedger(
   const byAgreement = new Map(
     accounts.filter((a) => a.agreementId).map((a) => [a.agreementId!, a])
   );
-  if (byChannel.size === 0 && byAgreement.size === 0) return 0;
+  const byGroup = new Map(
+    accounts.filter((a) => a.groupId).map((a) => [a.groupId!, a])
+  );
+  if (byChannel.size === 0 && byAgreement.size === 0 && byGroup.size === 0)
+    return 0;
 
   const channelTerms = await loadChannelTerms(ctx, propertyId);
+  // Which group blocks bill room + tax to the master account.
+  const masterGroups = new Set(
+    (
+      await ctx.db
+        .query("group_blocks")
+        .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+        .collect()
+    )
+      .filter((g) => g.billingMode === "master")
+      .map((g) => g._id as string)
+  );
 
   const folios = await ctx.db
     .query("folios")
@@ -245,9 +260,12 @@ export async function transferClosedFoliosToCityLedger(
     if (f.status !== "closed" || f.closedOn !== closedDate) continue;
     if (f.ledger === "city") continue;
     const res = await ctx.db.get(f.reservationId);
-    // A linked corporate/TA agreement settles to its own A/R account;
-    // otherwise fall back to an OTA channel match.
+    // A master-billed group block settles member folios to its master
+    // account; then a linked corporate/TA agreement; then an OTA channel.
     const acc =
+      (res?.groupId && masterGroups.has(res.groupId as string)
+        ? byGroup.get(res.groupId)
+        : undefined) ??
       (res?.corporateAccountId
         ? byAgreement.get(res.corporateAccountId)
         : undefined) ??

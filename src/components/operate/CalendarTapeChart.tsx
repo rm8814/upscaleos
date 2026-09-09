@@ -644,7 +644,7 @@ export default function CalendarTapeChart() {
             const isCollapsed = viewMode === "types" || collapsed.has(g.type);
             return (
               <React.Fragment key={g.type}>
-                {/* group header — collapsible; shows agg occupancy or rate row */}
+                {/* group header — rate + availability per day, collapsed or not */}
                 <div
                   onClick={() =>
                     viewMode === "types" ? setViewMode("rooms") : toggleCollapse(g.type)
@@ -663,104 +663,72 @@ export default function CalendarTapeChart() {
                       · {g.rooms.length}
                     </span>
                   </div>
-                  {g.cells.map((cell, i) =>
-                    isCollapsed ? (
-                      <div
-                        key={i}
-                        onClick={(ev) => ev.stopPropagation()}
-                        className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-1.5"
-                      >
-                        <span
-                          className="font-mono text-[11px] font-semibold"
-                          style={{ color: RATE_SOURCE_COLOR[cell.rateSource] }}
-                          title={`${cell.rateSource} rate`}
-                        >
-                          {cell.rate}
-                        </span>
-                        <div className="flex flex-wrap justify-center gap-[3px]">
-                          <span
-                            className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan"
-                            title={`${cell.available} available`}
-                          >
-                            {cell.available}
-                          </span>
-                          {cell.assigned > 0 ? (
-                            <button
-                              onClick={() =>
-                                setPeek({
-                                  roomType: g.type,
-                                  date: cell.date,
-                                  kind: "assigned",
-                                })
-                              }
-                              title={`${cell.assigned} assigned — view`}
-                              className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2 hover:bg-fg-1/[0.18]"
-                            >
-                              {cell.assigned}
-                            </button>
-                          ) : (
-                            <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
-                              0
-                            </span>
-                          )}
-                          {cell.unassigned > 0 && (
-                            <button
-                              onClick={() =>
-                                setPeek({
-                                  roomType: g.type,
-                                  date: cell.date,
-                                  kind: "unassigned",
-                                })
-                              }
-                              title={`${cell.unassigned} sold, unassigned — view`}
-                              className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo hover:bg-room-ooo/30"
-                            >
-                              {cell.unassigned}
-                            </button>
-                          )}
-                          {cell.held > 0 && (
-                            <span
-                              className="rounded-[4px] bg-res-tentative/[0.16] px-[5px] font-mono text-[10px] font-bold text-res-tentative"
-                              title={`${cell.held} held for a group block`}
-                            >
-                              {cell.held}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        key={i}
-                        className="border-l border-line-soft py-2 text-center font-mono text-[10.5px]"
+                  {g.cells.map((cell, i) => (
+                    <div
+                      key={i}
+                      onClick={(ev) => ev.stopPropagation()}
+                      className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-1.5"
+                    >
+                      <span
+                        className="font-mono text-[11px] font-semibold"
                         style={{ color: RATE_SOURCE_COLOR[cell.rateSource] }}
                         title={`${cell.rateSource} rate`}
                       >
                         {cell.rate}
+                      </span>
+                      <div className="flex flex-wrap justify-center gap-[3px]">
+                        <span
+                          className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan"
+                          title={`${cell.available} available`}
+                        >
+                          {cell.available}
+                        </span>
+                        {cell.assigned > 0 ? (
+                          <button
+                            onClick={() =>
+                              setPeek({
+                                roomType: g.type,
+                                date: cell.date,
+                                kind: "assigned",
+                              })
+                            }
+                            title={`${cell.assigned} assigned — view`}
+                            className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2 hover:bg-fg-1/[0.18]"
+                          >
+                            {cell.assigned}
+                          </button>
+                        ) : (
+                          <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
+                            0
+                          </span>
+                        )}
+                        {cell.unassigned > 0 && (
+                          <button
+                            onClick={() =>
+                              setPeek({
+                                roomType: g.type,
+                                date: cell.date,
+                                kind: "unassigned",
+                              })
+                            }
+                            title={`${cell.unassigned} sold, unassigned — view`}
+                            className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo hover:bg-room-ooo/30"
+                          >
+                            {cell.unassigned}
+                          </button>
+                        )}
+                        {cell.held > 0 && (
+                          <span
+                            className="rounded-[4px] bg-res-tentative/[0.16] px-[5px] font-mono text-[10px] font-bold text-res-tentative"
+                            title={`${cell.held} held for a group block`}
+                          >
+                            {cell.held}
+                          </span>
+                        )}
                       </div>
-                    )
-                  )}
-                </div>
-
-                {/* group-held inventory band — unpicked rooms in active blocks */}
-                {!isCollapsed && g.cells.some((c) => c.held > 0) && (
-                  <div className="grid border-b border-line-soft bg-deep/60" style={GRID}>
-                    <div className="px-3 py-1.5 text-[10.5px] font-medium text-res-tentative">
-                      Group hold
                     </div>
-                    {g.cells.map((c, i) => (
-                      <div
-                        key={i}
-                        className="border-l border-line-soft py-1.5 text-center font-mono text-[10.5px]"
-                        style={{
-                          color: c.held > 0 ? "var(--res-tentative)" : "var(--fg-4)",
-                        }}
-                        title={c.held > 0 ? `${c.held} rooms held for a group block` : undefined}
-                      >
-                        {c.held > 0 ? c.held : "·"}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  ))}
+                </div>
 
                 {/* rooms */}
                 {!isCollapsed &&

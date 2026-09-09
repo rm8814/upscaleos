@@ -10,6 +10,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Plus, Trash2, Rocket } from "lucide-react";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useAccount } from "@/components/providers/useAccount";
+import RoomSetupTab from "@/components/configure/RoomSetupTab";
 import {
   PROPERTY_ROLES,
   PROPERTY_ROLE_LABEL,
@@ -19,7 +20,7 @@ import {
   roleLabel,
 } from "@/lib/roles";
 
-type Tab = "property" | "team" | "taxes" | "integrations" | "account";
+type Tab = "property" | "rooms" | "team" | "taxes" | "integrations" | "account";
 
 const CURRENCIES = ["IDR", "USD", "SGD", "MYR", "AUD"];
 const TIMEZONES = [
@@ -51,6 +52,7 @@ export default function ConfigurePage() {
 
   const tabs: [Tab, string][] = [
     ["property", "Property"],
+    ["rooms", "Room setup"],
     ["team", "Team & roles"],
     ["taxes", "Taxes & fees"],
     ["integrations", "Integrations"],
@@ -76,6 +78,7 @@ export default function ConfigurePage() {
       </div>
 
       {tab === "property" && <PropertyTab property={activeProperty} />}
+      {tab === "rooms" && <RoomSetupTab propertyId={activeProperty._id} />}
       {tab === "team" && <TeamTab propertyId={activeProperty._id} />}
       {tab === "taxes" && <TaxesTab propertyId={activeProperty._id} />}
       {tab === "integrations" && <IntegrationsTab />}

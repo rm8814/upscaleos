@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { Id, Doc } from "./_generated/dataModel";
 import { authorize } from "./authz";
 
 const addDaysIso = (iso: string, n: number) => {
@@ -9,6 +9,86 @@ const addDaysIso = (iso: string, n: number) => {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
+
+/** A block still holds inventory: not cancelled, not released, cut-off ahead. */
+function blockActive(g: Doc<"group_blocks">, refDate: string): boolean {
+  return (
+    g.status !== "cancelled" &&
+    g.released !== true &&
+    g.cutoffDate >= refDate
+  );
+}
+
+/**
+ * Unpicked rooms held by group blocks for one room type on `date`, as of
+ * `refDate` (past cut-off = released). A pickup (any non-cancelled group
+ * reservation of that type overlapping the date) consumes one held room.
+ */
+export async function groupHeldRooms(
+  ctx: QueryCtx | MutationCtx,
+  propertyId: Id<"properties">,
+  roomType: string,
+  date: string,
+  refDate: string,
+  excludeGroupId?: Id<"group_blocks">
+): Promise<number> {
+  const blocks = await ctx.db
+    .query("group_blocks")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+
+  let held = 0;
+  for (const g of blocks) {
+    if (excludeGroupId && g._id === excludeGroupId) continue;
+    if (!blockActive(g, refDate)) continue;
+    const windowEnd = addDaysIso(g.startDate, g.nights);
+    if (date < g.startDate || date >= windowEnd) continue;
+
+    const subs = await ctx.db
+      .query("group_subblocks")
+      .withIndex("by_group", (q) => q.eq("groupId", g._id))
+      .collect();
+    const sub = subs.find((s) => s.roomType === roomType);
+    if (!sub) continue;
+
+    const picked = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_group", (q) => q.eq("groupId", g._id))
+        .collect()
+    ).filter(
+      (r) =>
+        r.status !== "cancelled" &&
+        r.roomType === roomType &&
+        r.checkIn <= date &&
+        r.checkOut > date
+    ).length;
+
+    held += Math.max(0, sub.blocked - picked);
+  }
+  return held;
+}
+
+/** Night-audit hook: release group blocks whose cut-off has passed. */
+export async function releasePastCutoff(
+  ctx: MutationCtx,
+  propertyId: Id<"properties">,
+  refDate: string
+): Promise<number> {
+  const blocks = await ctx.db
+    .query("group_blocks")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+  let released = 0;
+  for (const g of blocks) {
+    if (g.released === true || g.status === "cancelled") continue;
+    if (g.cutoffDate < refDate) {
+      await ctx.db.patch(g._id, { released: true, releasedOn: refDate });
+      released += 1;
+    }
+  }
+  return released;
+}
 
 const CONTRACT_COLOR: Record<string, string> = {
   Signed: "var(--accent-cyan)",
@@ -55,6 +135,7 @@ export const list = query({
         id: g._id,
         name: g.name,
         status: g.status,
+        released: g.released === true,
         startDate: g.startDate,
         nights: g.nights,
         cutoffDate: g.cutoffDate,
@@ -63,6 +144,7 @@ export const list = query({
         salesManager: g.salesManager,
         blocked,
         picked,
+        held: g.released === true ? 0 : Math.max(0, blocked - picked),
         pickupPct: `${pct}%`,
       });
     }
@@ -123,16 +205,23 @@ export const get = query({
       depositAmount: g.depositAmount,
       concessions: g.concessions,
       contact: g.contact,
+      released: g.released === true,
+      releasedOn: g.releasedOn ?? null,
       blocked,
       picked,
+      held: g.released === true ? 0 : Math.max(0, blocked - picked),
       pickupPct: `${pct}%`,
       trend: trendTo(pct),
-      subBlocks: subs.map((s) => ({
-        roomType: s.roomType,
-        blocked: s.blocked,
-        picked: pickedByType.get(s.roomType) ?? 0,
-        rate: s.rate,
-      })),
+      subBlocks: subs.map((s) => {
+        const sp = pickedByType.get(s.roomType) ?? 0;
+        return {
+          roomType: s.roomType,
+          blocked: s.blocked,
+          picked: sp,
+          held: g.released === true ? 0 : Math.max(0, s.blocked - sp),
+          rate: s.rate,
+        };
+      }),
       rooming,
     };
   },

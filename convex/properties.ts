@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
+import { releasePastCutoff } from "./groups";
 import { issueInvoiceForFolio } from "./invoices";
 import { loadReservationRates } from "./rates";
 import { sellableRoomCount, roomsSoldOn } from "./occupancy";
@@ -356,9 +357,13 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     if (folio) await issueInvoiceForFolio(ctx, folio._id);
   }
 
+  // Release group blocks past their cut-off — the unpicked rooms go back to
+  // general inventory.
+  const blocksReleased = await releasePastCutoff(ctx, id, newDate);
+
   await writeNightStats(ctx, id, oldDate, newDate);
 
-  return { businessDate: newDate, previous: oldDate, noShows };
+  return { businessDate: newDate, previous: oldDate, noShows, blocksReleased };
 }
 
 const MAX_AUTO_CATCHUP = 14; // days; a larger gap needs a manual catch-up
@@ -384,13 +389,22 @@ async function rollUpTo(
   let current = start;
   let days = 0;
   let noShows = 0;
+  let blocksReleased = 0;
   while (current < target && days < cap) {
     const r = await rollOne(ctx, id);
     current = r.businessDate;
     noShows += r.noShows;
+    blocksReleased += r.blocksReleased;
     days += 1;
   }
-  return { from: start, to: current, days, behind: current < target, noShows };
+  return {
+    from: start,
+    to: current,
+    days,
+    behind: current < target,
+    noShows,
+    blocksReleased,
+  };
 }
 
 /**
@@ -421,6 +435,7 @@ export const rollBusinessDate = mutation({
               days: 1,
               behind: false,
               noShows: res.noShows,
+              blocksReleased: res.blocksReleased,
             };
           })();
 

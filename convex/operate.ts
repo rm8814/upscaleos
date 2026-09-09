@@ -8,6 +8,7 @@ import {
   occupancyPct,
   RELEASED_STATUSES,
 } from "./occupancy";
+import { groupHeldRooms } from "./groups";
 
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -121,7 +122,7 @@ export const getAvailability = query({
         )
         .map((r) => r.roomId)
     );
-    return rooms
+    const free = rooms
       .filter(
         (r) =>
           r.status !== "OOO" &&
@@ -129,8 +130,34 @@ export const getAvailability = query({
           !taken.has(r._id) &&
           (!args.roomType || r.type === args.roomType)
       )
-      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
-      .map((r) => ({ _id: r._id, roomNumber: r.roomNumber, type: r.type }));
+      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber));
+
+    // Trim rooms held by group blocks (unpicked, cut-off ahead) for the
+    // arrival night — group holds aren't pinned to specific rooms.
+    const refDate = await businessDate(ctx, args.propertyId);
+    const byType = new Map<string, number>();
+    for (const r of free) byType.set(r.type, (byType.get(r.type) ?? 0) + 1);
+    const dropByType = new Map<string, number>();
+    for (const type of byType.keys()) {
+      dropByType.set(
+        type,
+        await groupHeldRooms(ctx, args.propertyId, type, args.checkIn, refDate)
+      );
+    }
+    const result = free.filter((r) => {
+      const left = dropByType.get(r.type) ?? 0;
+      if (left > 0) {
+        dropByType.set(r.type, left - 1);
+        return false;
+      }
+      return true;
+    });
+
+    return result.map((r) => ({
+      _id: r._id,
+      roomNumber: r.roomNumber,
+      type: r.type,
+    }));
   },
 });
 

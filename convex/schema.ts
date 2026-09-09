@@ -207,6 +207,8 @@ export default defineSchema({
     startDate: v.string(),
     nights: v.number(),
     cutoffDate: v.string(),
+    released: v.optional(v.boolean()), // cut-off passed — unpicked rooms freed
+    releasedOn: v.optional(v.string()),
     contractLabel: v.string(), // 'Signed' | 'Awaiting signature'
     salesManager: v.string(),
     billing: v.string(),

@@ -13,6 +13,7 @@ import { authorize } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
 import { quoteStay } from "./rates";
 import { RELEASED_STATUSES, READY_ROOM_STATUSES } from "./occupancy";
+import { groupHeldRooms } from "./groups";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -33,7 +34,8 @@ async function pickFreeRoom(
   roomType: string,
   checkIn: string,
   checkOut: string,
-  ignoreId?: Id<"reservations">
+  ignoreId?: Id<"reservations">,
+  forGroupId?: Id<"group_blocks">
 ): Promise<Id<"rooms"> | undefined> {
   const bd = await businessDate(ctx, propertyId);
   const sameDay = checkIn <= bd; // arrives today or is overdue
@@ -58,7 +60,7 @@ async function pickFreeRoom(
       )
       .map((r) => r.roomId)
   );
-  const free = rooms.find((rm) => {
+  const candidates = rooms.filter((rm) => {
     if (rm.type !== roomType || taken.has(rm._id)) return false;
     if (rm.status === "OOO" || rm.status === "OOS") return false;
     // A same-day arrival needs a room that is actually clean and ready; a
@@ -66,7 +68,19 @@ async function pickFreeRoom(
     if (sameDay) return READY_ROOM_STATUSES.has(rm.status);
     return rm.status !== "Occupied";
   });
-  return free?._id;
+
+  // Don't take a room another group is holding (this reservation's own group
+  // hold is excluded — it's picking up its block).
+  const held = await groupHeldRooms(
+    ctx,
+    propertyId,
+    roomType,
+    checkIn,
+    bd,
+    forGroupId
+  );
+  if (candidates.length <= held) return undefined;
+  return candidates[0]._id;
 }
 
 /**
@@ -103,7 +117,8 @@ export async function assignPropertyRooms(
       type,
       r.checkIn,
       r.checkOut,
-      r._id
+      r._id,
+      r.groupId
     );
     if (!roomId) continue;
     const room = await ctx.db.get(roomId);
@@ -444,7 +459,8 @@ export const assignOne = mutation({
       res.roomType ?? "",
       res.checkIn,
       res.checkOut,
-      res._id
+      res._id,
+      res.groupId
     );
     if (!roomId) return { assigned: false as const };
     const room = await ctx.db.get(roomId);

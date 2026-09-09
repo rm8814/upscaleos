@@ -143,7 +143,7 @@ export default function GroupsBlocksPage() {
           <div className={`${TABLE_GRID} border-b border-line py-2.5 text-[11px] uppercase tracking-[0.06em] text-fg-3`}>
             <div>Group</div>
             <div>Dates</div>
-            <div>Blocked</div>
+            <div>Held / blocked</div>
             <div>Pick-up</div>
             <div>Status</div>
             <div>Contract</div>
@@ -165,13 +165,22 @@ export default function GroupsBlocksPage() {
               <div className="whitespace-nowrap text-12 text-fg-3">
                 {fmtRange(row.startDate, row.nights)}
               </div>
-              <div className="font-mono">{row.blocked}</div>
+              <div className="font-mono">
+                {row.released ? (
+                  <span className="text-fg-3">released</span>
+                ) : (
+                  <>
+                    <span className="text-res-tentative">{row.held}</span>
+                    <span className="text-fg-3"> / {row.blocked}</span>
+                  </>
+                )}
+              </div>
               <div className="font-mono text-accent-cyan">
                 {row.picked} · {row.pickupPct}
               </div>
               <div>
                 <span className="rounded-pill border border-line bg-fg-1/[0.06] px-2.5 py-[3px] text-[11px] text-fg-2">
-                  {row.status}
+                  {row.released ? "Released" : row.status}
                 </span>
               </div>
               <div
@@ -275,20 +284,24 @@ export default function GroupsBlocksPage() {
                 <div>
                   <Eyebrow className="mb-2">Sub-blocks</Eyebrow>
                   <Card className="overflow-hidden p-0">
-                    <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_1fr] border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+                    <div className="grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_1fr] border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
                       <div>Room type</div>
                       <div>Blocked</div>
                       <div>Picked</div>
+                      <div>Held</div>
                       <div>Rate</div>
                     </div>
                     {g.subBlocks.map((sb) => (
                       <div
                         key={sb.roomType}
-                        className="grid grid-cols-[1.2fr_0.8fr_0.8fr_1fr] items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0"
+                        className="grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_1fr] items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0"
                       >
                         <div className="font-medium">{sb.roomType}</div>
                         <div className="font-mono">{sb.blocked}</div>
                         <div className="font-mono text-accent-cyan">{sb.picked}</div>
+                        <div className="font-mono text-res-tentative">
+                          {g.released ? "—" : sb.held}
+                        </div>
                         <div className="font-mono">{sb.rate}</div>
                       </div>
                     ))}

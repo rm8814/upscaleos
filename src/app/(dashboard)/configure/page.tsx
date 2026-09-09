@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -98,6 +98,35 @@ function AccountTab() {
   const addMember = useMutation(api.accounts.addMember);
   const updateRole = useMutation(api.accounts.updateMemberRole);
   const removeMember = useMutation(api.accounts.removeMember);
+
+  const users = useQuery(api.adminUsers.listUsers, {});
+  const setUserPassword = useAction(api.adminUsers.setUserPassword);
+  const [pwFor, setPwFor] = useState<string | null>(null);
+  const [pw, setPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+
+  const submitPassword = async (email: string) => {
+    if (pw.length < 8) {
+      toast("Password must be at least 8 characters", "error");
+      return;
+    }
+    setPwBusy(true);
+    try {
+      const r = await setUserPassword({ targetEmail: email, newPassword: pw });
+      toast(
+        r.provisioned
+          ? `Login created for ${email}`
+          : `Password reset for ${email} — their sessions were signed out`,
+        "success"
+      );
+      setPwFor(null);
+      setPw("");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not set password", "error");
+    } finally {
+      setPwBusy(false);
+    }
+  };
 
   const [form, setForm] = useState({ name: "", email: "", role: "admin" });
   const [err, setErr] = useState<string | null>(null);
@@ -247,6 +276,80 @@ function AccountTab() {
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-line px-4 py-3">
+          <Eyebrow>Sign-in credentials</Eyebrow>
+        </div>
+        <div className="border-b border-line bg-deep px-4 py-2 text-[11px] text-fg-3">
+          Set or reset any user&rsquo;s password. Resetting an existing login
+          signs that person out of every device.
+        </div>
+        {!users && <div className="px-4 py-4 text-13 text-fg-3">Loading…</div>}
+        {users?.map((u) => (
+          <div key={u.email} className="border-b border-line-soft last:border-0">
+            <div className="grid grid-cols-[1.5fr_1.4fr_0.8fr_auto] items-center gap-2 px-4 py-3 text-13">
+              <div>
+                <div className="font-semibold">{u.name}</div>
+                <div className="text-[11px] text-fg-3">{u.email}</div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {u.roles.map((r) => (
+                  <span
+                    key={r}
+                    className="rounded-[3px] bg-fg-1/[0.06] px-1.5 py-px text-[10px] text-fg-3"
+                  >
+                    {r.startsWith("Account ") ? r : roleLabel(r)}
+                  </span>
+                ))}
+              </div>
+              <div
+                className="text-[11.5px]"
+                style={{
+                  color: u.hasLogin
+                    ? "var(--accent-cyan)"
+                    : "var(--res-tentative)",
+                }}
+              >
+                {u.hasLogin ? "Has login" : "No login"}
+              </div>
+              <button
+                onClick={() => {
+                  setPwFor(pwFor === u.email ? null : u.email);
+                  setPw("");
+                }}
+                className="rounded-sm border border-line bg-fg-1/[0.06] px-2.5 py-1 text-[11px] hover:border-line-strong"
+              >
+                {u.hasLogin ? "Reset password" : "Create login"}
+              </button>
+            </div>
+            {pwFor === u.email && (
+              <div className="flex flex-wrap items-center gap-2 bg-deep px-4 py-2.5">
+                <input
+                  type="text"
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  placeholder="New password (min 8 chars)"
+                  className="w-64 rounded-sm border border-line bg-ink px-2.5 py-1.5 font-mono text-12 text-ice outline-none focus:border-accent-violet"
+                />
+                <button
+                  disabled={pwBusy}
+                  onClick={() => submitPassword(u.email)}
+                  className="rounded-sm bg-accent-violet px-3 py-1.5 text-12 font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+                >
+                  {pwBusy ? "Saving…" : "Set password"}
+                </button>
+                <button
+                  onClick={() => setPwFor(null)}
+                  className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-1.5 text-12"
+                >
+                  Cancel
+                </button>
+              </div>
             )}
           </div>
         ))}

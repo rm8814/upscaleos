@@ -350,6 +350,12 @@ export const updateDates = mutation({
     // no other live reservation, no dated OOO/OOS block.
     const targetRoomId = args.roomId ?? res.roomId;
     if (targetRoomId) {
+      const targetRoom = await ctx.db.get(targetRoomId);
+      if (targetRoom && (targetRoom.status === "OOO" || targetRoom.status === "OOS")) {
+        throw new Error(
+          `Room ${targetRoom.roomNumber} is ${targetRoom.status} — not sellable.`
+        );
+      }
       const [siblings, blocks] = await Promise.all([
         ctx.db
           .query("reservations")

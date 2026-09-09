@@ -294,8 +294,19 @@ export default function CalendarTapeChart() {
         | undefined;
 
       // Availability guard: the landing room must be free every night of the
-      // new stay — no other live reservation, no dated OOO/OOS block.
+      // new stay — not OOO/OOS, no other live reservation, no dated block.
       if (landingRoomId) {
+        const landingRoom = (rooms ?? []).find((r) => r._id === landingRoomId);
+        if (
+          landingRoom &&
+          (landingRoom.status === "OOO" || landingRoom.status === "OOS")
+        ) {
+          toast(
+            `Room ${landingRoom.roomNumber} is ${landingRoom.status} — not sellable.`,
+            "error"
+          );
+          return;
+        }
         for (
           let nd = start;
           nd < end;
@@ -658,6 +669,13 @@ export default function CalendarTapeChart() {
                 {!isCollapsed &&
                   g.rooms.map((room) => {
                     const list = resByRoom.get(room._id) ?? [];
+                    const roomBlocks = blocksByRoom.get(room._id) ?? [];
+                    // OOO is indefinite — the whole row is out of the sell set
+                    // until maintenance releases it, regardless of any end date.
+                    const oooRoom = room.status === "OOO";
+                    const hardBlock = oooRoom
+                      ? roomBlocks.find((b) => b.kind === "OOO") ?? roomBlocks[0]
+                      : undefined;
                     return (
                       <div
                         key={room._id}
@@ -668,8 +686,9 @@ export default function CalendarTapeChart() {
                           <input
                             type="checkbox"
                             checked={selected.has(room._id)}
+                            disabled={oooRoom}
                             onChange={() => toggleRoom(room._id)}
-                            className="accent-accent-violet"
+                            className="accent-accent-violet disabled:opacity-30"
                           />
                           <span
                             className="h-1.5 w-1.5 flex-none rounded-pill"
@@ -677,6 +696,22 @@ export default function CalendarTapeChart() {
                             title={room.status}
                           />
                           <span className="font-mono text-12 text-fg-2">{room.roomNumber}</span>
+                          {(room.status === "OOO" || room.status === "OOS") && (
+                            <span
+                              className="ml-auto rounded-[3px] px-1 py-px text-[9px] font-bold leading-none"
+                              style={{
+                                color: ROOM_STATUS_COLOR[room.status],
+                                border: `1px solid ${ROOM_STATUS_COLOR[room.status]}`,
+                              }}
+                              title={
+                                hardBlock?.reason ??
+                                roomBlocks[0]?.reason ??
+                                room.status
+                              }
+                            >
+                              {room.status}
+                            </span>
+                          )}
                         </div>
                         <div
                           data-room-id={room._id}
@@ -692,7 +727,8 @@ export default function CalendarTapeChart() {
                           }}
                         >
                           {days.map((d, i) => {
-                            const blk = blockOnRoomDate(room._id, iso(d));
+                            const blk =
+                              hardBlock ?? blockOnRoomDate(room._id, iso(d));
                             if (blk) {
                               const c =
                                 ROOM_STATUS_COLOR[blk.kind] ?? "var(--room-ooo)";

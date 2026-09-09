@@ -145,7 +145,8 @@ export const setRoomOutOfService = mutation({
       roomId: args.roomId,
       kind,
       from: args.from,
-      to: args.to ?? "",
+      // OOO is open-ended — the room is out until maintenance releases it.
+      to: kind === "OOO" ? "" : args.to ?? "",
       reason: args.reason,
       ticketId: args.ticketId,
       createdBy: scope.email,

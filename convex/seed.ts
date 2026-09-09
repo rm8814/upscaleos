@@ -277,7 +277,8 @@ export const seed = internalMutation({
         roomId: r._id,
         kind: r.status,
         from: iso(addDays(TODAY, -1)),
-        to: iso(addDays(TODAY, spec.days)),
+        // OOO has no known end — maintenance clears it when the work is done.
+        to: r.status === "OOO" ? "" : iso(addDays(TODAY, spec.days)),
         reason: spec.reason,
         ticketId: spec.ticket ? ticketIds[spec.ticket] : undefined,
         createdBy: "eng@grandsamudra.upscale.id",

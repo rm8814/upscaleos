@@ -2,8 +2,8 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
-import { nightlyRateFor, addDaysIso, money } from "./rateModel";
-import { loadRateRules } from "./rates";
+import { addDaysIso, money } from "./rateModel";
+import { loadReservationRates } from "./rates";
 import {
   sellableRoomCount,
   roomCountsByType,
@@ -52,9 +52,7 @@ export const getReports = query({
 
     const sellableTotal = sellableRoomCount(rooms);
     const { sellable: sellableByType } = roomCountsByType(rooms);
-    const rules = await loadRateRules(ctx, args.propertyId);
-    const eff = (rt: string, d: string) =>
-      rules(rt, d, nightlyRateFor(rt, d));
+    const rate = await loadReservationRates(ctx, args.propertyId);
 
     const onBooks = (d: string): Doc<"reservations">[] =>
       reservations.filter(
@@ -69,7 +67,7 @@ export const getReports = query({
       const d = addDaysIso(bd, i);
       const os = onBooks(d);
       const rooms_ = os.length;
-      const rev = os.reduce((s, r) => s + eff(r.roomType ?? "", d), 0);
+      const rev = os.reduce((s, r) => s + rate(r, d), 0);
       return {
         date: d,
         rooms: rooms_,
@@ -115,13 +113,13 @@ export const getReports = query({
     >();
     for (const d of prodDates) {
       for (const r of onBooks(d)) {
-        const rate = eff(r.roomType ?? "", d);
+        const amt = rate(r, d);
         const src = r.channel ?? "Direct";
         const s =
           bySourceMap.get(src) ??
           { roomNights: 0, revenue: 0, keys: new Set<string>() };
         s.roomNights += 1;
-        s.revenue += rate;
+        s.revenue += amt;
         s.keys.add(r._id);
         bySourceMap.set(src, s);
 
@@ -130,7 +128,7 @@ export const getReports = query({
           byTypeMap.get(rt) ??
           { roomNights: 0, revenue: 0, keys: new Set<string>() };
         t.roomNights += 1;
-        t.revenue += rate;
+        t.revenue += amt;
         t.keys.add(r._id);
         byTypeMap.set(rt, t);
       }
@@ -167,7 +165,7 @@ export const getReports = query({
         const d = addDaysIso(start, i);
         for (const r of onBooks(d)) {
           rn += 1;
-          rev += eff(r.roomType ?? "", d);
+          rev += rate(r, d);
         }
       }
       const cap = sellableTotal * 7;

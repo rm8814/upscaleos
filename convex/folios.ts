@@ -5,7 +5,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { roomNightTaxes, chargeTaxes } from "./taxEngine";
 import { codeForPayment } from "./transactionCodes";
-import { effectiveNightlyRate } from "./rates";
+import { nightlyRateForReservation } from "./rates";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -48,12 +48,7 @@ async function postNight(
   if (existing.some((l) => l.kind === "room" && l.date === date && !l.voided))
     return;
 
-  const gross = await effectiveNightlyRate(
-    ctx,
-    folio.propertyId,
-    res.roomType ?? "",
-    date
-  );
+  const gross = await nightlyRateForReservation(ctx, res, date);
   const taxes = await propertyTaxes(ctx, folio.propertyId);
   const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {
     firstNight: date === res.checkIn,

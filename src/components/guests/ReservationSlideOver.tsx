@@ -30,6 +30,7 @@ export interface SlideOverReservation {
   roomNumber?: string;
   roomType?: string;
   channel?: string;
+  corporateAccountId?: string;
 }
 
 const TIMELINE = [
@@ -65,9 +66,15 @@ export default function ReservationSlideOver({
 }) {
   const statusColor = RES_STATUS_COLOR[res.status] ?? "var(--fg-2)";
   const setStatus = useMutation(api.reservations.setStatus);
+  const setCorporate = useMutation(api.reservations.setCorporate);
   const toast = useToast();
   const { activeProperty } = useProperty();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
+
+  const agreements = useQuery(
+    api.revenue.getCorporateAgreements,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
 
   const { actions, note } = reservationActions(
     res.status,
@@ -175,6 +182,32 @@ export default function ReservationSlideOver({
             </Row>
             <Row icon={<User className="h-4 w-4" />} label="Channel">
               {res.channel ?? "Direct"}
+            </Row>
+            <Row icon={<User className="h-4 w-4" />} label="Corporate">
+              <select
+                value={res.corporateAccountId ?? ""}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  await setCorporate({
+                    id: res._id as Id<"reservations">,
+                    corporateAgreementId: v
+                      ? (v as Id<"corporate_agreements">)
+                      : undefined,
+                  });
+                  toast(
+                    v ? "Negotiated rate applied" : "Corporate link removed",
+                    "success"
+                  );
+                }}
+                className="rounded-sm border border-line bg-ink px-2 py-1 text-12 text-ice outline-none focus:border-accent-violet"
+              >
+                <option value="">None (rack rate)</option>
+                {(agreements ?? []).map((a) => (
+                  <option key={a._id} value={a._id}>
+                    {a.accountName} · {a.rate}
+                  </option>
+                ))}
+              </select>
             </Row>
             <Row icon={<Star className="h-4 w-4" />} label="Nightly rate">
               <span className="font-mono">{res.rate}</span>

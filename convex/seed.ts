@@ -335,6 +335,32 @@ export const seed = internalMutation({
       void resId;
     }
 
+    // ---- corporate agreements + negotiated-rate tagging ----------
+    // (before the folio pass, so tagged folios post at the negotiated rate)
+    const corporates = [
+      { accountName: "Accor Global", type: "Corporate", rate: "Rp 1,800,000", vsBar: "−20%", commission: "10%", roomType: "King Suite", contractStart: "2026-01-01", contractEnd: "2026-12-31", status: "Active", blackoutDates: "Dec 24–31", roomsContracted: 1000 },
+      { accountName: "La Compagnie", type: "Corporate", rate: "Rp 2,100,000", vsBar: "−15%", commission: "8%", roomType: "Double Queen", contractStart: "2026-03-15", contractEnd: "2027-03-14", status: "Active", blackoutDates: "Aug 10–15", roomsContracted: 500 },
+      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1,600,000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-03-01", contractEnd: "2026-08-31", status: "Expired", blackoutDates: "None", roomsContracted: 300 },
+    ];
+    const corpIds = await Promise.all(
+      corporates.map((c) =>
+        ctx.db.insert("corporate_agreements", { ...c, propertyId })
+      )
+    );
+    const kingBookings = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+        .collect()
+    ).filter(
+      (r) =>
+        r.roomType === "King Suite" &&
+        (r.status === "inhouse" || r.status === "confirmed")
+    );
+    for (const r of kingBookings.slice(0, 3)) {
+      await ctx.db.patch(r._id, { corporateAccountId: corpIds[0] });
+    }
+
     // ---- group blocks + rooming lists -----------------------------
     const groupSeed = [
       {
@@ -540,7 +566,13 @@ export const seed = internalMutation({
         d <= lastNight && d <= businessDateIso;
         d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
       ) {
-        const gross = nightlyRateFor(r.roomType, d);
+        const corpRate = r.corporateAccountId
+          ? Number(
+              (corporates[corpIds.indexOf(r.corporateAccountId)]?.rate ?? "")
+                .replace(/[^\d]/g, "")
+            )
+          : 0;
+        const gross = corpRate > 0 ? corpRate : nightlyRateFor(r.roomType, d);
         const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {
           firstNight: d === r.checkIn,
         });
@@ -590,28 +622,13 @@ export const seed = internalMutation({
       await ctx.db.insert("waitlist", { ...w, propertyId });
     }
 
-    // ---- corporate agreements (grow milestone) -------------------
-    const corporates = [
-      { accountName: "Accor Global", type: "Corporate", rate: "Rp 1,800,000", vsBar: "−20%", commission: "10%", roomType: "King Suite", contractStart: "2026-01-01", contractEnd: "2026-12-31", status: "Active", blackoutDates: "Dec 24–31" },
-      { accountName: "La Compagnie", type: "Corporate", rate: "Rp 2,100,000", vsBar: "−15%", commission: "8%", roomType: "Double Queen", contractStart: "2026-03-15", contractEnd: "2027-03-14", status: "Active", blackoutDates: "Aug 10–15" },
-      { accountName: "TechCorp Inc", type: "Travel Agent", rate: "Rp 1,600,000", vsBar: "−25%", commission: "12%", roomType: "King Suite", contractStart: "2026-03-01", contractEnd: "2026-08-31", status: "Expired", blackoutDates: "None" },
-    ];
-    const corpIds = await Promise.all(
-      corporates.map((c) => ctx.db.insert("corporate_agreements", { ...c, propertyId }))
-    );
-    const productions = [
-      { agreementId: corpIds[0], year: "2026", roomsBooked: 850, roomsContracted: 1000 },
-      { agreementId: corpIds[1], year: "2026", roomsBooked: 420, roomsContracted: 500 },
-      { agreementId: corpIds[2], year: "2026", roomsBooked: 110, roomsContracted: 300 },
-    ];
-    for (const p of productions) await ctx.db.insert("corporate_production", p);
-
     // ---- city ledger / accounts receivable ----------------------
     const arAccounts = [
       {
         name: "Accor Global",
         type: "Corporate",
         creditLimit: 150_000_000,
+        agreementId: corpIds[0],
         tx: [
           { off: -90, kind: "invoice", ref: "INV-2026-0712", desc: "Corporate rate — Jun", amount: 40_000_000 },
           { off: -58, kind: "invoice", ref: "INV-2026-0798", desc: "Corporate rate — Jul", amount: 22_200_000 },
@@ -623,6 +640,7 @@ export const seed = internalMutation({
         name: "TechCorp Inc",
         type: "Travel agent",
         creditLimit: 40_000_000,
+        agreementId: corpIds[2],
         tx: [
           { off: -126, kind: "invoice", ref: "INV-2026-0655", desc: "TA allotment — May", amount: 23_000_000 },
           { off: -82, kind: "invoice", ref: "INV-2026-0740", desc: "TA allotment — Jul", amount: 12_500_000 },

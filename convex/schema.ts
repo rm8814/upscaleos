@@ -132,10 +132,12 @@ export default defineSchema({
     roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
     groupId: v.optional(v.id("group_blocks")), // part of a group block's rooming list
     externalRef: v.optional(v.string()), // channel/OTA booking reference, for idempotent ingest
+    corporateAccountId: v.optional(v.id("corporate_agreements")), // negotiated-rate agreement
   })
     .index("by_property", ["propertyId"])
     .index("by_group", ["groupId"])
-    .index("by_external_ref", ["externalRef"]),
+    .index("by_external_ref", ["externalRef"])
+    .index("by_corporate", ["corporateAccountId"]),
   folios: defineTable({
     propertyId: v.id("properties"),
     reservationId: v.id("reservations"),
@@ -190,6 +192,7 @@ export default defineSchema({
     status: v.string(),
     propertyId: v.id("properties"),
     blackoutDates: v.optional(v.string()),
+    roomsContracted: v.optional(v.number()), // annual committed room-nights
   }).index("by_property", ["propertyId"]),
   corporate_production: defineTable({
     agreementId: v.id("corporate_agreements"),
@@ -248,6 +251,7 @@ export default defineSchema({
     type: v.string(), // 'Corporate' | 'Travel agent' | 'OTA settlement'
     creditLimit: v.number(), // 0 = no limit
     matchChannel: v.optional(v.string()), // OTA channel this account settles
+    agreementId: v.optional(v.id("corporate_agreements")), // corp/TA account this settles
   }).index("by_property", ["propertyId"]),
 
   // ---- invoicing: sequential, gapless per property per year -------------

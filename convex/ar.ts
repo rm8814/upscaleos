@@ -219,7 +219,10 @@ export async function transferClosedFoliosToCityLedger(
   const byChannel = new Map(
     accounts.filter((a) => a.matchChannel).map((a) => [a.matchChannel!, a])
   );
-  if (byChannel.size === 0) return 0;
+  const byAgreement = new Map(
+    accounts.filter((a) => a.agreementId).map((a) => [a.agreementId!, a])
+  );
+  if (byChannel.size === 0 && byAgreement.size === 0) return 0;
 
   const folios = await ctx.db
     .query("folios")
@@ -231,7 +234,13 @@ export async function transferClosedFoliosToCityLedger(
     if (f.status !== "closed" || f.closedOn !== closedDate) continue;
     if (f.ledger === "city") continue;
     const res = await ctx.db.get(f.reservationId);
-    const acc = res?.channel ? byChannel.get(res.channel) : undefined;
+    // A linked corporate/TA agreement settles to its own A/R account;
+    // otherwise fall back to an OTA channel match.
+    const acc =
+      (res?.corporateAccountId
+        ? byAgreement.get(res.corporateAccountId)
+        : undefined) ??
+      (res?.channel ? byChannel.get(res.channel) : undefined);
     if (!acc) continue;
 
     const lines = await ctx.db

@@ -203,6 +203,7 @@ export const create = mutation({
     status: v.string(),
     adults: v.optional(v.number()),
     children: v.optional(v.number()),
+    corporateAgreementId: v.optional(v.id("corporate_agreements")),
   },
   handler: async (ctx, args) => {
     await authorize(ctx, {
@@ -241,6 +242,7 @@ export const create = mutation({
       roomType: args.roomType,
       checkIn: args.checkIn,
       checkOut: args.checkOut,
+      corporateAgreementId: args.corporateAgreementId,
     });
     return await ctx.db.insert("reservations", {
       guestId,
@@ -257,6 +259,7 @@ export const create = mutation({
       adults: args.adults ?? 2,
       children: args.children ?? 0,
       roomAutoAssigned,
+      corporateAccountId: args.corporateAgreementId,
     });
   },
 });
@@ -376,6 +379,39 @@ export const setStatus = mutation({
     else if (next === "cancelled") {
       await reverseFolioCharges(ctx, args.id, bd);
     }
+  },
+});
+
+/** Link / unlink a reservation to a corporate agreement (negotiated rate). */
+export const setCorporate = mutation({
+  args: {
+    id: v.id("reservations"),
+    corporateAgreementId: v.optional(v.id("corporate_agreements")),
+  },
+  handler: async (ctx, args) => {
+    const res = await ctx.db.get(args.id);
+    if (!res) throw new Error("Reservation not found");
+    await authorize(ctx, {
+      propertyId: res.propertyId,
+      requireProperty: "front_office",
+    });
+    await ctx.db.patch(args.id, {
+      corporateAccountId: args.corporateAgreementId,
+    });
+    // Re-price the estimate and any open folio at the new (negotiated) rate.
+    const q = await quoteStay(ctx, {
+      propertyId: res.propertyId,
+      roomType: res.roomType ?? "",
+      checkIn: res.checkIn,
+      checkOut: res.checkOut,
+      corporateAgreementId: args.corporateAgreementId,
+    });
+    await ctx.db.patch(args.id, {
+      rate: fmtRp(q.nights[0]?.rate ?? 0),
+      totalAmount: fmtRp(q.total),
+    });
+    const bd = await businessDate(ctx, res.propertyId);
+    await reconcileFolioToStay(ctx, args.id, bd, { repriceExisting: true });
   },
 });
 

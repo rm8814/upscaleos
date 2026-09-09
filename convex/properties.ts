@@ -6,8 +6,7 @@ import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
 import { issueInvoiceForFolio } from "./invoices";
-import { nightlyRateFor } from "./rateModel";
-import { loadRateRules } from "./rates";
+import { loadReservationRates } from "./rates";
 import { sellableRoomCount, roomsSoldOn } from "./occupancy";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
@@ -50,15 +49,9 @@ async function writeNightStats(
 
   const soldThatNight = roomsSoldOn(reservations, closedDate);
   const roomsSold = soldThatNight.length;
-  const rules = await loadRateRules(ctx, propertyId);
+  const rate = await loadReservationRates(ctx, propertyId);
   const roomRevenue = soldThatNight.reduce(
-    (s, r) =>
-      s +
-      rules(
-        r.roomType ?? "",
-        closedDate,
-        nightlyRateFor(r.roomType ?? "", closedDate)
-      ),
+    (s, r) => s + rate(r, closedDate),
     0
   );
   const postedRoomRevenue = folioLines
@@ -119,16 +112,7 @@ async function writeNightStats(
       asOf: newDate,
       forDate,
       roomsOnBooks: staying.length,
-      revenueOnBooks: staying.reduce(
-        (s, r) =>
-          s +
-          rules(
-            r.roomType ?? "",
-            forDate,
-            nightlyRateFor(r.roomType ?? "", forDate)
-          ),
-        0
-      ),
+      revenueOnBooks: staying.reduce((s, r) => s + rate(r, forDate), 0),
     };
     const id = priorByDate.get(forDate);
     if (id) await ctx.db.patch(id, row);

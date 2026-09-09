@@ -1,8 +1,12 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Id, Doc } from "./_generated/dataModel";
 import { authorize, writeAudit } from "./authz";
+
+/** "Rp 1,800,000" -> 1800000; 0 when unparseable. */
+export const parseRp = (s: string | undefined) =>
+  Number((s ?? "").replace(/[^\d]/g, "")) || 0;
 import {
   ROOM_TYPES,
   nightlyRateFor,
@@ -68,6 +72,60 @@ export async function effectiveNightlyRate(
   );
 }
 
+/**
+ * THE nightly rate for a specific reservation on a date: a linked corporate
+ * agreement's negotiated flat rate wins over the rack/rules rate.
+ */
+export async function nightlyRateForReservation(
+  ctx: Ctx,
+  res: Doc<"reservations">,
+  date: string
+): Promise<number> {
+  if (res.corporateAccountId) {
+    const agreement = await ctx.db.get(res.corporateAccountId);
+    const neg = parseRp(agreement?.rate);
+    if (neg > 0) return neg;
+  }
+  return effectiveNightlyRate(
+    ctx,
+    res.propertyId,
+    res.roomType ?? "",
+    date
+  );
+}
+
+/**
+ * Batched (reservation, date) -> rate resolver, for hot loops (KPIs,
+ * night-audit stats, pickup fan-out, reports). Honours negotiated corporate
+ * rates.
+ */
+export async function loadReservationRates(
+  ctx: Ctx,
+  propertyId: Id<"properties">
+) {
+  const [rules, agreements] = await Promise.all([
+    loadRateRules(ctx, propertyId),
+    ctx.db
+      .query("corporate_agreements")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+  ]);
+  const negByAgreement = new Map(
+    agreements.map((a) => [a._id, parseRp(a.rate)])
+  );
+  return (res: Doc<"reservations">, date: string): number => {
+    if (res.corporateAccountId) {
+      const neg = negByAgreement.get(res.corporateAccountId);
+      if (neg && neg > 0) return neg;
+    }
+    return rules(
+      res.roomType ?? "",
+      date,
+      nightlyRateFor(res.roomType ?? "", date)
+    );
+  };
+}
+
 /** Batched resolver for hot loops (KPIs, night-audit stats, pickup fan-out). */
 export async function loadRateRules(ctx: Ctx, propertyId: Id<"properties">) {
   const [adjustments, overrides] = await Promise.all([
@@ -106,6 +164,7 @@ export async function quoteStay(
     roomType: string;
     checkIn: string;
     checkOut: string;
+    corporateAgreementId?: Id<"corporate_agreements">;
   }
 ): Promise<{
   nights: { date: string; rate: number }[];
@@ -119,11 +178,20 @@ export async function quoteStay(
     .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
     .collect();
 
+  // A linked corporate agreement's negotiated rate replaces the rules rate.
+  let negotiated = 0;
+  if (args.corporateAgreementId) {
+    negotiated = parseRp((await ctx.db.get(args.corporateAgreementId))?.rate);
+  }
+
   const nights: { date: string; rate: number }[] = [];
   for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
     nights.push({
       date: d,
-      rate: rules(args.roomType, d, nightlyRateFor(args.roomType, d)),
+      rate:
+        negotiated > 0
+          ? negotiated
+          : rules(args.roomType, d, nightlyRateFor(args.roomType, d)),
     });
   }
   const subtotal = nights.reduce((s, n) => s + n.rate, 0);

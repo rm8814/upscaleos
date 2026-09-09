@@ -4,7 +4,11 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { authorize } from "./authz";
 import { nightlyRateFor, addDaysIso, money } from "./rateModel";
-import { effectiveNightlyRate, loadRateRules, quoteStay } from "./rates";
+import {
+  effectiveNightlyRate,
+  loadReservationRates,
+  quoteStay,
+} from "./rates";
 import { sellableRoomCount, roomsSoldOn } from "./occupancy";
 
 // Re-exported for callers that historically priced against the rack rate.
@@ -32,14 +36,14 @@ function windowStats(
   reservations: Doc<"reservations">[],
   sellableRooms: number,
   nights: string[],
-  rate: (roomType: string, date: string) => number
+  rate: (res: Doc<"reservations">, date: string) => number
 ) {
   let roomsSold = 0;
   let roomRevenue = 0;
   for (const d of nights) {
     for (const r of roomsSoldOn(reservations, d)) {
       roomsSold += 1;
-      roomRevenue += rate(r.roomType ?? "", d);
+      roomRevenue += rate(r, d);
     }
   }
   const available = sellableRooms * nights.length;
@@ -66,10 +70,40 @@ export const getCorporateAgreements = query({
 export const getAgreementProduction = query({
   args: { agreementId: v.id("corporate_agreements") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const agreement = await ctx.db.get(args.agreementId);
+    if (!agreement) return null;
+    const year = new Date().getUTCFullYear();
+
+    // Live: room-nights on reservations linked to this agreement in the
+    // contract year.
+    const linked = await ctx.db
+      .query("reservations")
+      .withIndex("by_corporate", (q) =>
+        q.eq("corporateAccountId", args.agreementId)
+      )
+      .collect();
+    let roomsBooked = 0;
+    for (const r of linked) {
+      if (r.status === "cancelled" || r.status === "no_show") continue;
+      for (
+        let d = r.checkIn;
+        d < r.checkOut;
+        d = addDaysIso(d, 1)
+      ) {
+        if (d.startsWith(String(year))) roomsBooked += 1;
+      }
+    }
+
+    const legacy = await ctx.db
       .query("corporate_production")
       .withIndex("by_agreement", (q) => q.eq("agreementId", args.agreementId))
       .first();
+
+    return {
+      year: String(year),
+      roomsBooked,
+      roomsContracted: agreement.roomsContracted ?? legacy?.roomsContracted ?? 0,
+    };
   },
 });
 
@@ -114,6 +148,7 @@ export const getStayQuote = query({
     roomType: v.string(),
     checkIn: v.string(),
     checkOut: v.string(),
+    corporateAgreementId: v.optional(v.id("corporate_agreements")),
   },
   handler: async (ctx, args) => {
     const q = await quoteStay(ctx, args);
@@ -176,9 +211,7 @@ export const getKpis = query({
       addDaysIso(anchor, -(2 * count - 1 - i))
     );
 
-    const rules = await loadRateRules(ctx, args.propertyId);
-    const rate = (rt: string, d: string) =>
-      rules(rt, d, nightlyRateFor(rt, d));
+    const rate = await loadReservationRates(ctx, args.propertyId);
     const cur = windowStats(reservations, sellable, nights, rate);
     const prev = windowStats(reservations, sellable, priorNights, rate);
 

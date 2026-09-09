@@ -25,6 +25,8 @@ export const RELEASED_STATUSES = new Set([
   "departed",
   "no_show",
 ]);
+/** A guest still expected to arrive — not yet checked in. */
+export const ARRIVAL_STATUSES = new Set(["confirmed", "tentative"]);
 /** Room statuses a same-day arrival can actually move into. */
 export const READY_ROOM_STATUSES = new Set(["Inspected", "Vacant Clean"]);
 

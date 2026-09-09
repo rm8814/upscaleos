@@ -7,6 +7,7 @@ import {
   roomsSoldOn,
   occupancyPct,
   RELEASED_STATUSES,
+  ARRIVAL_STATUSES,
   blockedRoomIds,
 } from "./occupancy";
 import { groupHeldRooms } from "./groups";
@@ -561,7 +562,7 @@ export const getDashboardBoard = query({
     ).length;
     const unassignedArrivals = reservations.filter(
       (r) =>
-        r.checkIn === today && !r.roomId && !RELEASED_STATUSES.has(r.status)
+        r.checkIn === today && !r.roomId && ARRIVAL_STATUSES.has(r.status)
     ).length;
     const tentativeGroups = groups.filter(
       (g) => g.status === "Tentative" || g.status === "tentative"
@@ -672,10 +673,10 @@ export const getDashboardStats = query({
       dirty: rooms.filter((r) => r.status === "Vacant Dirty").length,
       ooo: rooms.filter((r) => r.status === "OOO").length,
       arrivalsToday: reservations.filter(
-        (r) => r.checkIn === today && !RELEASED_STATUSES.has(r.status)
+        (r) => r.checkIn === today && ARRIVAL_STATUSES.has(r.status)
       ).length,
       departuresToday: reservations.filter(
-        (r) => r.checkOut === today && r.status !== "cancelled" && r.status !== "no_show"
+        (r) => r.checkOut === today && r.status === "inhouse"
       ).length,
       inHouse,
       openTickets: tickets.filter((t) => t.status !== "Resolved").length,

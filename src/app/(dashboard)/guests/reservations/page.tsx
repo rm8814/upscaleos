@@ -73,11 +73,11 @@ function ReservationListInner() {
     await assignRooms({ propertyId: activeProperty._id });
     setAssigning(false);
   };
-  const RELEASED = new Set(["cancelled", "departed", "no_show"]);
   const isArrival = (r: (typeof list)[number]) =>
-    r.checkIn === TODAY && !RELEASED.has(r.status);
+    r.checkIn === TODAY &&
+    (r.status === "confirmed" || r.status === "tentative");
   const isDeparture = (r: (typeof list)[number]) =>
-    r.checkOut === TODAY && r.status !== "cancelled" && r.status !== "no_show";
+    r.checkOut === TODAY && r.status === "inhouse";
 
   const tabCounts = {
     arrivals: list.filter(isArrival).length,

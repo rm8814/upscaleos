@@ -12,7 +12,11 @@ import {
 import { authorize, writeAudit } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
 import { quoteStay, assertPlanEligible } from "./rates";
-import { RELEASED_STATUSES, READY_ROOM_STATUSES } from "./occupancy";
+import {
+  RELEASED_STATUSES,
+  READY_ROOM_STATUSES,
+  ARRIVAL_STATUSES,
+} from "./occupancy";
 import { groupHeldRooms } from "./groups";
 
 const FALLBACK_TODAY = "2026-09-08";
@@ -195,7 +199,7 @@ export const getArrivalsToday = query({
     return joinGuestAndRoom(
       ctx,
       rows.filter(
-        (r) => r.checkIn === today && !RELEASED_STATUSES.has(r.status)
+        (r) => r.checkIn === today && ARRIVAL_STATUSES.has(r.status)
       )
     );
   },

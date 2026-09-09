@@ -128,6 +128,37 @@ export default function RatesPage() {
     [adjustments]
   );
 
+  const overrides = useQuery(
+    api.rates.getOverrides,
+    activeProperty
+      ? { propertyId: activeProperty._id, from: todayIso, to: windowTo }
+      : "skip"
+  );
+  const setManualRate = useMutation(api.rates.setManualRate);
+  const overrideMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of overrides ?? []) m.set(`${o.roomType}|${o.date}`, o.amount);
+    return m;
+  }, [overrides]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const saveManual = async (roomType: string, dayIso: string) => {
+    if (!activeProperty) return;
+    const amount = Number(draft.replace(/[^\d]/g, ""));
+    setEditing(null);
+    try {
+      await setManualRate({
+        propertyId: activeProperty._id,
+        roomType,
+        date: dayIso,
+        amount,
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save rate", "error");
+    }
+  };
+
   const toggleDynamic = async (dayIso: string) => {
     if (!activeProperty) return;
     try {
@@ -244,9 +275,15 @@ export default function RatesPage() {
                     <div className="text-[10.5px] text-fg-3">Base {money(rt.base)}</div>
                   </div>
                   {days.map((d, i) => {
-                    const dyn = dynamicDates.has(iso(d));
+                    const dayIsoTop = iso(d);
+                    const dyn = dynamicDates.has(dayIsoTop);
                     const dow = d.getUTCDay();
-                    const rate = rackRate(rt.base, d) * (dyn ? 1.06 : 1);
+                    const rackVal = rackRate(rt.base, d);
+                    const cellKey = `${rt.name}|${dayIsoTop}`;
+                    const manual = overrideMap.get(cellKey);
+                    const rate = dyn
+                      ? rackVal * 1.06
+                      : (manual ?? rackVal);
                     const demand =
                       DOW_MULT[dow] >= 1.25 ? "high" : DOW_MULT[dow] <= 0.95 ? "low" : "mid";
                     const dayIso = iso(d);
@@ -275,12 +312,48 @@ export default function RatesPage() {
                         className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-2"
                         style={{ background: dyn ? "var(--violet-wash)" : undefined }}
                       >
-                        <div
-                          className="font-mono text-[11px] font-semibold"
-                          style={{ color: dyn ? "var(--accent-violet-hi)" : "var(--fg-1)" }}
-                        >
-                          {money(rate)}
-                        </div>
+                        {dyn ? (
+                          <div
+                            className="font-mono text-[11px] font-semibold"
+                            style={{ color: "var(--accent-violet-hi)" }}
+                            title="Dynamic pricing on — toggle off to edit"
+                          >
+                            {money(rate)}
+                          </div>
+                        ) : editing === cellKey ? (
+                          <input
+                            autoFocus
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onBlur={() => saveManual(rt.name, dayIsoTop)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveManual(rt.name, dayIsoTop);
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            className="w-[70px] rounded-[3px] border border-accent-violet bg-ink px-1 py-0.5 text-center font-mono text-[11px] text-ice outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditing(cellKey);
+                              setDraft(String(Math.round(rate)));
+                            }}
+                            className="rounded-[3px] px-1 font-mono text-[11px] font-semibold hover:bg-fg-1/[0.08]"
+                            style={{
+                              color:
+                                manual !== undefined
+                                  ? "var(--accent-cyan)"
+                                  : "var(--fg-1)",
+                            }}
+                            title={
+                              manual !== undefined
+                                ? "Manual rate — click to edit, clear to reset"
+                                : "Click to set a manual rate"
+                            }
+                          >
+                            {money(rate)}
+                          </button>
+                        )}
                         <div className="flex flex-wrap justify-center gap-[3px]">
                           <span className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan">
                             {avail}

@@ -318,4 +318,13 @@ export default defineSchema({
     date: v.string(), // stay date the adjustment applies to
     pct: v.number(), // e.g. 0.06 = +6% on the rack rate
   }).index("by_property_date", ["propertyId", "date"]),
+
+  // ---- manual per-cell rate overrides (typed into the grid when a day is
+  //      not on dynamic pricing) --------------------------------------------
+  rate_overrides: defineTable({
+    propertyId: v.id("properties"),
+    roomType: v.string(),
+    date: v.string(),
+    amount: v.number(),
+  }).index("by_property", ["propertyId"]),
 });

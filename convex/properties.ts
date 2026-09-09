@@ -7,7 +7,7 @@ import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
 import { issueInvoiceForFolio } from "./invoices";
 import { nightlyRateFor } from "./revenue";
-import { rateMultiplierFor } from "./rates";
+import { loadRateRules } from "./rates";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
 const PICKUP_HORIZON_DAYS = 45;
@@ -57,10 +57,15 @@ async function writeNightStats(
       r.checkOut > closedDate
   );
   const roomsSold = soldThatNight.length;
-  const closedMult = await rateMultiplierFor(ctx, propertyId, closedDate);
+  const rules = await loadRateRules(ctx, propertyId);
   const roomRevenue = soldThatNight.reduce(
     (s, r) =>
-      s + Math.round(nightlyRateFor(r.roomType ?? "", closedDate) * closedMult),
+      s +
+      rules(
+        r.roomType ?? "",
+        closedDate,
+        nightlyRateFor(r.roomType ?? "", closedDate)
+      ),
     0
   );
   const postedRoomRevenue = folioLines
@@ -113,7 +118,6 @@ async function writeNightStats(
 
   for (let i = 0; i < PICKUP_HORIZON_DAYS; i++) {
     const forDate = addIso(newDate, i);
-    const fMult = await rateMultiplierFor(ctx, propertyId, forDate);
     const staying = onBooks.filter(
       (r) => r.checkIn <= forDate && r.checkOut > forDate
     );
@@ -125,7 +129,11 @@ async function writeNightStats(
       revenueOnBooks: staying.reduce(
         (s, r) =>
           s +
-          Math.round(nightlyRateFor(r.roomType ?? "", forDate) * fMult),
+          rules(
+            r.roomType ?? "",
+            forDate,
+            nightlyRateFor(r.roomType ?? "", forDate)
+          ),
         0
       ),
     };

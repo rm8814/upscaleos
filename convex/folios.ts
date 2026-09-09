@@ -6,7 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { nightlyRateFor } from "./revenue";
 import { roomNightTaxes, chargeTaxes } from "./taxEngine";
 import { codeForPayment } from "./transactionCodes";
-import { rateMultiplierFor } from "./rates";
+import { applyRateRules } from "./rates";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -48,9 +48,12 @@ async function postNight(
     .collect();
   if (existing.some((l) => l.kind === "room" && l.date === date)) return;
 
-  const gross = Math.round(
-    nightlyRateFor(res.roomType ?? "", date) *
-      (await rateMultiplierFor(ctx, folio.propertyId, date))
+  const gross = await applyRateRules(
+    ctx,
+    folio.propertyId,
+    res.roomType ?? "",
+    date,
+    nightlyRateFor(res.roomType ?? "", date)
   );
   const taxes = await propertyTaxes(ctx, folio.propertyId);
   const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {

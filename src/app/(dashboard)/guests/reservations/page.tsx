@@ -66,7 +66,7 @@ function ReservationListInner() {
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  const [pageSize, setPageSize] = useState(10);
   const [selected, setSelected] = useState<string | null>(null);
 
   const TODAY = activeProperty?.businessDate ?? "2026-09-08";

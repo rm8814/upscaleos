@@ -31,6 +31,7 @@ export interface SlideOverReservation {
   roomType?: string;
   channel?: string;
   corporateAccountId?: string;
+  ratePlanId?: string;
 }
 
 const TIMELINE = [
@@ -67,12 +68,17 @@ export default function ReservationSlideOver({
   const statusColor = RES_STATUS_COLOR[res.status] ?? "var(--fg-2)";
   const setStatus = useMutation(api.reservations.setStatus);
   const setCorporate = useMutation(api.reservations.setCorporate);
+  const setRatePlan = useMutation(api.reservations.setRatePlan);
   const toast = useToast();
   const { activeProperty } = useProperty();
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
 
   const agreements = useQuery(
     api.revenue.getCorporateAgreements,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
+  const ratePlans = useQuery(
+    api.rates.getRatePlans,
     activeProperty ? { propertyId: activeProperty._id } : "skip"
   );
 
@@ -182,6 +188,31 @@ export default function ReservationSlideOver({
             </Row>
             <Row icon={<User className="h-4 w-4" />} label="Channel">
               {res.channel ?? "Direct"}
+            </Row>
+            <Row icon={<Star className="h-4 w-4" />} label="Rate plan">
+              <select
+                value={res.ratePlanId ?? ""}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  await setRatePlan({
+                    id: res._id as Id<"reservations">,
+                    ratePlanId: v
+                      ? (v as Id<"rate_plans">)
+                      : undefined,
+                  });
+                  toast(v ? "Rate plan applied" : "Back to BAR", "success");
+                }}
+                className="rounded-sm border border-line bg-ink px-2 py-1 text-12 text-ice outline-none focus:border-accent-violet"
+              >
+                <option value="">BAR (best available)</option>
+                {(ratePlans ?? [])
+                  .filter((p) => p.active || p._id === res.ratePlanId)
+                  .map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.code} · {p.name}
+                    </option>
+                  ))}
+              </select>
             </Row>
             <Row icon={<User className="h-4 w-4" />} label="Corporate">
               <select

@@ -45,6 +45,7 @@ export const seed = internalMutation({
       "ar_accounts",
       "rate_adjustments",
       "rate_overrides",
+      "rate_plans",
       "room_blocks",
       "waitlist",
       "reservations",
@@ -388,8 +389,39 @@ export const seed = internalMutation({
         r.roomType === "King Suite" &&
         (r.status === "inhouse" || r.status === "confirmed")
     );
+    // ---- rate plans (first-class, sellable price definitions) ----
+    const planSeed = [
+      { code: "BAR", name: "Best Available Rate", kind: "bar", pricing: "engine", active: true },
+      { code: "CORP-ACCOR", name: "Accor Global negotiated", kind: "corporate", pricing: "flat", agreementId: corpIds[0], amount: 1800000, active: true },
+      { code: "PKG-BB", name: "Bed & Breakfast", kind: "package", pricing: "engine", includesBreakfast: true, components: [{ label: "Breakfast for 2", amount: 150000, code: "FB-BF" }], active: true },
+      { code: "PROMO-EB21", name: "Early Bird — 21 days", kind: "promo", pricing: "percent_off", percent: 0.15, advanceDays: 21, minLos: 2, active: true },
+      { code: "PROMO-STAY3", name: "Stay 3 Pay 2", kind: "promo", pricing: "amount_off", amount: 500000, minLos: 3, active: false },
+    ];
+    const planIds: Record<string, import("./_generated/dataModel").Id<"rate_plans">> = {};
+    for (const p of planSeed) {
+      planIds[p.code] = await ctx.db.insert("rate_plans", { ...p, propertyId });
+    }
+
     for (const r of kingBookings.slice(0, 3)) {
-      await ctx.db.patch(r._id, { corporateAccountId: corpIds[0] });
+      await ctx.db.patch(r._id, {
+        corporateAccountId: corpIds[0],
+        ratePlanId: planIds["CORP-ACCOR"],
+      });
+    }
+    // put a couple of upcoming direct bookings on the early-bird promo
+    const ebCandidates = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+        .collect()
+    ).filter(
+      (r) =>
+        (r.status === "confirmed" || r.status === "tentative") &&
+        !r.corporateAccountId &&
+        r.checkOut > r.checkIn
+    );
+    for (const r of ebCandidates.slice(0, 2)) {
+      await ctx.db.patch(r._id, { ratePlanId: planIds["PROMO-EB21"] });
     }
 
     // ---- group blocks + rooming lists -----------------------------

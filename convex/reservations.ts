@@ -236,12 +236,16 @@ export const create = mutation({
     adults: v.optional(v.number()),
     children: v.optional(v.number()),
     corporateAgreementId: v.optional(v.id("corporate_agreements")),
+    ratePlanId: v.optional(v.id("rate_plans")),
   },
   handler: async (ctx, args) => {
     const scope = await authorize(ctx, {
       propertyId: args.propertyId,
       requireProperty: "front_office",
     });
+    // A corporate rate plan carries its own agreement link.
+    const plan = args.ratePlanId ? await ctx.db.get(args.ratePlanId) : null;
+    const agreementId = args.corporateAgreementId ?? plan?.agreementId;
     const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
 
     let roomId = args.roomId;
@@ -274,7 +278,8 @@ export const create = mutation({
       roomType: args.roomType,
       checkIn: args.checkIn,
       checkOut: args.checkOut,
-      corporateAgreementId: args.corporateAgreementId,
+      corporateAgreementId: agreementId,
+      ratePlanId: args.ratePlanId,
     });
     const id = await ctx.db.insert("reservations", {
       guestId,
@@ -291,7 +296,8 @@ export const create = mutation({
       adults: args.adults ?? 2,
       children: args.children ?? 0,
       roomAutoAssigned,
-      corporateAccountId: args.corporateAgreementId,
+      corporateAccountId: agreementId,
+      ratePlanId: args.ratePlanId,
     });
     await writeAudit(ctx, scope, "reservation.create", {
       propertyId: args.propertyId,
@@ -342,6 +348,8 @@ export const updateDates = mutation({
       roomType: effectiveType,
       checkIn: args.checkIn,
       checkOut: args.checkOut,
+      corporateAgreementId: res.corporateAccountId,
+      ratePlanId: res.ratePlanId,
     });
     patch.rate = fmtRp(q.nights[0]?.rate ?? 0);
     patch.totalAmount = fmtRp(q.total);
@@ -479,6 +487,53 @@ export const setCorporate = mutation({
       propertyId: res.propertyId,
       target: (await ctx.db.get(res.guestId))?.name,
       detail: agreement ? `linked ${agreement.accountName}` : "unlinked",
+    });
+  },
+});
+
+/** Put a reservation on a rate plan (or clear it back to BAR). */
+export const setRatePlan = mutation({
+  args: {
+    id: v.id("reservations"),
+    ratePlanId: v.optional(v.id("rate_plans")),
+  },
+  handler: async (ctx, args) => {
+    const res = await ctx.db.get(args.id);
+    if (!res) throw new Error("Reservation not found");
+    const scope = await authorize(ctx, {
+      propertyId: res.propertyId,
+      requireProperty: "front_office",
+    });
+    const plan = args.ratePlanId ? await ctx.db.get(args.ratePlanId) : null;
+    // A corporate plan re-points the reservation's agreement link too; a
+    // non-corporate plan leaves any manual corporate link untouched.
+    const agreementId =
+      plan && plan.kind === "corporate"
+        ? plan.agreementId
+        : res.corporateAccountId;
+    await ctx.db.patch(args.id, {
+      ratePlanId: args.ratePlanId,
+      corporateAccountId: agreementId,
+    });
+    const q = await quoteStay(ctx, {
+      propertyId: res.propertyId,
+      roomType: res.roomType ?? "",
+      checkIn: res.checkIn,
+      checkOut: res.checkOut,
+      corporateAgreementId: agreementId,
+      ratePlanId: args.ratePlanId,
+    });
+    await ctx.db.patch(args.id, {
+      rate: fmtRp(q.nights[0]?.rate ?? 0),
+      totalAmount: fmtRp(q.total),
+    });
+    const bd = await businessDate(ctx, res.propertyId);
+    await reconcileFolioToStay(ctx, args.id, bd, { repriceExisting: true });
+
+    await writeAudit(ctx, scope, "reservation.rate_plan", {
+      propertyId: res.propertyId,
+      target: (await ctx.db.get(res.guestId))?.name,
+      detail: plan ? `${plan.code} — ${plan.name}` : "BAR (cleared)",
     });
   },
 });

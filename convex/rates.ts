@@ -73,25 +73,64 @@ export async function effectiveNightlyRate(
 }
 
 /**
- * THE nightly rate for a specific reservation on a date: a linked corporate
- * agreement's negotiated flat rate wins over the rack/rules rate.
+ * Apply a rate plan's modifier to the engine (rack + rules) price.
+ *   flat         -> the plan's own nightly amount
+ *   percent_off  -> engine × (1 − percent)
+ *   amount_off   -> engine − amount (never below 0)
+ *   engine       -> engine, unless a linked agreement carries a flat rate
+ */
+export function resolvePlanRate(
+  plan: Doc<"rate_plans"> | null | undefined,
+  engineRate: number,
+  agreementRate: number
+): number {
+  if (!plan) return engineRate;
+  switch (plan.pricing) {
+    case "flat":
+      return plan.amount && plan.amount > 0 ? plan.amount : engineRate;
+    case "percent_off":
+      return plan.percent
+        ? Math.round(engineRate * (1 - plan.percent))
+        : engineRate;
+    case "amount_off":
+      return plan.amount ? Math.max(0, engineRate - plan.amount) : engineRate;
+    default:
+      return agreementRate > 0 ? agreementRate : engineRate;
+  }
+}
+
+/**
+ * THE nightly rate for a specific reservation on a date. Precedence:
+ *   1. a linked rate plan's modifier over the engine price
+ *   2. (legacy) a directly-linked corporate agreement's flat rate
+ *   3. the engine (rack + property rules) price
  */
 export async function nightlyRateForReservation(
   ctx: Ctx,
   res: Doc<"reservations">,
   date: string
 ): Promise<number> {
-  if (res.corporateAccountId) {
-    const agreement = await ctx.db.get(res.corporateAccountId);
-    const neg = parseRp(agreement?.rate);
-    if (neg > 0) return neg;
-  }
-  return effectiveNightlyRate(
+  const engine = await effectiveNightlyRate(
     ctx,
     res.propertyId,
     res.roomType ?? "",
     date
   );
+  if (res.ratePlanId) {
+    const plan = await ctx.db.get(res.ratePlanId);
+    if (plan) {
+      let agRate = 0;
+      if (plan.agreementId) {
+        agRate = parseRp((await ctx.db.get(plan.agreementId))?.rate);
+      }
+      return resolvePlanRate(plan, engine, agRate);
+    }
+  }
+  if (res.corporateAccountId) {
+    const neg = parseRp((await ctx.db.get(res.corporateAccountId))?.rate);
+    if (neg > 0) return neg;
+  }
+  return engine;
 }
 
 /**
@@ -103,26 +142,41 @@ export async function loadReservationRates(
   ctx: Ctx,
   propertyId: Id<"properties">
 ) {
-  const [rules, agreements] = await Promise.all([
+  const [rules, agreements, plans] = await Promise.all([
     loadRateRules(ctx, propertyId),
     ctx.db
       .query("corporate_agreements")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+    ctx.db
+      .query("rate_plans")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect(),
   ]);
   const negByAgreement = new Map(
     agreements.map((a) => [a._id, parseRp(a.rate)])
   );
+  const planById = new Map(plans.map((p) => [p._id, p]));
   return (res: Doc<"reservations">, date: string): number => {
-    if (res.corporateAccountId) {
-      const neg = negByAgreement.get(res.corporateAccountId);
-      if (neg && neg > 0) return neg;
-    }
-    return rules(
+    const engine = rules(
       res.roomType ?? "",
       date,
       nightlyRateFor(res.roomType ?? "", date)
     );
+    if (res.ratePlanId) {
+      const plan = planById.get(res.ratePlanId);
+      if (plan) {
+        const agRate = plan.agreementId
+          ? negByAgreement.get(plan.agreementId) ?? 0
+          : 0;
+        return resolvePlanRate(plan, engine, agRate);
+      }
+    }
+    if (res.corporateAccountId) {
+      const neg = negByAgreement.get(res.corporateAccountId);
+      if (neg && neg > 0) return neg;
+    }
+    return engine;
   };
 }
 
@@ -165,6 +219,7 @@ export async function quoteStay(
     checkIn: string;
     checkOut: string;
     corporateAgreementId?: Id<"corporate_agreements">;
+    ratePlanId?: Id<"rate_plans">;
   }
 ): Promise<{
   nights: { date: string; rate: number }[];
@@ -178,21 +233,21 @@ export async function quoteStay(
     .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
     .collect();
 
-  // A linked corporate agreement's negotiated rate replaces the rules rate.
-  let negotiated = 0;
-  if (args.corporateAgreementId) {
-    negotiated = parseRp((await ctx.db.get(args.corporateAgreementId))?.rate);
-  }
+  // A linked rate plan (or, legacy, a bare corporate agreement) reshapes the
+  // per-night price off the engine rate.
+  let plan: Doc<"rate_plans"> | null = null;
+  if (args.ratePlanId) plan = await ctx.db.get(args.ratePlanId);
+  let agreementRate = 0;
+  const agreementId = args.corporateAgreementId ?? plan?.agreementId;
+  if (agreementId) agreementRate = parseRp((await ctx.db.get(agreementId))?.rate);
 
   const nights: { date: string; rate: number }[] = [];
   for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
-    nights.push({
-      date: d,
-      rate:
-        negotiated > 0
-          ? negotiated
-          : rules(args.roomType, d, nightlyRateFor(args.roomType, d)),
-    });
+    const engine = rules(args.roomType, d, nightlyRateFor(args.roomType, d));
+    let rate = engine;
+    if (plan) rate = resolvePlanRate(plan, engine, agreementRate);
+    else if (agreementRate > 0) rate = agreementRate;
+    nights.push({ date: d, rate });
   }
   const subtotal = nights.reduce((s, n) => s + n.rate, 0);
   const tax = nights.reduce(
@@ -293,7 +348,105 @@ export const getRatesGrid = query({
   },
 });
 
+/** Every rate plan for a property, with a live count of linked reservations. */
+export const getRatePlans = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const plans = await ctx.db
+      .query("rate_plans")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const out = [];
+    for (const p of plans) {
+      const linked = await ctx.db
+        .query("reservations")
+        .withIndex("by_rate_plan", (q) => q.eq("ratePlanId", p._id))
+        .collect();
+      out.push({
+        _id: p._id,
+        code: p.code,
+        name: p.name,
+        kind: p.kind,
+        pricing: p.pricing,
+        amount: p.amount ?? null,
+        percent: p.percent ?? null,
+        agreementId: p.agreementId ?? null,
+        minLos: p.minLos ?? null,
+        advanceDays: p.advanceDays ?? null,
+        includesBreakfast: p.includesBreakfast ?? false,
+        components: p.components ?? [],
+        active: p.active,
+        reservations: linked.length,
+      });
+    }
+    return out.sort((a, b) => a.code.localeCompare(b.code));
+  },
+});
+
 /* -------------------------------------------------- writes ------------- */
+
+/** Create or update a rate plan. */
+export const upsertRatePlan = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    id: v.optional(v.id("rate_plans")),
+    code: v.string(),
+    name: v.string(),
+    kind: v.string(),
+    pricing: v.string(),
+    amount: v.optional(v.number()),
+    percent: v.optional(v.number()),
+    agreementId: v.optional(v.id("corporate_agreements")),
+    minLos: v.optional(v.number()),
+    advanceDays: v.optional(v.number()),
+    includesBreakfast: v.optional(v.boolean()),
+    active: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const scope = await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "gm",
+    });
+    const { id, propertyId, ...rest } = args;
+    const doc = {
+      propertyId,
+      ...rest,
+      active: args.active ?? true,
+    };
+    let planId: Id<"rate_plans">;
+    if (id) {
+      await ctx.db.patch(id, doc);
+      planId = id;
+    } else {
+      planId = await ctx.db.insert("rate_plans", doc);
+    }
+    await writeAudit(ctx, scope, "rate.plan", {
+      propertyId,
+      target: args.code,
+      detail: id ? "updated" : "created",
+    });
+    return planId;
+  },
+});
+
+/** Toggle a rate plan on or off for sale. */
+export const setRatePlanActive = mutation({
+  args: { id: v.id("rate_plans"), active: v.boolean() },
+  handler: async (ctx, args) => {
+    const plan = await ctx.db.get(args.id);
+    if (!plan) throw new Error("Rate plan not found");
+    const scope = await authorize(ctx, {
+      propertyId: plan.propertyId,
+      requireProperty: "gm",
+    });
+    await ctx.db.patch(args.id, { active: args.active });
+    await writeAudit(ctx, scope, "rate.plan", {
+      propertyId: plan.propertyId,
+      target: plan.code,
+      detail: args.active ? "activated" : "deactivated",
+    });
+  },
+});
 
 /** Turn the dynamic-pricing toggle on/off for one stay date. */
 export const setDynamic = mutation({

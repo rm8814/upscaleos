@@ -133,11 +133,13 @@ export default defineSchema({
     groupId: v.optional(v.id("group_blocks")), // part of a group block's rooming list
     externalRef: v.optional(v.string()), // channel/OTA booking reference, for idempotent ingest
     corporateAccountId: v.optional(v.id("corporate_agreements")), // negotiated-rate agreement
+    ratePlanId: v.optional(v.id("rate_plans")), // first-class rate plan driving the price
   })
     .index("by_property", ["propertyId"])
     .index("by_group", ["groupId"])
     .index("by_external_ref", ["externalRef"])
-    .index("by_corporate", ["corporateAccountId"]),
+    .index("by_corporate", ["corporateAccountId"])
+    .index("by_rate_plan", ["ratePlanId"]),
   folios: defineTable({
     propertyId: v.id("properties"),
     reservationId: v.id("reservations"),
@@ -349,4 +351,36 @@ export default defineSchema({
     date: v.string(),
     amount: v.number(),
   }).index("by_property", ["propertyId"]),
+
+  // ---- rate plans: first-class, sellable price definitions ----------------
+  //   kind:  'bar'       -> the rack + rules engine price, no modifier
+  //          'corporate' -> negotiated flat rate, linked to an agreement
+  //          'package'   -> BAR + bundled components posted as folio lines
+  //          'promo'     -> BAR with a percent / amount discount + conditions
+  rate_plans: defineTable({
+    propertyId: v.id("properties"),
+    code: v.string(), // 'BAR', 'CORP-ACCOR', 'PKG-BB', 'PROMO-EB21'
+    name: v.string(),
+    kind: v.string(),
+    pricing: v.string(), // 'engine' | 'flat' | 'percent_off' | 'amount_off'
+    amount: v.optional(v.number()), // flat nightly rate, or amount-off value
+    percent: v.optional(v.number()), // e.g. 0.15 = 15% off the engine price
+    agreementId: v.optional(v.id("corporate_agreements")),
+    minLos: v.optional(v.number()), // minimum length of stay
+    advanceDays: v.optional(v.number()), // must be booked >= N days ahead
+    includesBreakfast: v.optional(v.boolean()),
+    components: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          amount: v.number(), // per night; 0 = inclusive, informational only
+          code: v.string(), // folio transaction code, e.g. 'FB-BF'
+        })
+      )
+    ),
+    active: v.boolean(),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_property_kind", ["propertyId", "kind"])
+    .index("by_agreement", ["agreementId"]),
 });

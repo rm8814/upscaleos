@@ -257,6 +257,7 @@ export const getCalendarBoard = query({
       to: args.to,
       days,
       rooms: rooms
+        .filter((r) => r.active !== false)
         .map((r) => ({
           _id: r._id,
           roomNumber: r.roomNumber,

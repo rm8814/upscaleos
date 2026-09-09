@@ -79,6 +79,7 @@ async function pickFreeRoom(
   const candidates = rooms.filter((rm) => {
     if (rm.type !== roomType || taken.has(rm._id) || blocked.has(rm._id))
       return false;
+    if (rm.active === false) return false; // retired in Room setup
     if (rm.status === "OOO" || rm.status === "OOS") return false;
     // A same-day arrival needs a room that is actually clean and ready; a
     // future arrival can be given one that will be cleaned before check-in.

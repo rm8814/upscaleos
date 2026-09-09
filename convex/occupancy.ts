@@ -14,6 +14,11 @@ import type { Doc } from "./_generated/dataModel";
 
 const OUT_OF_SERVICE = new Set(["OOO", "OOS"]);
 
+/** A room in inventory: not retired in Room setup. */
+export function activeRoom(r: Doc<"rooms">): boolean {
+  return r.active !== false;
+}
+
 /** Statuses where a reservation no longer holds / needs a room. */
 export const RELEASED_STATUSES = new Set([
   "cancelled",
@@ -24,7 +29,7 @@ export const RELEASED_STATUSES = new Set([
 export const READY_ROOM_STATUSES = new Set(["Inspected", "Vacant Clean"]);
 
 export function sellableRoom(r: Doc<"rooms">): boolean {
-  return !OUT_OF_SERVICE.has(r.status);
+  return activeRoom(r) && !OUT_OF_SERVICE.has(r.status);
 }
 
 /** A room_block covers `date` (from inclusive, to exclusive; '' to = open). */

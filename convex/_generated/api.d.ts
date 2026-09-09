@@ -33,6 +33,7 @@ import type * as rates from "../rates.js";
 import type * as reports from "../reports.js";
 import type * as reservations from "../reservations.js";
 import type * as revenue from "../revenue.js";
+import type * as roomSetup from "../roomSetup.js";
 import type * as seed from "../seed.js";
 import type * as taxEngine from "../taxEngine.js";
 import type * as taxes from "../taxes.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   reservations: typeof reservations;
   revenue: typeof revenue;
+  roomSetup: typeof roomSetup;
   seed: typeof seed;
   taxEngine: typeof taxEngine;
   taxes: typeof taxes;

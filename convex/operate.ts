@@ -310,6 +310,7 @@ export const getAvailability = query({
     const free = rooms
       .filter(
         (r) =>
+          r.active !== false &&
           r.status !== "OOO" &&
           r.status !== "OOS" &&
           !oos.has(r._id) &&

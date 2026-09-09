@@ -56,6 +56,8 @@ export default function GroupsBlocksPage() {
   const addGuest = useMutation(api.groups.addRoomingGuest);
   const assignRoom = useMutation(api.reservations.assignOne);
   const recordDeposit = useMutation(api.groups.recordDeposit);
+  const releaseRooms = useMutation(api.groups.releaseRooms);
+  const extendCutoff = useMutation(api.groups.extendCutoff);
   const [depositDraft, setDepositDraft] = useState("");
 
   const [search, setSearch] = useState("");
@@ -268,7 +270,30 @@ export default function GroupsBlocksPage() {
                 </div>
 
                 <Card className="p-3.5">
-                  <Eyebrow className="mb-2">Pick-up trend</Eyebrow>
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <Eyebrow>Pick-up &amp; wash forecast</Eyebrow>
+                    <button
+                      onClick={async () => {
+                        const iso7 = addIso(g.cutoffDate, 7);
+                        try {
+                          await extendCutoff({
+                            groupId: g.id,
+                            toDate: iso7,
+                            reason: "Extended from group detail",
+                          });
+                          toast(`Cut-off moved to ${fmtDate(iso7)}`, "success");
+                        } catch (e) {
+                          toast(
+                            e instanceof Error ? e.message : "Could not extend",
+                            "error"
+                          );
+                        }
+                      }}
+                      className="rounded-sm border border-line px-2 py-1 text-[11px] text-fg-2 hover:border-line-strong"
+                    >
+                      Extend cut-off +7d
+                    </button>
+                  </div>
                   <div className="flex h-14 items-end gap-1.5">
                     {g.trend.map((t, i) => (
                       <div
@@ -278,25 +303,61 @@ export default function GroupsBlocksPage() {
                       />
                     ))}
                   </div>
-                  <div className="mt-1.5 text-[11px] text-fg-3">
-                    {g.picked} of {g.blocked} rooms picked up · {g.pickupPct}
+                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-fg-3">
+                    <span>
+                      Picked{" "}
+                      <span className="font-mono text-fg-1">
+                        {g.picked} / {g.blocked}
+                      </span>{" "}
+                      · {g.pickupPct}
+                    </span>
+                    <span>
+                      Pace{" "}
+                      <span className="font-mono text-fg-1">
+                        {g.pacePerDay}/day
+                      </span>
+                    </span>
+                    <span>
+                      Projected at cut-off{" "}
+                      <span className="font-mono text-accent-cyan">
+                        {g.projectedPickup}
+                      </span>{" "}
+                      · wash{" "}
+                      <span className="font-mono text-res-tentative">
+                        {g.projectedWash}
+                      </span>
+                    </span>
+                    <span>
+                      Cut-off{" "}
+                      <span className="font-mono text-fg-1">
+                        {g.cutoffDays <= 0 ? "passed" : `in ${g.cutoffDays}d`}
+                      </span>
+                    </span>
                   </div>
+                  {g.attritionShortfall > 0 && (
+                    <div className="mt-1.5 rounded-sm border border-res-tentative bg-elevated px-2 py-1 text-[11px] text-res-tentative">
+                      Projected {g.projectedPickup} below the{" "}
+                      {g.guaranteed}-room guarantee — {g.attritionShortfall}-room
+                      attrition exposure.
+                    </div>
+                  )}
                 </Card>
 
                 <div>
                   <Eyebrow className="mb-2">Sub-blocks</Eyebrow>
                   <Card className="overflow-hidden p-0">
-                    <div className="grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_1fr] border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+                    <div className="grid grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr] border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
                       <div>Room type</div>
                       <div>Blocked</div>
                       <div>Picked</div>
                       <div>Held</div>
                       <div>Rate</div>
+                      <div />
                     </div>
                     {g.subBlocks.map((sb) => (
                       <div
                         key={sb.roomType}
-                        className="grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_1fr] items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0"
+                        className="grid grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr] items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0"
                       >
                         <div className="font-medium">{sb.roomType}</div>
                         <div className="font-mono">{sb.blocked}</div>
@@ -304,7 +365,35 @@ export default function GroupsBlocksPage() {
                         <div className="font-mono text-res-tentative">
                           {g.released ? "—" : sb.held}
                         </div>
-                        <div className="font-mono">{sb.rate}</div>
+                        <div className="font-mono text-[11px]">{sb.rate}</div>
+                        <div className="text-right">
+                          {!g.released && sb.held > 0 && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const r = await releaseRooms({
+                                    subBlockId: sb.subBlockId,
+                                    count: sb.held,
+                                  });
+                                  toast(
+                                    `Released ${r.released} ${sb.roomType}`,
+                                    "success"
+                                  );
+                                } catch (e) {
+                                  toast(
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Could not release",
+                                    "error"
+                                  );
+                                }
+                              }}
+                              className="rounded-sm border border-line px-2 py-0.5 text-[10.5px] text-fg-2 hover:border-line-strong"
+                            >
+                              Release {sb.held}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </Card>

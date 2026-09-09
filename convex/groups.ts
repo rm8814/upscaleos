@@ -110,6 +110,112 @@ export async function groupHeldRooms(
   return held;
 }
 
+/** Night-audit hook: one pick-up snapshot per still-relevant group block. */
+export async function snapshotGroupPickup(
+  ctx: MutationCtx,
+  propertyId: Id<"properties">,
+  asOf: string
+): Promise<number> {
+  const blocks = await ctx.db
+    .query("group_blocks")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+  let n = 0;
+  for (const g of blocks) {
+    if (g.status === "cancelled") continue;
+    const windowEnd = addDaysIso(g.startDate, g.nights);
+    if (asOf >= windowEnd) continue; // stay is over — stop tracking
+    const subs = await ctx.db
+      .query("group_subblocks")
+      .withIndex("by_group", (q) => q.eq("groupId", g._id))
+      .collect();
+    const blocked = subs.reduce((s, x) => s + x.blocked, 0);
+    const picked = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_group", (q) => q.eq("groupId", g._id))
+        .collect()
+    ).filter((r) => r.status !== "cancelled").length;
+    // one row per (group, asOf)
+    const existing = await ctx.db
+      .query("group_pickup")
+      .withIndex("by_group", (q) => q.eq("groupId", g._id).eq("asOf", asOf))
+      .first();
+    if (existing) await ctx.db.patch(existing._id, { picked, blocked });
+    else
+      await ctx.db.insert("group_pickup", {
+        groupId: g._id,
+        propertyId,
+        asOf,
+        picked,
+        blocked,
+      });
+    n += 1;
+  }
+  return n;
+}
+
+/** Manually release N held rooms from a sub-block back to general inventory. */
+export const releaseRooms = mutation({
+  args: { subBlockId: v.id("group_subblocks"), count: v.number() },
+  handler: async (ctx, args) => {
+    const sub = await ctx.db.get(args.subBlockId);
+    if (!sub) throw new Error("Sub-block not found");
+    const block = await ctx.db.get(sub.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    const picked = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_group", (q) => q.eq("groupId", block._id))
+        .collect()
+    ).filter((r) => r.roomType === sub.roomType && r.status !== "cancelled")
+      .length;
+    const releasable = Math.max(0, sub.blocked - picked);
+    const n = Math.min(Math.max(1, Math.round(args.count)), releasable);
+    if (n <= 0) throw new Error("No unpicked rooms to release");
+    await ctx.db.patch(args.subBlockId, { blocked: sub.blocked - n });
+    await writeAudit(ctx, scope, "group.release", {
+      propertyId: block.propertyId,
+      target: `${block.name} · ${sub.roomType}`,
+      detail: `released ${n} of ${releasable} held`,
+    });
+    return { released: n };
+  },
+});
+
+/** Push a block's cut-off date out (needs a reason for the trail). */
+export const extendCutoff = mutation({
+  args: {
+    groupId: v.id("group_blocks"),
+    toDate: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const block = await ctx.db.get(args.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    if (args.toDate <= block.cutoffDate)
+      throw new Error("New cut-off must be later than the current one");
+    await ctx.db.patch(args.groupId, {
+      cutoffDate: args.toDate,
+      released: false,
+      releasedOn: undefined,
+    });
+    await writeAudit(ctx, scope, "group.cutoff", {
+      propertyId: block.propertyId,
+      target: block.name,
+      detail: `${block.cutoffDate} → ${args.toDate} · ${args.reason}`,
+    });
+  },
+});
+
 /** Night-audit hook: release group blocks whose cut-off has passed. */
 export async function releasePastCutoff(
   ctx: MutationCtx,
@@ -231,6 +337,47 @@ export const get = query({
     const picked = res.length;
     const pct = blocked ? Math.round((picked / blocked) * 100) : 0;
 
+    // ---- real pick-up curve + projection to cut-off ----
+    const snaps = (
+      await ctx.db
+        .query("group_pickup")
+        .withIndex("by_group", (q) => q.eq("groupId", g._id))
+        .collect()
+    ).sort((a, b) => a.asOf.localeCompare(b.asOf));
+    const trend =
+      snaps.length >= 2
+        ? snaps.map((s) => s.picked)
+        : trendTo(pct); // fall back to a synthetic curve until audits run
+    const bd =
+      (await ctx.db.get(g.propertyId))?.businessDate ?? g.startDate;
+    const cutoffDays = Math.round(
+      (Date.parse(g.cutoffDate + "T00:00:00Z") -
+        Date.parse(bd + "T00:00:00Z")) /
+        86400000
+    );
+    // pace = rooms picked per day over the last week of snapshots
+    let pacePerDay = 0;
+    if (snaps.length >= 2) {
+      const first = snaps[Math.max(0, snaps.length - 8)];
+      const last = snaps[snaps.length - 1];
+      const span = Math.max(
+        1,
+        Math.round(
+          (Date.parse(last.asOf + "T00:00:00Z") -
+            Date.parse(first.asOf + "T00:00:00Z")) /
+            86400000
+        )
+      );
+      pacePerDay = (last.picked - first.picked) / span;
+    }
+    const projectedPickup = Math.min(
+      blocked,
+      Math.max(picked, Math.round(picked + pacePerDay * Math.max(0, cutoffDays)))
+    );
+    const projectedWash = Math.max(0, blocked - projectedPickup);
+    const guaranteed = Math.round(blocked * (g.guaranteedPct ?? 1));
+    const attritionShortfall = Math.max(0, guaranteed - projectedPickup);
+
     // Master A/R account: charges, deposits/payments, outstanding.
     const arAcc = (
       await ctx.db
@@ -284,10 +431,17 @@ export const get = query({
       picked,
       held: g.released === true ? 0 : Math.max(0, blocked - picked),
       pickupPct: `${pct}%`,
-      trend: trendTo(pct),
+      trend,
+      projectedPickup,
+      projectedWash,
+      pacePerDay: Math.round(pacePerDay * 10) / 10,
+      cutoffDays,
+      guaranteed,
+      attritionShortfall,
       subBlocks: subs.map((s) => {
         const sp = pickedByType.get(s.roomType) ?? 0;
         return {
+          subBlockId: s._id,
           roomType: s.roomType,
           blocked: s.blocked,
           picked: sp,

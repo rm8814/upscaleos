@@ -5,7 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
-import { releasePastCutoff } from "./groups";
+import { releasePastCutoff, snapshotGroupPickup } from "./groups";
 import { expireRoomBlocks } from "./operate";
 import { issueInvoiceForFolio } from "./invoices";
 import { loadReservationRates } from "./rates";
@@ -362,6 +362,7 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
   // general inventory.
   const blocksReleased = await releasePastCutoff(ctx, id, newDate);
   const roomsRestored = await expireRoomBlocks(ctx, id, newDate);
+  await snapshotGroupPickup(ctx, id, newDate);
 
   await writeNightStats(ctx, id, oldDate, newDate);
 

@@ -773,6 +773,22 @@ export const seed = internalMutation({
           ratePlanId: planByType[rm.roomType],
         });
       }
+
+      // backfill ~14 daily pick-up snapshots so the wash projection is real
+      const gBlocked = gs.subs.reduce((s, x) => s + x.blocked, 0);
+      const gPicked = gs.rooming.length;
+      for (let d = 14; d >= 1; d--) {
+        const asOf = iso(addDays(TODAY, -d));
+        // ramp from ~35% of final pickup up to the current count
+        const frac = Math.min(1, 0.35 + ((14 - d) / 13) * 0.65);
+        await ctx.db.insert("group_pickup", {
+          groupId,
+          propertyId,
+          asOf,
+          picked: Math.round(gPicked * frac),
+          blocked: gBlocked,
+        });
+      }
     }
 
     // ---- folios: every in-house / departed reservation with a room --

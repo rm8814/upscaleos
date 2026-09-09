@@ -32,6 +32,7 @@ export default function HousekeepingBoard() {
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const rooms = useQuery(api.operate.getRooms, arg);
   const summary = useQuery(api.operate.getRoomStatusSummary, arg);
+  const forecast = useQuery(api.housekeeping.getHousekeepingForecast, arg);
   const tickets = useQuery(api.operate.getMaintenanceTickets, arg);
   const updateStatus = useMutation(api.operate.updateRoomStatus);
 
@@ -77,6 +78,66 @@ export default function HousekeepingBoard() {
           </div>
         ))}
       </div>
+
+      {/* Cleaning forecast */}
+      <Card className="mb-4 overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+          <Eyebrow>Cleaning forecast</Eyebrow>
+          <span className="text-[11px] text-fg-3">
+            {forecast
+              ? `peak ${forecast.peakHousekeepers} housekeepers · ${forecast.creditsPerHousekeeper} credits/shift`
+              : "—"}
+          </span>
+        </div>
+        {!forecast && (
+          <div className="px-4 py-4 text-13 text-fg-3">Loading forecast…</div>
+        )}
+        {forecast && (
+          <div className="upx-scroll overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_0.7fr_0.8fr_0.9fr] gap-2 border-b border-line px-4 py-2 text-[11px] uppercase tracking-[0.06em] text-fg-3">
+                <div>Date</div>
+                <div>Arr</div>
+                <div>Dep</div>
+                <div>Stay</div>
+                <div>Turn</div>
+                <div>Labour h</div>
+                <div>Housekeepers</div>
+              </div>
+              {forecast.rows.map((r) => (
+                <div
+                  key={r.date}
+                  className={`grid grid-cols-[1.1fr_0.7fr_0.7fr_0.7fr_0.7fr_0.8fr_0.9fr] gap-2 border-b border-line-soft px-4 py-2 text-12 last:border-0 ${
+                    r.isToday ? "bg-violet-wash" : ""
+                  }`}
+                >
+                  <div className="font-mono text-fg-2">
+                    {r.date}
+                    {r.isToday && (
+                      <span className="ml-1 text-[10px] text-accent-violet-hi">
+                        today
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono">{r.arrivals}</div>
+                  <div className="font-mono">{r.departures}</div>
+                  <div className="font-mono">{r.stayovers}</div>
+                  <div
+                    className="font-mono"
+                    style={{ color: r.turnovers ? "var(--room-ooo)" : undefined }}
+                  >
+                    {r.turnovers}
+                  </div>
+                  <div className="font-mono text-fg-2">{r.laborHours}</div>
+                  <div className="font-mono font-semibold text-ice">
+                    {r.housekeepersNeeded}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
 
       {/* Filters */}
       <div className="mb-3.5 flex flex-wrap items-center gap-2">

@@ -20,6 +20,7 @@ import type * as folios from "../folios.js";
 import type * as groups from "../groups.js";
 import type * as guests from "../guests.js";
 import type * as history from "../history.js";
+import type * as housekeeping from "../housekeeping.js";
 import type * as http from "../http.js";
 import type * as invoices from "../invoices.js";
 import type * as maintenance from "../maintenance.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   groups: typeof groups;
   guests: typeof guests;
   history: typeof history;
+  housekeeping: typeof housekeeping;
   http: typeof http;
   invoices: typeof invoices;
   maintenance: typeof maintenance;

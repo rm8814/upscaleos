@@ -431,6 +431,35 @@ export const getRatesGrid = query({
     buildRateGrid(ctx, args.propertyId, args.from, args.to),
 });
 
+/** The property's sellable room types + base rates, in display order.
+ *  Falls back to the code table for a property with no room_types rows. */
+export const getRoomTypes = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("room_types")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    if (rows.length === 0)
+      return ROOM_TYPES.map((name) => ({
+        name,
+        baseRate: BASE_RATE[name] ?? DEFAULT_BASE,
+        maxAdults: 2,
+        maxChildren: 2,
+        active: true,
+      }));
+    return [...rows]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r) => ({
+        name: r.name,
+        baseRate: r.baseRate,
+        maxAdults: r.maxAdults,
+        maxChildren: r.maxChildren,
+        active: r.active,
+      }));
+  },
+});
+
 /** Every rate plan for a property, with a live count of linked reservations. */
 export const getRatePlans = query({
   args: { propertyId: v.id("properties") },

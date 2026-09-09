@@ -22,12 +22,6 @@ const DAYS = 14;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
 
-const ROOM_TYPES = [
-  { name: "Deluxe Twin", base: 1_450_000 },
-  { name: "Double Queen", base: 1_850_000 },
-  { name: "King Suite", base: 2_600_000 },
-  { name: "Presidential Suite", base: 6_900_000 },
-];
 
 const SEASONS = [
   { name: "Low", dates: "Feb 1 – Mar 31", color: "var(--accent-cyan)", standard: "1,150,000", deluxe: "1,480,000", suite: "2,100,000", flex: "1,650,000" },
@@ -97,6 +91,10 @@ export default function RatesPage() {
   );
   const roomCounts = useQuery(
     api.operate.getRoomCounts,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
+  const roomTypes = useQuery(
+    api.rates.getRoomTypes,
     activeProperty ? { propertyId: activeProperty._id } : "skip"
   );
   const sellableByType = useMemo(() => {
@@ -288,7 +286,7 @@ export default function RatesPage() {
               })}
             </div>
 
-            {ROOM_TYPES.map((rt, rtIdx) => {
+            {(roomTypes ?? []).map((rt, rtIdx) => {
               const totalRooms = sellableByType.get(rt.name) ?? 0;
               return (
                 <div
@@ -298,7 +296,7 @@ export default function RatesPage() {
                 >
                   <div className="sticky left-0 z-10 flex flex-col gap-1 bg-elevated p-3">
                     <div className="text-13 font-semibold">{rt.name}</div>
-                    <div className="text-[10.5px] text-fg-3">Base {money(rt.base)}</div>
+                    <div className="text-[10.5px] text-fg-3">Base {money(rt.baseRate)}</div>
                   </div>
                   {days.map((d, i) => {
                     const dayIsoTop = iso(d);

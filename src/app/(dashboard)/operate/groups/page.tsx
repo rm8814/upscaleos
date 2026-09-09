@@ -604,8 +604,6 @@ export default function GroupsBlocksPage() {
   );
 }
 
-const ROOM_TYPES = ["Deluxe Twin", "Double Queen", "King Suite", "Presidential Suite"];
-
 function NewBlockModal({
   propertyId,
   businessDate,
@@ -624,8 +622,11 @@ function NewBlockModal({
     rate: string;
   }) => Promise<void>;
 }) {
+  const roomTypes = useQuery(api.rates.getRoomTypes, { propertyId });
+  const typeNames = (roomTypes ?? []).map((t) => t.name);
   const [name, setName] = useState("");
-  const [roomType, setRoomType] = useState("Double Queen");
+  const [roomType, setRoomType] = useState("");
+  const effectiveType = roomType || typeNames[0] || "Double Queen";
   const [startDate, setStartDate] = useState(addIso(businessDate, 30));
   const [nights, setNights] = useState(2);
   const [blocked, setBlocked] = useState(8);
@@ -634,7 +635,7 @@ function NewBlockModal({
 
   const check = useQuery(api.groups.checkBlockAvailability, {
     propertyId,
-    roomType,
+    roomType: effectiveType,
     startDate,
     nights: Math.max(1, nights),
     blocked: Math.max(0, blocked),
@@ -660,11 +661,11 @@ function NewBlockModal({
           />
           <div className="grid grid-cols-2 gap-2.5">
             <select
-              value={roomType}
+              value={effectiveType}
               onChange={(e) => setRoomType(e.target.value)}
               className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-fg-2"
             >
-              {ROOM_TYPES.map((t) => (
+              {typeNames.map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </select>
@@ -737,7 +738,7 @@ function NewBlockModal({
                   name: name.trim(),
                   startDate,
                   nights: Math.max(1, nights),
-                  roomType,
+                  roomType: effectiveType,
                   blocked: Math.max(1, blocked),
                   rate: `Rp ${rate.replace(/[^\d]/g, "")}`,
                 });

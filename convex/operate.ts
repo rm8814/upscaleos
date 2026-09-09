@@ -10,6 +10,7 @@ import {
   blockedRoomIds,
 } from "./occupancy";
 import { groupHeldRooms } from "./groups";
+import { addDaysIso } from "./rateModel";
 
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -381,6 +382,194 @@ export const getRoomCounts = query({
       total: total.get(type) ?? 0,
       sellable: sellable.get(type) ?? 0,
     }));
+  },
+});
+
+const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+
+const ACTIVITY_VERB: Record<string, string> = {
+  "reservation.create": "New reservation",
+  "reservation.status": "Reservation",
+  "reservation.dates": "Reservation dates changed",
+  "reservation.corporate": "Corporate link",
+  "reservation.rate_plan": "Rate plan",
+  "folio.payment": "Payment posted",
+  "folio.charge": "Charge posted",
+  "folio.void": "Folio line voided",
+  "ar.payment": "A/R payment",
+  "invoice.issue": "Invoice issued",
+  "invoice.void": "Invoice voided",
+  "invoice.credit_note": "Credit note",
+  "rate.dynamic": "Dynamic pricing",
+  "rate.manual": "Manual rate",
+  "rate.plan": "Rate plan",
+  "channel.terms": "Channel terms",
+  "maintenance.ticket": "Maintenance ticket",
+  "maintenance.resolve": "Maintenance resolved",
+  "room.block": "Room blocked",
+};
+
+/**
+ * Everything the dashboard shows beyond the KPI tiles, from live data:
+ * channel mix, revenue by source, 14-day occupancy outlook, average length
+ * of stay, the activity feed (audit log) and a derived task list.
+ */
+export const getDashboardBoard = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const today = await businessDate(ctx, args.propertyId);
+    const [rooms, reservations, lines, audit, groups] = await Promise.all([
+      ctx.db
+        .query("rooms")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("folio_lines")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("audit_log")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("group_blocks")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+    ]);
+
+    const sellable = sellableRoomCount(rooms);
+    const live = reservations.filter((r) => !RELEASED_STATUSES.has(r.status));
+
+    // ---- channel mix: room-nights over the next 30 stay dates ----
+    const chan = new Map<string, number>();
+    let chanTotal = 0;
+    for (let i = 0; i < 30; i++) {
+      const d = addDaysIso(today, i);
+      for (const r of live) {
+        if (r.checkIn <= d && r.checkOut > d && r.roomId) {
+          const c = r.channel ?? "Direct";
+          chan.set(c, (chan.get(c) ?? 0) + 1);
+          chanTotal += 1;
+        }
+      }
+    }
+    const channelMix = [...chan.entries()]
+      .map(([name, n]) => ({
+        name,
+        pct: chanTotal ? Math.round((n / chanTotal) * 100) : 0,
+      }))
+      .sort((a, b) => b.pct - a.pct);
+
+    // ---- revenue by source: posted folio lines, trailing 30 days ----
+    const since = addDaysIso(today, -30);
+    const bucket = { Rooms: 0, "F&B": 0, Other: 0 };
+    for (const l of lines) {
+      if (l.voided || l.amount <= 0 || l.date < since) continue;
+      if (l.kind === "room" || l.kind === "tax") bucket.Rooms += l.amount;
+      else if (l.kind === "fnb") bucket["F&B"] += l.amount;
+      else if (l.kind !== "payment") bucket.Other += l.amount;
+    }
+    const revTotal = bucket.Rooms + bucket["F&B"] + bucket.Other;
+    const revenueSources = (
+      Object.entries(bucket) as [keyof typeof bucket, number][]
+    ).map(([label, amount]) => ({
+      label,
+      amount: money(amount),
+      pct: revTotal ? Math.round((amount / revTotal) * 100) : 0,
+    }));
+
+    // ---- 14-day occupancy outlook ----
+    const outlook = Array.from({ length: 14 }, (_, i) => {
+      const d = addDaysIso(today, i);
+      const sold = roomsSoldOn(reservations, d).length;
+      return {
+        date: d,
+        dow: new Date(d + "T00:00:00Z").getUTCDay(),
+        occPct: occupancyPct(sold, sellable),
+      };
+    });
+
+    // ---- average length of stay (current + future stays) ----
+    const losRes = live.filter((r) => r.checkOut > today);
+    const losNights = losRes.reduce(
+      (s, r) =>
+        s +
+        Math.max(
+          1,
+          Math.round(
+            (Date.parse(r.checkOut + "T00:00:00Z") -
+              Date.parse(r.checkIn + "T00:00:00Z")) /
+              86400000
+          )
+        ),
+      0
+    );
+    const avgLos = losRes.length ? losNights / losRes.length : 0;
+
+    // ---- activity feed from the audit log ----
+    const activity = [...audit]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 7)
+      .map((a) => ({
+        at: a.at,
+        atLabel: new Date(a.at).toISOString().slice(11, 16),
+        text: [
+          ACTIVITY_VERB[a.action] ?? a.action,
+          a.target ? ` — ${a.target}` : "",
+          a.detail ? ` (${a.detail})` : "",
+        ]
+          .join("")
+          .trim(),
+      }));
+
+    // ---- derived task list ----
+    const dirty = rooms.filter((r) => r.status === "Vacant Dirty").length;
+    const ooo = rooms.filter(
+      (r) => r.status === "OOO" || r.status === "OOS"
+    ).length;
+    const unassignedArrivals = reservations.filter(
+      (r) =>
+        r.checkIn === today && !r.roomId && !RELEASED_STATUSES.has(r.status)
+    ).length;
+    const tentativeGroups = groups.filter(
+      (g) => g.status === "Tentative" || g.status === "tentative"
+    ).length;
+    const openDeposits = reservations.filter(
+      (r) => r.status === "confirmed" && r.checkIn === today
+    ).length;
+    const tasks = [
+      unassignedArrivals > 0 &&
+        `Assign rooms to ${unassignedArrivals} arrival${
+          unassignedArrivals > 1 ? "s" : ""
+        } due today`,
+      dirty > 0 &&
+        `${dirty} vacant-dirty room${dirty > 1 ? "s" : ""} to clean before 3 PM cut-off`,
+      tentativeGroups > 0 &&
+        `Confirm ${tentativeGroups} tentative group block${
+          tentativeGroups > 1 ? "s" : ""
+        }`,
+      ooo > 0 && `Follow up on ${ooo} out-of-order room${ooo > 1 ? "s" : ""}`,
+      openDeposits > 0 &&
+        `Take deposit / check in ${openDeposits} confirmed arrival${
+          openDeposits > 1 ? "s" : ""
+        }`,
+      `Sign off tonight's night audit`,
+    ].filter(Boolean) as string[];
+
+    return {
+      businessDate: today,
+      channelMix,
+      revenueSources,
+      revenueTotal: money(revTotal),
+      outlook,
+      avgLos: Math.round(avgLos * 10) / 10,
+      activity,
+      tasks,
+    };
   },
 });
 

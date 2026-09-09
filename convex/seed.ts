@@ -828,6 +828,30 @@ export const seed = internalMutation({
       }
     }
 
+    // ---- activity feed seed (audit_log) -------------------------
+    //   Every guest / money / rate mutation writes one of these going
+    //   forward; seed a recent handful so the dashboard feed isn't blank.
+    const auditSeed = [
+      { minsAgo: 18, action: "reservation.status", target: "Sarah Wijaya", detail: "checked in to 118" },
+      { minsAgo: 46, action: "maintenance.ticket", target: "AC not cooling — Room 204", detail: "room OOO" },
+      { minsAgo: 92, action: "folio.payment", target: "Daniel Kim", detail: "Rp 2,600,000 · card" },
+      { minsAgo: 140, action: "rate.plan", target: "PROMO-EB21", detail: "updated" },
+      { minsAgo: 175, action: "reservation.rate_plan", target: "Putri Anggraini", detail: "CORP-ACCOR" },
+      { minsAgo: 220, action: "invoice.issue", target: "INV-2026-0044", detail: "Rp 8,120,000" },
+      { minsAgo: 310, action: "channel.terms", target: "Agoda", detail: "18% · merchant" },
+    ];
+    for (const a of auditSeed) {
+      await ctx.db.insert("audit_log", {
+        accountId,
+        propertyId,
+        actorEmail: OWNER_EMAIL,
+        action: a.action,
+        target: a.target,
+        detail: a.detail,
+        at: Date.now() - a.minsAgo * 60_000,
+      });
+    }
+
     return { success: true, rooms: roomRows.length, reservations: guestIds.length };
   },
 });

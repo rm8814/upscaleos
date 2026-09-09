@@ -40,43 +40,7 @@ const PERIOD_LABEL: Record<Period, string> = {
   "30d": "Last 30 days",
 };
 
-const CHANNEL_MIX = [
-  { name: "Direct", pct: "38%" },
-  { name: "Booking.com", pct: "27%" },
-  { name: "Agoda", pct: "19%" },
-  { name: "Expedia", pct: "16%" },
-];
-
-const REVENUE_SOURCES = [
-  { label: "Rooms", pct: "72%", amount: "Rp 238,400,000" },
-  { label: "F&B", pct: "19%", amount: "Rp 62,900,000" },
-  { label: "Other", pct: "9%", amount: "Rp 29,700,000" },
-];
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const prevDayLabel = (iso: string) => {
-  const d = new Date(iso + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() - 1);
-  return `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
-};
-
-const buildTasks = (businessDate: string) => [
-  "Approve 3 rate overrides for the weekend",
-  "Confirm group block — Astra offsite (12 rooms)",
-  "Review 2 pending refunds",
-  `Sign off night audit for ${prevDayLabel(businessDate)}`,
-];
-
-const buildActivity = (businessDate: string) => [
-  { time: "09:41", text: "Room 204 flagged out of order — AC" },
-  { time: "09:12", text: "Sarah Wijaya checked in to 118" },
-  { time: "08:55", text: "Agoda rate plan synced" },
-  { time: "08:30", text: "Housekeeping started Floor 3" },
-  { time: "08:02", text: `Night audit posted for ${prevDayLabel(businessDate)}` },
-];
-
-const OUTLOOK = [72, 78, 81, 69, 64, 88, 92, 85, 79, 74, 70, 83, 90, 87];
-const DOW = ["M", "T", "W", "T", "F", "S", "S", "M", "T", "W", "T", "F", "S", "S"];
+const DOW_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -84,6 +48,7 @@ export default function DashboardPage() {
   const { activeProperty } = useProperty();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const stats = useQuery(api.operate.getDashboardStats, arg);
+  const board = useQuery(api.operate.getDashboardBoard, arg);
   const roomStatus = useQuery(api.operate.getRoomStatusSummary, arg);
   const arrivals = useQuery(api.reservations.getArrivalsToday, arg);
 
@@ -101,8 +66,6 @@ export default function DashboardPage() {
 
   // PMS business date vs the real wall-clock date in the property's timezone.
   const bizDate = activeProperty?.businessDate ?? null;
-  const TASKS = buildTasks(bizDate ?? "2026-09-08");
-  const ACTIVITY = buildActivity(bizDate ?? "2026-09-08");
   const wallToday = (() => {
     const tz = activeProperty?.timezone ?? "Asia/Makassar";
     try {
@@ -268,18 +231,22 @@ export default function DashboardPage() {
           </button>
         </div>
         <Card className="flex flex-col gap-2 p-4">
-          <Eyebrow>Channel mix</Eyebrow>
-          {CHANNEL_MIX.map((c) => (
+          <Eyebrow>Channel mix · next 30 nights</Eyebrow>
+          {!board && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
+          {board && board.channelMix.length === 0 && (
+            <div className="py-1.5 text-12 text-fg-3">No rooms on the books.</div>
+          )}
+          {(board?.channelMix ?? []).map((c) => (
             <div key={c.name} className="flex items-center gap-2">
               <span className="w-[70px] text-12 text-fg-2">{c.name}</span>
               <span className="h-1.5 flex-1 overflow-hidden rounded-pill bg-deep">
                 <span
                   className="block h-full bg-accent-violet"
-                  style={{ width: c.pct }}
+                  style={{ width: `${c.pct}%` }}
                 />
               </span>
               <span className="w-8 text-right font-mono text-[11px] text-fg-3">
-                {c.pct}
+                {c.pct}%
               </span>
             </div>
           ))}
@@ -291,7 +258,7 @@ export default function DashboardPage() {
         {[
           { label: "Departures today", value: stats ? String(stats.departuresToday) : "—" },
           { label: "In-house", value: stats ? String(stats.inHouse) : "—" },
-          { label: "Avg. length of stay", value: "2.4 nights" },
+          { label: "Avg. length of stay", value: board ? `${board.avgLos} nights` : "—" },
           { label: "Open tickets", value: stats ? String(stats.openTickets) : "—" },
         ].map((s) => (
           <Card key={s.label} className="p-3.5">
@@ -304,12 +271,13 @@ export default function DashboardPage() {
       {/* Revenue by source / Room status / Guest sentiment */}
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-[1.4fr_1fr_1fr]">
         <Card className="p-4">
-          <Eyebrow className="mb-2.5">Revenue by source</Eyebrow>
-          {REVENUE_SOURCES.map((rv) => (
+          <Eyebrow className="mb-2.5">Revenue by source · last 30 days</Eyebrow>
+          {!board && <div className="py-2 text-12 text-fg-3">Loading…</div>}
+          {(board?.revenueSources ?? []).map((rv) => (
             <div key={rv.label} className="flex items-center gap-2.5 py-2">
               <span className="w-[70px] text-[12.5px] text-fg-2">{rv.label}</span>
               <span className="h-1.5 flex-1 overflow-hidden rounded-pill bg-deep">
-                <span className="block h-full bg-accent-violet" style={{ width: rv.pct }} />
+                <span className="block h-full bg-accent-violet" style={{ width: `${rv.pct}%` }} />
               </span>
               <span className="w-[110px] text-right font-mono text-12 text-fg-3">
                 {rv.amount}
@@ -385,34 +353,47 @@ export default function DashboardPage() {
               <div className="text-[11.5px] text-fg-3">
                 Avg{" "}
                 <span className="font-mono font-semibold text-ice">
-                  {Math.round(OUTLOOK.reduce((a, b) => a + b, 0) / OUTLOOK.length)}%
+                  {board && board.outlook.length
+                    ? Math.round(
+                        board.outlook.reduce((a, b) => a + b.occPct, 0) /
+                          board.outlook.length
+                      )
+                    : "—"}
+                  %
                 </span>
               </div>
             </div>
             <div className="flex h-[130px] items-end gap-2">
-              {OUTLOOK.map((h, i) => (
+              {(board?.outlook ?? []).map((o) => (
                 <div
-                  key={i}
+                  key={o.date}
                   className="flex h-full flex-1 flex-col items-center justify-end gap-1.5"
                 >
-                  <div className="font-mono text-[10.5px] font-semibold text-fg-3">{h}</div>
+                  <div className="font-mono text-[10.5px] font-semibold text-fg-3">
+                    {o.occPct}
+                  </div>
                   <div className="flex h-24 w-full items-end overflow-hidden rounded-t-[4px] bg-deep">
                     <div
                       className="w-full rounded-t-[4px]"
                       style={{
-                        height: `${h}%`,
+                        height: `${o.occPct}%`,
                         background:
-                          h >= 85
+                          o.occPct >= 85
                             ? "var(--accent-violet)"
-                            : h >= 70
+                            : o.occPct >= 70
                               ? "var(--accent-violet-hi)"
                               : "var(--line-strong)",
                       }}
                     />
                   </div>
-                  <div className="text-[10px] text-fg-4">{DOW[i]}</div>
+                  <div className="text-[10px] text-fg-4">{DOW_LETTER[o.dow]}</div>
                 </div>
               ))}
+              {!board && (
+                <div className="flex h-full w-full items-center justify-center text-12 text-fg-3">
+                  Loading outlook…
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -420,7 +401,8 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-3.5">
           <Card className="p-4">
             <Eyebrow className="mb-2.5">Tasks</Eyebrow>
-            {TASKS.map((t) => (
+            {!board && <div className="py-2 text-12 text-fg-3">Loading…</div>}
+            {(board?.tasks ?? []).map((t) => (
               <div
                 key={t}
                 className="flex items-start gap-2 border-b border-line-soft py-2 last:border-0"
@@ -432,9 +414,20 @@ export default function DashboardPage() {
           </Card>
           <Card className="p-4">
             <Eyebrow className="mb-2.5">Activity</Eyebrow>
-            {ACTIVITY.map((ev) => (
-              <div key={ev.time} className="flex gap-2.5 py-1.5 text-12 text-fg-2">
-                <span className="w-[38px] flex-none font-mono text-fg-3">{ev.time}</span>
+            {!board && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
+            {board && board.activity.length === 0 && (
+              <div className="py-1.5 text-12 text-fg-3">
+                No recent activity logged.
+              </div>
+            )}
+            {(board?.activity ?? []).map((ev) => (
+              <div
+                key={ev.at}
+                className="flex gap-2.5 py-1.5 text-12 text-fg-2"
+              >
+                <span className="w-[38px] flex-none font-mono text-fg-3">
+                  {ev.atLabel}
+                </span>
                 {ev.text}
               </div>
             ))}

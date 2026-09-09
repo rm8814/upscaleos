@@ -2,7 +2,48 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
-import { authorize } from "./authz";
+import { authorize, writeAudit } from "./authz";
+import { parseRp, quoteStay } from "./rates";
+import { reconcileFolioToStay } from "./folios";
+
+const rpNum = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+
+/** Short, stable-ish code for a group rate plan from its name. */
+function groupPlanCode(name: string) {
+  const slug = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 6);
+  return `GRP-${slug || "BLOCK"}`;
+}
+
+/**
+ * Ensure a sub-block has a linked rate plan (kind "group", flat = its rate)
+ * and return the plan id. Reservations under the block price through this
+ * plan, so the engine / folio / tax path is the same as everything else.
+ */
+async function ensureSubBlockPlan(
+  ctx: MutationCtx,
+  block: Doc<"group_blocks">,
+  sub: Doc<"group_subblocks">
+): Promise<Id<"rate_plans">> {
+  const amount = parseRp(sub.rate);
+  if (sub.ratePlanId) {
+    await ctx.db.patch(sub.ratePlanId, { amount, active: true });
+    return sub.ratePlanId;
+  }
+  const planId = await ctx.db.insert("rate_plans", {
+    propertyId: block.propertyId,
+    code: `${groupPlanCode(block.name)}-${sub.roomType.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}`,
+    name: `${block.name} — ${sub.roomType}`,
+    kind: "group",
+    pricing: "flat",
+    amount,
+    active: true,
+  });
+  await ctx.db.patch(sub._id, { ratePlanId: planId });
+  return planId;
+}
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -240,7 +281,7 @@ export const create = mutation({
     contact: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: args.propertyId,
       requireProperty: "front_office",
     });
@@ -253,20 +294,76 @@ export const create = mutation({
       cutoffDate: addDaysIso(args.startDate, -14),
       contractLabel: "Awaiting signature",
       salesManager: args.salesManager ?? "Unassigned",
-      billing: "Master folio — all charges",
+      billing: "Master folio — all room & tax",
+      billingMode: "master",
+      guaranteedPct: 0.8,
       depositStatus: "Not received",
       depositAmount: "Rp 0",
       concessions: "To be negotiated.",
       contact: args.contact ?? "",
     });
-    await ctx.db.insert("group_subblocks", {
+    const subId = await ctx.db.insert("group_subblocks", {
       groupId,
       propertyId: args.propertyId,
       roomType: args.roomType,
       blocked: args.blocked,
       rate: args.rate,
     });
+    const block = (await ctx.db.get(groupId))!;
+    const sub = (await ctx.db.get(subId))!;
+    await ensureSubBlockPlan(ctx, block, sub);
+    await writeAudit(ctx, scope, "group.create", {
+      propertyId: args.propertyId,
+      target: args.name,
+      detail: `${args.blocked} ${args.roomType} · ${args.startDate}`,
+    });
     return groupId;
+  },
+});
+
+/** Change a sub-block's negotiated rate — re-prices its plan and any open
+ *  folios of rooming-list guests. */
+export const setSubBlockRate = mutation({
+  args: { subBlockId: v.id("group_subblocks"), rate: v.string() },
+  handler: async (ctx, args) => {
+    const sub = await ctx.db.get(args.subBlockId);
+    if (!sub) throw new Error("Sub-block not found");
+    const block = await ctx.db.get(sub.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    await ctx.db.patch(args.subBlockId, { rate: args.rate });
+    const fresh = (await ctx.db.get(args.subBlockId))!;
+    await ensureSubBlockPlan(ctx, block, fresh);
+
+    const bd = (await ctx.db.get(block.propertyId))?.businessDate ?? block.startDate;
+    const roomers = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_group", (q) => q.eq("groupId", block._id))
+        .collect()
+    ).filter((r) => r.roomType === sub.roomType && r.status !== "cancelled");
+    for (const r of roomers) {
+      const q = await quoteStay(ctx, {
+        propertyId: block.propertyId,
+        roomType: r.roomType ?? sub.roomType,
+        checkIn: r.checkIn,
+        checkOut: r.checkOut,
+        ratePlanId: fresh.ratePlanId,
+      });
+      await ctx.db.patch(r._id, {
+        rate: rpNum(q.nights[0]?.rate ?? 0),
+        totalAmount: rpNum(q.total),
+      });
+      await reconcileFolioToStay(ctx, r._id, bd, { repriceExisting: true });
+    }
+    await writeAudit(ctx, scope, "group.rate", {
+      propertyId: block.propertyId,
+      target: `${block.name} · ${sub.roomType}`,
+      detail: args.rate,
+    });
   },
 });
 
@@ -284,12 +381,27 @@ export const addRoomingGuest = mutation({
       propertyId: g.propertyId,
       requireProperty: "front_office",
     });
-    const sub = (
+    let sub = (
       await ctx.db
         .query("group_subblocks")
         .withIndex("by_group", (q) => q.eq("groupId", g._id))
         .collect()
     ).find((s) => s.roomType === args.roomType);
+    // Make sure the sub-block has its group rate plan before we price.
+    let ratePlanId = sub?.ratePlanId;
+    if (sub && !ratePlanId) {
+      ratePlanId = await ensureSubBlockPlan(ctx, g, sub);
+      sub = (await ctx.db.get(sub._id))!;
+    }
+
+    const checkOut = addDaysIso(g.startDate, g.nights);
+    const q = await quoteStay(ctx, {
+      propertyId: g.propertyId,
+      roomType: args.roomType,
+      checkIn: g.startDate,
+      checkOut,
+      ratePlanId,
+    });
 
     const guestId = await ctx.db.insert("guests", {
       name: args.guestName,
@@ -301,15 +413,16 @@ export const addRoomingGuest = mutation({
       guestId,
       propertyId: g.propertyId,
       checkIn: g.startDate,
-      checkOut: addDaysIso(g.startDate, g.nights),
-      status: "confirmed",
-      rate: sub?.rate ?? "Rp 1,850,000",
-      totalAmount: sub?.rate ?? "Rp 1,850,000",
+      checkOut,
+      status: g.status === "In-house" ? "inhouse" : "confirmed",
+      rate: rpNum(q.nights[0]?.rate ?? parseRp(sub?.rate)),
+      totalAmount: rpNum(q.total),
       channel: "Group",
       roomType: args.roomType,
       adults: 1,
       children: 0,
       groupId: g._id,
+      ratePlanId,
     });
   },
 });

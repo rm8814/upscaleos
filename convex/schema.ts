@@ -213,11 +213,15 @@ export default defineSchema({
     releasedOn: v.optional(v.string()),
     contractLabel: v.string(), // 'Signed' | 'Awaiting signature'
     salesManager: v.string(),
-    billing: v.string(),
+    billing: v.string(), // human label
+    billingMode: v.optional(v.string()), // 'master' | 'split' | 'individual'
+    masterFolioId: v.optional(v.id("folios")),
+    guaranteedPct: v.optional(v.number()), // attrition floor, e.g. 0.8
     depositStatus: v.string(),
     depositAmount: v.string(),
     concessions: v.string(),
     contact: v.string(),
+    fbMinimum: v.optional(v.number()), // contracted F&B / meeting minimum
   }).index("by_property", ["propertyId"]),
   group_subblocks: defineTable({
     groupId: v.id("group_blocks"),
@@ -225,7 +229,19 @@ export default defineSchema({
     roomType: v.string(),
     blocked: v.number(),
     rate: v.string(),
+    ratePlanId: v.optional(v.id("rate_plans")), // the group's negotiated plan
   }).index("by_group", ["groupId"]),
+
+  // ---- group pick-up curve: rooms picked vs blocked, snapshot per audit ----
+  group_pickup: defineTable({
+    groupId: v.id("group_blocks"),
+    propertyId: v.id("properties"),
+    asOf: v.string(), // business date the snapshot was taken
+    picked: v.number(),
+    blocked: v.number(),
+  })
+    .index("by_group", ["groupId", "asOf"])
+    .index("by_property_asof", ["propertyId", "asOf"]),
 
   // ---- history: one immutable row per property per closed business date ----
   daily_stats: defineTable({

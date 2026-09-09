@@ -34,6 +34,7 @@ export const seed = internalMutation({
     for (const table of [
       "folio_lines",
       "folios",
+      "group_pickup",
       "group_subblocks",
       "group_blocks",
       "daily_stats",
@@ -571,7 +572,7 @@ export const seed = internalMutation({
         cutoffOffset: 3,
         contractLabel: "Signed",
         salesManager: "Rangga Putra",
-        billing: "Master folio — all room & tax",
+        billing: "Master folio — all room & tax", billingMode: "master", fbMinimum: 120_000_000,
         depositStatus: "Received",
         depositAmount: "Rp 42,000,000",
         concessions:
@@ -597,7 +598,7 @@ export const seed = internalMutation({
         cutoffOffset: 12,
         contractLabel: "Signed",
         salesManager: "Sari Melati",
-        billing: "Split — room to guests, F&B to master",
+        billing: "Split — room to guests, F&B to master", billingMode: "split", fbMinimum: 180_000_000,
         depositStatus: "Partial",
         depositAmount: "Rp 15,000,000 of Rp 30,000,000",
         concessions:
@@ -622,7 +623,7 @@ export const seed = internalMutation({
         cutoffOffset: -8,
         contractLabel: "Signed",
         salesManager: "Rangga Putra",
-        billing: "Master folio — room only",
+        billing: "Master folio — room only", billingMode: "master", fbMinimum: 0,
         depositStatus: "Received",
         depositAmount: "Rp 12,000,000",
         concessions: "Early check-in, storage room for equipment.",
@@ -642,7 +643,7 @@ export const seed = internalMutation({
         cutoffOffset: 21,
         contractLabel: "Awaiting signature",
         salesManager: "Sari Melati",
-        billing: "Master folio — all charges",
+        billing: "Master folio — all charges", billingMode: "master", fbMinimum: 90_000_000,
         depositStatus: "Not received",
         depositAmount: "Rp 0 of Rp 60,000,000",
         concessions:
@@ -683,20 +684,35 @@ export const seed = internalMutation({
         contractLabel: gs.contractLabel,
         salesManager: gs.salesManager,
         billing: gs.billing,
+        billingMode: gs.billingMode ?? "master",
+        guaranteedPct: 0.8,
+        fbMinimum: gs.fbMinimum,
         depositStatus: gs.depositStatus,
         depositAmount: gs.depositAmount,
         concessions: gs.concessions,
         contact: gs.contact,
       });
       const rateByType: Record<string, string> = {};
+      const planByType: Record<string, import("./_generated/dataModel").Id<"rate_plans">> = {};
       for (const s of gs.subs) {
         rateByType[s.roomType] = s.rate;
+        const planId = await ctx.db.insert("rate_plans", {
+          propertyId,
+          code: `GRP-${gs.name.toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 6)}-${s.roomType.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}`,
+          name: `${gs.name} — ${s.roomType}`,
+          kind: "group",
+          pricing: "flat",
+          amount: Number(s.rate.replace(/[^\d]/g, "")),
+          active: true,
+        });
+        planByType[s.roomType] = planId;
         await ctx.db.insert("group_subblocks", {
           groupId,
           propertyId,
           roomType: s.roomType,
           blocked: s.blocked,
           rate: s.rate,
+          ratePlanId: planId,
         });
       }
       for (const rm of gs.rooming) {
@@ -731,6 +747,7 @@ export const seed = internalMutation({
           adults: 1,
           children: 0,
           groupId,
+          ratePlanId: planByType[rm.roomType],
         });
       }
     }

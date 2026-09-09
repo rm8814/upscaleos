@@ -184,6 +184,7 @@ export const RES_STATUS_COLOR: Record<string, string> = {
   tentative: "var(--res-tentative)",
   departed: "var(--res-departed)",
   cancelled: "var(--res-cancelled)",
+  no_show: "var(--room-ooo)",
 };
 
 export const RES_STATUS_LABEL: Record<string, string> = {
@@ -192,6 +193,7 @@ export const RES_STATUS_LABEL: Record<string, string> = {
   tentative: "Tentative",
   departed: "Checked out",
   cancelled: "Cancelled",
+  no_show: "No-show",
 };
 
 export const TIER_COLOR: Record<string, string> = {

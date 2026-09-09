@@ -334,6 +334,7 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     .withIndex("by_property", (q) => q.eq("propertyId", id))
     .collect();
   const departedNow: Id<"reservations">[] = [];
+  let noShows = 0;
   for (const r of reservations) {
     if (r.status === "inhouse" && r.checkOut <= newDate) {
       await ctx.db.patch(r._id, { status: "departed" });
@@ -344,6 +345,16 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
         });
       await closeFolio(ctx, r._id, newDate);
       departedNow.push(r._id);
+    }
+    // No-show: a booking whose whole arrival day has passed and never checked
+    // in. The room (if one was held) is released; no charge is posted — that
+    // needs a guarantee-type / cancellation policy the model doesn't have yet.
+    else if (
+      (r.status === "confirmed" || r.status === "tentative") &&
+      r.checkIn < newDate
+    ) {
+      await ctx.db.patch(r._id, { status: "no_show" });
+      noShows += 1;
     }
   }
 
@@ -363,7 +374,7 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
 
   await writeNightStats(ctx, id, oldDate, newDate);
 
-  return { businessDate: newDate, previous: oldDate };
+  return { businessDate: newDate, previous: oldDate, noShows };
 }
 
 const MAX_AUTO_CATCHUP = 14; // days; a larger gap needs a manual catch-up
@@ -388,11 +399,14 @@ async function rollUpTo(
   const start = (await ctx.db.get(id))?.businessDate ?? "2026-09-08";
   let current = start;
   let days = 0;
+  let noShows = 0;
   while (current < target && days < cap) {
-    current = (await rollOne(ctx, id)).businessDate;
+    const r = await rollOne(ctx, id);
+    current = r.businessDate;
+    noShows += r.noShows;
     days += 1;
   }
-  return { from: start, to: current, days, behind: current < target };
+  return { from: start, to: current, days, behind: current < target, noShows };
 }
 
 /**
@@ -422,6 +436,7 @@ export const rollBusinessDate = mutation({
               to: res.businessDate,
               days: 1,
               behind: false,
+              noShows: res.noShows,
             };
           })();
 

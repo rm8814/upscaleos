@@ -14,6 +14,15 @@ import type { Doc } from "./_generated/dataModel";
 
 const OUT_OF_SERVICE = new Set(["OOO", "OOS"]);
 
+/** Statuses where a reservation no longer holds / needs a room. */
+export const RELEASED_STATUSES = new Set([
+  "cancelled",
+  "departed",
+  "no_show",
+]);
+/** Room statuses a same-day arrival can actually move into. */
+export const READY_ROOM_STATUSES = new Set(["Inspected", "Vacant Clean"]);
+
 export function sellableRoom(r: Doc<"rooms">): boolean {
   return !OUT_OF_SERVICE.has(r.status);
 }
@@ -46,6 +55,7 @@ export function roomsSoldOn(
   return reservations.filter(
     (r) =>
       r.status !== "cancelled" &&
+      r.status !== "no_show" &&
       !!r.roomId &&
       (!roomType || r.roomType === roomType) &&
       r.checkIn <= date &&

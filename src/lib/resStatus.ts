@@ -3,7 +3,8 @@ export type ResStatus =
   | "confirmed"
   | "inhouse"
   | "departed"
-  | "cancelled";
+  | "cancelled"
+  | "no_show";
 
 export interface ResAction {
   label: string;
@@ -64,6 +65,13 @@ export function reservationActions(
     case "cancelled":
       return {
         actions: [{ label: "Reinstate", next: "confirmed", tone: "primary" }],
+      };
+    case "no_show":
+      return {
+        actions: [
+          { label: "Reinstate", next: "confirmed", tone: "primary" },
+        ],
+        note: "Marked no-show by the night audit — reinstate if the guest arrives.",
       };
     default:
       return { actions: [] };

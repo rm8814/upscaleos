@@ -45,7 +45,8 @@ async function postNight(
     .query("folio_lines")
     .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
     .collect();
-  if (existing.some((l) => l.kind === "room" && l.date === date)) return;
+  if (existing.some((l) => l.kind === "room" && l.date === date && !l.voided))
+    return;
 
   const gross = await effectiveNightlyRate(
     ctx,
@@ -92,6 +93,11 @@ export async function openFolioForReservation(
   let folio = await folioForReservation(ctx, res._id);
   if (folio && folio.status === "closed") {
     await ctx.db.patch(folio._id, { status: "open", closedOn: undefined });
+    folio = await ctx.db.get(folio._id);
+  }
+  // A deposit folio opened before arrival becomes the guest folio on check-in.
+  if (folio && folio.ledger === "deposit") {
+    await ctx.db.patch(folio._id, { ledger: undefined, status: "open" });
     folio = await ctx.db.get(folio._id);
   }
   if (!folio) {
@@ -156,20 +162,75 @@ export async function reopenFolio(
   }
 }
 
-/** Undo a mistaken check-in: drop the folio if nothing has been paid on it. */
-export async function voidFolioIfUnpaid(
+/**
+ * Undo a check-in / cancel a reservation: reverse the folio without destroying
+ * it. Every un-voided charge line is voided (kept for the audit trail). If no
+ * payment was taken the folio is marked "void"; if a payment exists the folio
+ * stays open carrying a credit balance (a refund is owed).
+ */
+export async function reverseFolioCharges(
   ctx: MutationCtx,
-  reservationId: Id<"reservations">
+  reservationId: Id<"reservations">,
+  businessDate: string
 ) {
   const folio = await folioForReservation(ctx, reservationId);
-  if (!folio) return;
+  if (!folio || folio.status === "void") return;
   const lines = await ctx.db
     .query("folio_lines")
     .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
     .collect();
-  if (lines.some((l) => l.kind === "payment")) return; // keep a folio with money on it
-  for (const l of lines) await ctx.db.delete(l._id);
-  await ctx.db.delete(folio._id);
+
+  for (const l of lines) {
+    if (l.kind === "payment" || l.voided) continue;
+    await ctx.db.patch(l._id, { voided: true });
+  }
+  const hasPayment = lines.some((l) => l.kind === "payment" && !l.voided);
+  await ctx.db.patch(folio._id, {
+    status: hasPayment ? "open" : "void",
+    closedOn: hasPayment ? undefined : businessDate,
+  });
+}
+
+/**
+ * Reconcile an open folio's room/tax lines to the reservation's current dates
+ * (and room type). Called after a stay change. Nights no longer in the stay are
+ * voided; missing nights up to the business date are posted. `repriceExisting`
+ * re-posts in-range nights too (used when the room type changed).
+ */
+export async function reconcileFolioToStay(
+  ctx: MutationCtx,
+  reservationId: Id<"reservations">,
+  businessDate: string,
+  opts: { repriceExisting?: boolean } = {}
+) {
+  const folio = await folioForReservation(ctx, reservationId);
+  if (!folio || folio.status === "void") return;
+  const res = await ctx.db.get(reservationId);
+  if (!res) return;
+
+  const lastNight =
+    businessDate < addDaysIso(res.checkOut, -1)
+      ? businessDate
+      : addDaysIso(res.checkOut, -1);
+  const inStay = new Set<string>();
+  for (let d = res.checkIn; d <= lastNight; d = addDaysIso(d, 1)) {
+    inStay.add(d);
+  }
+
+  const lines = await ctx.db
+    .query("folio_lines")
+    .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
+    .collect();
+  for (const l of lines) {
+    if ((l.kind !== "room" && l.kind !== "tax") || l.voided) continue;
+    if (!inStay.has(l.date) || opts.repriceExisting) {
+      await ctx.db.patch(l._id, { voided: true });
+    }
+  }
+
+  for (const night of inStay) {
+    await postNight(ctx, folio, res, night);
+  }
 }
 
 /* -------------------------------------------------- public query --------- */
@@ -291,14 +352,31 @@ export const recordPayment = mutation({
     businessDate: v.string(),
   },
   handler: async (ctx, args) => {
-    const folio = await folioForReservation(ctx, args.reservationId);
-    if (!folio) throw new Error("No folio for that reservation");
+    const res = await ctx.db.get(args.reservationId);
+    if (!res) throw new Error("Reservation not found");
     await authorize(ctx, {
-      propertyId: folio.propertyId,
+      propertyId: res.propertyId,
       requireProperty: "front_office",
     });
     const amt = Math.abs(Math.round(args.amount));
     if (!amt) throw new Error("Amount must be greater than zero");
+
+    // No folio yet (guest hasn't checked in) → this is an advance deposit;
+    // open a deposit-ledger folio for it. On check-in it becomes the guest folio.
+    let folio = await folioForReservation(ctx, args.reservationId);
+    if (!folio) {
+      const id = await ctx.db.insert("folios", {
+        propertyId: res.propertyId,
+        reservationId: res._id,
+        guestId: res.guestId,
+        status: "open",
+        ledger: "deposit",
+        openedOn: args.businessDate,
+      });
+      folio = await ctx.db.get(id);
+    }
+    if (!folio) throw new Error("Could not open a folio");
+
     await ctx.db.insert("folio_lines", {
       folioId: folio._id,
       propertyId: folio.propertyId,

@@ -6,11 +6,13 @@ import {
   openFolioForReservation,
   closeFolio,
   reopenFolio,
-  voidFolioIfUnpaid,
+  reverseFolioCharges,
+  reconcileFolioToStay,
 } from "./folios";
 import { authorize } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
 import { quoteStay } from "./rates";
+import { RELEASED_STATUSES, READY_ROOM_STATUSES } from "./occupancy";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -33,6 +35,8 @@ async function pickFreeRoom(
   checkOut: string,
   ignoreId?: Id<"reservations">
 ): Promise<Id<"rooms"> | undefined> {
+  const bd = await businessDate(ctx, propertyId);
+  const sameDay = checkIn <= bd; // arrives today or is overdue
   const [rooms, existing] = await Promise.all([
     ctx.db
       .query("rooms")
@@ -48,20 +52,20 @@ async function pickFreeRoom(
       .filter(
         (r) =>
           r._id !== ignoreId &&
-          r.status !== "cancelled" &&
-          r.status !== "departed" &&
+          !RELEASED_STATUSES.has(r.status) &&
           r.checkIn < checkOut &&
           r.checkOut > checkIn
       )
       .map((r) => r.roomId)
   );
-  const free = rooms.find(
-    (rm) =>
-      rm.type === roomType &&
-      rm.status !== "OOO" &&
-      rm.status !== "OOS" &&
-      !taken.has(rm._id)
-  );
+  const free = rooms.find((rm) => {
+    if (rm.type !== roomType || taken.has(rm._id)) return false;
+    if (rm.status === "OOO" || rm.status === "OOS") return false;
+    // A same-day arrival needs a room that is actually clean and ready; a
+    // future arrival can be given one that will be cleaned before check-in.
+    if (sameDay) return READY_ROOM_STATUSES.has(rm.status);
+    return rm.status !== "Occupied";
+  });
   return free?._id;
 }
 
@@ -86,8 +90,7 @@ export async function assignPropertyRooms(
       (r) =>
         !r.roomId &&
         r.checkOut > today &&
-        r.status !== "cancelled" &&
-        r.status !== "departed"
+        !RELEASED_STATUSES.has(r.status)
     )
     .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
 
@@ -303,6 +306,18 @@ export const updateDates = mutation({
     patch.totalAmount = fmtRp(q.total);
 
     await ctx.db.patch(args.id, patch);
+
+    // Keep an open folio in step with the new dates / room type: void nights
+    // that fell out of the stay, post nights that fell in.
+    const typeChanged = effectiveType !== (res.roomType ?? "");
+    const datesChanged =
+      args.checkIn !== res.checkIn || args.checkOut !== res.checkOut;
+    if (typeChanged || datesChanged) {
+      const bd = await businessDate(ctx, res.propertyId);
+      await reconcileFolioToStay(ctx, args.id, bd, {
+        repriceExisting: typeChanged,
+      });
+    }
   },
 });
 
@@ -345,19 +360,21 @@ export const setStatus = mutation({
         .first();
       if (folio) await issueInvoiceForFolio(ctx, folio._id);
     }
-    // Undo check-in.
+    // Undo check-in: room back to clean, reverse the folio charges (kept, not
+    // deleted; a taken payment leaves a credit balance to refund).
     else if (prev === "inhouse" && next === "confirmed") {
       await setRoom("Vacant Clean");
-      await voidFolioIfUnpaid(ctx, args.id);
+      await reverseFolioCharges(ctx, args.id, bd);
     }
     // Undo check-out.
     else if (prev === "departed" && next === "inhouse") {
       await setRoom("Occupied");
       await reopenFolio(ctx, args.id);
     }
-    // Cancellation: drop an unpaid folio if one was opened.
+    // Cancellation / reinstating a no-show back to confirmed: reverse the folio
+    // if one exists.
     else if (next === "cancelled") {
-      await voidFolioIfUnpaid(ctx, args.id);
+      await reverseFolioCharges(ctx, args.id, bd);
     }
   },
 });

@@ -6,6 +6,7 @@ import {
   sellableRoomCount,
   roomsSoldOn,
   occupancyPct,
+  RELEASED_STATUSES,
 } from "./occupancy";
 
 import type { QueryCtx } from "./_generated/server";
@@ -114,8 +115,7 @@ export const getAvailability = query({
         .filter(
           (r) =>
             r._id !== args.ignoreReservationId &&
-            r.status !== "cancelled" &&
-            r.status !== "departed" &&
+            !RELEASED_STATUSES.has(r.status) &&
             r.checkIn < args.checkOut &&
             r.checkOut > args.checkIn
         )

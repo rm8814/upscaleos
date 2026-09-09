@@ -669,11 +669,17 @@ export default function CalendarTapeChart() {
                 }}
               >
                 {board!.groupLane.map((blk, row) => {
-                  const s = Math.max(0, dayCol(blk.from));
-                  const e = Math.min(DAYS, dayCol(blk.to));
+                  // Match the reservation bars: straddle from the middle of the
+                  // arrival-day cell to the middle of the departure-day cell.
+                  const s = dayCol(blk.from);
+                  const e = dayCol(blk.to);
                   if (e <= 0 || s >= DAYS) return null;
-                  const leftPct = (s / DAYS) * 100;
-                  const widthPct = ((e - s) / DAYS) * 100;
+                  const leftPct =
+                    Math.max(0, Math.min(1, (s + 0.5) / DAYS)) * 100;
+                  const rightPct =
+                    Math.max(0, Math.min(1, (e + 0.5) / DAYS)) * 100;
+                  const widthPct = rightPct - leftPct;
+                  if (widthPct <= 0) return null;
                   return (
                     <button
                       key={blk._id}

@@ -658,17 +658,14 @@ export default function CalendarTapeChart() {
           {/* Group lane — one bar per active block across its window */}
           {(board?.groupLane ?? []).length > 0 && (
             <div className="grid border-b border-line bg-deep" style={GRID}>
-              <div className="px-3 py-2 text-[11px] font-semibold text-group-hold">
+              <div className="flex items-center px-3 py-2 text-[11px] font-semibold text-group-hold">
                 Groups
               </div>
               <div
-                className="relative col-span-full"
-                style={{
-                  gridColumn: `2 / span ${DAYS}`,
-                  minHeight: `${(board!.groupLane.length || 1) * 22 + 8}px`,
-                }}
+                className="flex flex-col justify-center gap-1 py-1.5"
+                style={{ gridColumn: `2 / span ${DAYS}` }}
               >
-                {board!.groupLane.map((blk, row) => {
+                {board!.groupLane.map((blk) => {
                   // Match the reservation bars: straddle from the middle of the
                   // arrival-day cell to the middle of the departure-day cell.
                   const s = dayCol(blk.from);
@@ -681,25 +678,26 @@ export default function CalendarTapeChart() {
                   const widthPct = rightPct - leftPct;
                   if (widthPct <= 0) return null;
                   return (
-                    <button
-                      key={blk._id}
-                      onClick={() => setGroupPeek({ id: blk._id, name: blk.name })}
-                      title={`${blk.name} · ${blk.picked}/${blk.blocked} picked · cut-off ${dmIso(blk.cutoffDate)}`}
-                      className="absolute flex items-center overflow-hidden whitespace-nowrap rounded-[5px] border px-1.5 text-[10.5px] text-ice"
-                      style={{
-                        top: row * 22 + 4,
-                        height: 18,
-                        left: `${leftPct}%`,
-                        width: `${widthPct}%`,
-                        background:
-                          "color-mix(in srgb, var(--group-hold) 24%, var(--bg-deep))",
-                        borderColor: "var(--group-hold)",
-                      }}
-                    >
-                      <span className="overflow-hidden text-ellipsis">
-                        {blk.name} · {blk.held} held
-                      </span>
-                    </button>
+                    <div key={blk._id} className="relative h-[18px]">
+                      <button
+                        onClick={() =>
+                          setGroupPeek({ id: blk._id, name: blk.name })
+                        }
+                        title={`${blk.name} · ${blk.picked}/${blk.blocked} picked · cut-off ${dmIso(blk.cutoffDate)}`}
+                        className="absolute inset-y-0 flex items-center overflow-hidden whitespace-nowrap rounded-[5px] border px-1.5 text-[10.5px] text-ice"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          background:
+                            "color-mix(in srgb, var(--group-hold) 24%, var(--bg-deep))",
+                          borderColor: "var(--group-hold)",
+                        }}
+                      >
+                        <span className="overflow-hidden text-ellipsis">
+                          {blk.name} · {blk.held} held
+                        </span>
+                      </button>
+                    </div>
                   );
                 })}
               </div>

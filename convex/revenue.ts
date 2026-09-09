@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { authorize } from "./authz";
 import { nightlyRateFor, addDaysIso, money } from "./rateModel";
 import { effectiveNightlyRate, loadRateRules, quoteStay } from "./rates";
+import { sellableRoomCount, roomsSoldOn } from "./occupancy";
 
 // Re-exported for callers that historically priced against the rack rate.
 // New code should use rates.effectiveNightlyRate / rates.quoteStay.
@@ -24,9 +25,8 @@ const fmtDelta = (d: number | null) =>
 
 /**
  * Room revenue / rooms sold / availability across a set of stay-nights.
- * Occupancy basis matches daily_stats: a reservation counts only if it holds a
- * room. Revenue uses the effective nightly rate (same resolver as the folio),
- * not the string cached on the reservation.
+ * Occupancy comes from the shared `roomsSoldOn` basis; revenue uses the
+ * effective nightly rate (same resolver as the folio), not the cached string.
  */
 function windowStats(
   reservations: Doc<"reservations">[],
@@ -37,12 +37,9 @@ function windowStats(
   let roomsSold = 0;
   let roomRevenue = 0;
   for (const d of nights) {
-    for (const r of reservations) {
-      if (r.status === "cancelled" || !r.roomId) continue;
-      if (r.checkIn <= d && d < r.checkOut) {
-        roomsSold += 1;
-        roomRevenue += rate(r.roomType ?? "", d);
-      }
+    for (const r of roomsSoldOn(reservations, d)) {
+      roomsSold += 1;
+      roomRevenue += rate(r.roomType ?? "", d);
     }
   }
   const available = sellableRooms * nights.length;
@@ -165,9 +162,7 @@ export const getKpis = query({
         .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
         .collect(),
     ]);
-    const sellable = rooms.filter(
-      (r) => r.status !== "OOO" && r.status !== "OOS"
-    ).length;
+    const sellable = sellableRoomCount(rooms);
 
     // Window length and the last night of the window (yesterday shifts the
     // anchor back a day; every other period ends on the business date).

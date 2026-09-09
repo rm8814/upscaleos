@@ -95,6 +95,15 @@ export default function RatesPage() {
     api.reservations.getByProperty,
     activeProperty ? { propertyId: activeProperty._id } : "skip"
   );
+  const roomCounts = useQuery(
+    api.operate.getRoomCounts,
+    activeProperty ? { propertyId: activeProperty._id } : "skip"
+  );
+  const sellableByType = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of roomCounts ?? []) m.set(c.roomType, c.sellable);
+    return m;
+  }, [roomCounts]);
 
   const todayIso = activeProperty?.businessDate ?? "2026-09-08";
   const days = useMemo(
@@ -280,7 +289,7 @@ export default function RatesPage() {
             </div>
 
             {ROOM_TYPES.map((rt, rtIdx) => {
-              const totalRooms = rt.name === "Presidential Suite" ? 6 : 8;
+              const totalRooms = sellableByType.get(rt.name) ?? 0;
               return (
                 <div
                   key={rt.name}

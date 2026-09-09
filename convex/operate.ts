@@ -1,6 +1,12 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { authorize } from "./authz";
+import {
+  roomCountsByType,
+  sellableRoomCount,
+  roomsSoldOn,
+  occupancyPct,
+} from "./occupancy";
 
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -150,6 +156,23 @@ export const getRoomStatusSummary = query({
   },
 });
 
+/** Physical + sellable room counts per room type — for the rate grid. */
+export const getRoomCounts = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const rooms = await ctx.db
+      .query("rooms")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const { total, sellable } = roomCountsByType(rooms);
+    return [...total.keys()].map((type) => ({
+      roomType: type,
+      total: total.get(type) ?? 0,
+      sellable: sellable.get(type) ?? 0,
+    }));
+  },
+});
+
 export const getDashboardStats = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
@@ -169,15 +192,17 @@ export const getDashboardStats = query({
         .collect(),
     ]);
 
-    const sellable = rooms.filter((r) => r.status !== "OOO" && r.status !== "OOS").length;
-    const occupied = rooms.filter((r) => r.status === "Occupied").length;
+    // Occupancy: rooms sold tonight (reservations holding a room) ÷ sellable
+    // rooms. `inHouse` is the separate "physically here right now" count.
+    const sellable = sellableRoomCount(rooms);
+    const occupied = roomsSoldOn(reservations, today).length;
     const inHouse = reservations.filter((r) => r.status === "inhouse").length;
 
     return {
       roomsTotal: rooms.length,
       sellable,
       occupied,
-      occupancyPct: sellable ? Math.round((occupied / sellable) * 100) : 0,
+      occupancyPct: occupancyPct(occupied, sellable),
       dirty: rooms.filter((r) => r.status === "Vacant Dirty").length,
       ooo: rooms.filter((r) => r.status === "OOO").length,
       arrivalsToday: reservations.filter((r) => r.checkIn === today).length,

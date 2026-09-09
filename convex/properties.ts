@@ -8,6 +8,7 @@ import { transferClosedFoliosToCityLedger } from "./ar";
 import { issueInvoiceForFolio } from "./invoices";
 import { nightlyRateFor } from "./rateModel";
 import { loadRateRules } from "./rates";
+import { sellableRoomCount, roomsSoldOn } from "./occupancy";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
 const PICKUP_HORIZON_DAYS = 45;
@@ -44,18 +45,10 @@ async function writeNightStats(
       .collect(),
   ]);
 
-  const availableRooms = rooms.filter(
-    (r) => r.status !== "OOO" && r.status !== "OOS"
-  ).length;
+  const availableRooms = sellableRoomCount(rooms);
   const oooRooms = rooms.filter((r) => r.status === "OOO").length;
 
-  const soldThatNight = reservations.filter(
-    (r) =>
-      r.status !== "cancelled" &&
-      r.roomId && // an unassigned booking never occupied a billable room
-      r.checkIn <= closedDate &&
-      r.checkOut > closedDate
-  );
+  const soldThatNight = roomsSoldOn(reservations, closedDate);
   const roomsSold = soldThatNight.length;
   const rules = await loadRateRules(ctx, propertyId);
   const roomRevenue = soldThatNight.reduce(

@@ -22,6 +22,7 @@ import type * as history from "../history.js";
 import type * as http from "../http.js";
 import type * as invoices from "../invoices.js";
 import type * as maintenance from "../maintenance.js";
+import type * as occupancy from "../occupancy.js";
 import type * as operate from "../operate.js";
 import type * as properties from "../properties.js";
 import type * as rateModel from "../rateModel.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   invoices: typeof invoices;
   maintenance: typeof maintenance;
+  occupancy: typeof occupancy;
   operate: typeof operate;
   properties: typeof properties;
   rateModel: typeof rateModel;

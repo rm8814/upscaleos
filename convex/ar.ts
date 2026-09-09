@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { authorize, writeAudit } from "./authz";
+import { loadChannelTerms } from "./commissions";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 const daysBetween = (a: string, b: string) =>
@@ -232,6 +233,8 @@ export async function transferClosedFoliosToCityLedger(
   );
   if (byChannel.size === 0 && byAgreement.size === 0) return 0;
 
+  const channelTerms = await loadChannelTerms(ctx, propertyId);
+
   const folios = await ctx.db
     .query("folios")
     .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
@@ -287,6 +290,31 @@ export async function transferClosedFoliosToCityLedger(
       description: `Transferred to city ledger — ${acc.name}`,
       amount: -Math.round(balance),
     });
+    // OTA agency model: the hotel's receivable from the channel is room
+    // revenue net of commission. Post the commission as a credit adjustment
+    // against the same A/R account so the balance owed reflects the net rate.
+    const term = res?.channel ? channelTerms.term(res.channel) : undefined;
+    if (term && !res?.corporateAccountId) {
+      const roomRevenue = lines
+        .filter((l) => !l.voided && (l.kind === "room" || l.kind === "fnb"))
+        .reduce((s, l) => s + l.amount, 0);
+      const commission = Math.round(roomRevenue * term.commissionPct);
+      if (commission > 0) {
+        await ctx.db.insert("ar_transactions", {
+          accountId: acc._id,
+          propertyId,
+          date: closedDate,
+          kind: "adjustment",
+          description: `Channel commission ${Math.round(
+            term.commissionPct * 100
+          )}% — ${res!.channel}`,
+          ref: `COM-${2026}-${String(seq).padStart(4, "0")}`,
+          amount: -commission,
+          folioId: f._id,
+        });
+      }
+    }
+
     await ctx.db.patch(f._id, { ledger: "city" });
     moved += 1;
   }

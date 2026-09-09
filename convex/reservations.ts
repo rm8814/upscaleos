@@ -11,7 +11,7 @@ import {
 } from "./folios";
 import { authorize, writeAudit } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
-import { quoteStay } from "./rates";
+import { quoteStay, assertPlanEligible } from "./rates";
 import { RELEASED_STATUSES, READY_ROOM_STATUSES } from "./occupancy";
 import { groupHeldRooms } from "./groups";
 
@@ -245,6 +245,10 @@ export const create = mutation({
     });
     // A corporate rate plan carries its own agreement link.
     const plan = args.ratePlanId ? await ctx.db.get(args.ratePlanId) : null;
+    if (plan) {
+      const bd = await businessDate(ctx, args.propertyId);
+      assertPlanEligible(plan, args.checkIn, args.checkOut, bd);
+    }
     const agreementId = args.corporateAgreementId ?? plan?.agreementId;
     const guestId = await findOrCreateGuest(ctx, args.guestName, args.email, args.phone);
 
@@ -505,6 +509,10 @@ export const setRatePlan = mutation({
       requireProperty: "front_office",
     });
     const plan = args.ratePlanId ? await ctx.db.get(args.ratePlanId) : null;
+    if (plan) {
+      const bd = await businessDate(ctx, res.propertyId);
+      assertPlanEligible(plan, res.checkIn, res.checkOut, bd);
+    }
     // A corporate plan re-points the reservation's agreement link too; a
     // non-corporate plan leaves any manual corporate link untouched.
     const agreementId =

@@ -99,6 +99,49 @@ export function resolvePlanRate(
   }
 }
 
+const nightsBetween = (checkIn: string, checkOut: string) =>
+  Math.max(
+    0,
+    Math.round(
+      (Date.parse(checkOut + "T00:00:00Z") -
+        Date.parse(checkIn + "T00:00:00Z")) /
+        86400000
+    )
+  );
+
+/**
+ * Guard a rate plan's booking conditions. Throws a guest-readable error when
+ * the stay doesn't qualify — call before putting a reservation on the plan.
+ */
+export function assertPlanEligible(
+  plan: Doc<"rate_plans">,
+  checkIn: string,
+  checkOut: string,
+  businessDate: string
+) {
+  if (!plan.active) {
+    throw new Error(`Rate plan ${plan.code} is not open for sale.`);
+  }
+  const los = nightsBetween(checkIn, checkOut);
+  if (plan.minLos && los < plan.minLos) {
+    throw new Error(
+      `${plan.code} needs a minimum stay of ${plan.minLos} night${
+        plan.minLos > 1 ? "s" : ""
+      } — this stay is ${los}.`
+    );
+  }
+  if (plan.advanceDays) {
+    const lead = nightsBetween(businessDate, checkIn);
+    if (lead < plan.advanceDays) {
+      throw new Error(
+        `${plan.code} must be booked at least ${plan.advanceDays} days ahead — this arrival is ${lead} day${
+          lead === 1 ? "" : "s"
+        } out.`
+      );
+    }
+  }
+}
+
 /**
  * THE nightly rate for a specific reservation on a date. Precedence:
  *   1. a linked rate plan's modifier over the engine price

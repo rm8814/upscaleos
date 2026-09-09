@@ -1,7 +1,6 @@
 import { internalMutation } from "./_generated/server";
-import { nightlyRateFor } from "./rateModel";
-import { roomNightTaxes } from "./taxEngine";
 import { issueInvoiceForFolio } from "./invoices";
+import { postNight } from "./folios";
 
 /**
  * Wipes and reseeds the demo property. Idempotent — safe to run repeatedly.
@@ -426,12 +425,22 @@ export const seed = internalMutation({
         .query("reservations")
         .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
         .collect()
-    ).filter(
-      (r) =>
-        (r.status === "confirmed" || r.status === "tentative") &&
-        !r.corporateAccountId &&
-        r.checkOut > r.checkIn
-    );
+    ).filter((r) => {
+      if (r.status !== "confirmed" && r.status !== "tentative") return false;
+      if (r.corporateAccountId) return false;
+      const nights = Math.round(
+        (Date.parse(r.checkOut + "T00:00:00Z") -
+          Date.parse(r.checkIn + "T00:00:00Z")) /
+          86400000
+      );
+      const lead = Math.round(
+        (Date.parse(r.checkIn + "T00:00:00Z") -
+          Date.parse(iso(TODAY) + "T00:00:00Z")) /
+          86400000
+      );
+      // PROMO-EB21 conditions: 2+ nights, booked 21+ days out
+      return nights >= 2 && lead >= 21;
+    });
     for (const r of ebCandidates.slice(0, 2)) {
       await ctx.db.patch(r._id, { ratePlanId: planIds["PROMO-EB21"] });
     }
@@ -645,58 +654,16 @@ export const seed = internalMutation({
         closedOn: departed ? r.checkOut : undefined,
       });
       if (departed) departedFolioIds.push(folioId);
+      const folioDoc = await ctx.db.get(folioId);
+      // Post through the same code path the night audit uses: room + tax at
+      // the reservation's effective rate (plan / corporate aware) plus any
+      // package components. Keeps seeded folios identical to live ones.
       for (
         let d = r.checkIn;
         d <= lastNight && d <= businessDateIso;
         d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
       ) {
-        const corpRate = r.corporateAccountId
-          ? Number(
-              (corporates[corpIds.indexOf(r.corporateAccountId)]?.rate ?? "")
-                .replace(/[^\d]/g, "")
-            )
-          : 0;
-        const gross = corpRate > 0 ? corpRate : nightlyRateFor(r.roomType, d);
-        const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {
-          firstNight: d === r.checkIn,
-        });
-        await ctx.db.insert("folio_lines", {
-          folioId,
-          propertyId,
-          date: d,
-          kind: "room",
-          code: "RM",
-          description: `Room — ${r.roomType} · night of ${d}`,
-          amount: roomNet,
-        });
-        for (const t of taxLines) {
-          await ctx.db.insert("folio_lines", {
-            folioId,
-            propertyId,
-            date: d,
-            kind: "tax",
-            code: t.code,
-            description: t.name,
-            amount: t.amount,
-          });
-        }
-        // package components ride each room night
-        const plan = r.ratePlanId ? planSeed.find((p) => planIds[p.code] === r.ratePlanId) : null;
-        if (plan?.kind === "package" && plan.components) {
-          for (const c of plan.components) {
-            if (c.amount <= 0) continue;
-            await ctx.db.insert("folio_lines", {
-              folioId,
-              propertyId,
-              date: d,
-              kind: "fnb",
-              code: c.code,
-              description: `${c.label} · ${plan.code}`,
-              amount: c.amount,
-              source: "package",
-            });
-          }
-        }
+        if (folioDoc) await postNight(ctx, folioDoc, r, d);
       }
     }
 
@@ -790,6 +757,73 @@ export const seed = internalMutation({
           description: t.desc,
           ref: t.ref,
           amount: t.amount,
+        });
+      }
+    }
+
+    // ---- historical daily_stats + pickup snapshots --------------
+    //   Night audit writes these going forward; seed backfills ~35 closed
+    //   days so the reports screen (MTD, forecast, booking curve) has real
+    //   history to render on a fresh install.
+    const sellableRooms = roomRows.filter(
+      (r) => r.status !== "OOO" && r.status !== "OOS"
+    ).length;
+    const oooRooms = roomRows.filter(
+      (r) => r.status === "OOO" || r.status === "OOS"
+    ).length;
+    const dowOcc = [0.66, 0.7, 0.73, 0.78, 0.9, 0.94, 0.82]; // Sun..Sat
+    const allResForStats = await ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect();
+
+    for (let off = -35; off <= -1; off++) {
+      const dt = addDays(TODAY, off);
+      const d = iso(dt);
+      const occ = Math.min(
+        0.98,
+        dowOcc[dt.getUTCDay()] + ((off % 5) - 2) * 0.015
+      );
+      const roomsSold = Math.round(sellableRooms * occ);
+      const adr = 1_820_000 + ((off % 7) - 3) * 45_000;
+      const roomRevenue = roomsSold * adr;
+      await ctx.db.insert("daily_stats", {
+        propertyId,
+        date: d,
+        roomsSold,
+        availableRooms: sellableRooms,
+        oooRooms,
+        roomRevenue,
+        postedRoomRevenue: roomRevenue,
+        variance: 0,
+        balanced: true,
+        adr,
+        revpar: Math.round(roomRevenue / Math.max(1, sellableRooms)),
+        occupancyPct: Math.round(occ * 100),
+        arrivals: Math.round(roomsSold * 0.32),
+        departures: Math.round(roomsSold * 0.3),
+        closedAt: dt.getTime(),
+      });
+    }
+
+    const overlaps = (r: (typeof allResForStats)[number], day: string) =>
+      r.status !== "cancelled" &&
+      r.status !== "no_show" &&
+      r.checkIn <= day &&
+      r.checkOut > day;
+    for (const asOfOff of [-2, -1]) {
+      const asOf = iso(addDays(TODAY, asOfOff));
+      const decay = asOfOff === -2 ? 0.82 : 1; // earlier snapshot had fewer on the books
+      for (let i = 0; i < 14; i++) {
+        const forDate = iso(addDays(TODAY, asOfOff + i));
+        const live = allResForStats.filter((r) => overlaps(r, forDate)).length;
+        const roomsOnBooks = Math.max(0, Math.round(live * decay));
+        await ctx.db.insert("pickup_snapshots", {
+          propertyId,
+          asOf,
+          forDate,
+          roomsOnBooks,
+          revenueOnBooks: roomsOnBooks * 2_050_000,
         });
       }
     }

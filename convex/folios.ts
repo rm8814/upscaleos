@@ -35,7 +35,7 @@ async function folioForReservation(
 }
 
 /** Post one night's room + tax charge to a folio, unless already posted. */
-async function postNight(
+export async function postNight(
   ctx: MutationCtx,
   folio: Doc<"folios">,
   res: Doc<"reservations">,

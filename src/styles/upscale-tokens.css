@@ -69,6 +69,12 @@
   --res-cancelled:   #FF5A7A;
   --res-noshow:      #FF5A7A;
 
+  /* ---------- Color · Group blocks (held inventory) -------------------- */
+  /* A hue of its own so a group hold never reads as a tentative booking. */
+  --group-hold:      #2DD4BF;  /* rooms blocked for a group, not yet picked */
+  --group-hold-w:    rgba(45, 212, 191, .16);
+  --group-hold-b:    rgba(45, 212, 191, .45);
+
   /* ---------- AI · The "AI suggestion" surface --------------------------- */
   /* A consistent visual treatment for anything produced by the AI: rate
      recommendations, demand forecasts, copilot answers, anomaly callouts.  */

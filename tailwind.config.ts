@@ -60,6 +60,9 @@ const config: Config = {
         "res-departed": "var(--res-departed)",
         "res-cancelled": "var(--res-cancelled)",
 
+        // Group blocks (held inventory)
+        "group-hold": "var(--group-hold)",
+
         // AI surface
         "ai-tint": "var(--ai-tint)",
         "ai-edge": "var(--ai-edge)",

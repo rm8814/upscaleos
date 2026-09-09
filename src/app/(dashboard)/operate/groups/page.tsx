@@ -174,7 +174,7 @@ export default function GroupsBlocksPage() {
                   <span className="text-fg-3">released</span>
                 ) : (
                   <>
-                    <span className="text-res-tentative">{row.held}</span>
+                    <span className="text-group-hold">{row.held}</span>
                     <span className="text-fg-3"> / {row.blocked}</span>
                   </>
                 )}
@@ -402,7 +402,7 @@ export default function GroupsBlocksPage() {
                         <div className="font-medium">{sb.roomType}</div>
                         <div className="font-mono">{sb.blocked}</div>
                         <div className="font-mono text-accent-cyan">{sb.picked}</div>
-                        <div className="font-mono text-res-tentative">
+                        <div className="font-mono text-group-hold">
                           {g.released ? "—" : sb.held}
                         </div>
                         <div className="font-mono text-[11px]">{sb.rate}</div>

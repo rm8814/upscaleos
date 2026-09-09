@@ -595,7 +595,7 @@ export default function CalendarTapeChart() {
         <div className="flex items-center gap-1.5 text-12 text-fg-3">
           <span
             className="h-2 w-3.5 rounded-[2px]"
-            style={{ background: "var(--res-tentative)" }}
+            style={{ background: "var(--group-hold)" }}
           />
           Group hold
         </div>
@@ -658,7 +658,7 @@ export default function CalendarTapeChart() {
           {/* Group lane — one bar per active block across its window */}
           {(board?.groupLane ?? []).length > 0 && (
             <div className="grid border-b border-line bg-deep" style={GRID}>
-              <div className="px-3 py-2 text-[11px] font-semibold text-res-tentative">
+              <div className="px-3 py-2 text-[11px] font-semibold text-group-hold">
                 Groups
               </div>
               <div
@@ -686,8 +686,8 @@ export default function CalendarTapeChart() {
                         left: `${leftPct}%`,
                         width: `${widthPct}%`,
                         background:
-                          "color-mix(in srgb, var(--res-tentative) 24%, var(--bg-deep))",
-                        borderColor: "var(--res-tentative)",
+                          "color-mix(in srgb, var(--group-hold) 24%, var(--bg-deep))",
+                        borderColor: "var(--group-hold)",
                       }}
                     >
                       <span className="overflow-hidden text-ellipsis">
@@ -779,7 +779,7 @@ export default function CalendarTapeChart() {
                         )}
                         {cell.held > 0 && (
                           <span
-                            className="rounded-[4px] bg-res-tentative/[0.16] px-[5px] font-mono text-[10px] font-bold text-res-tentative"
+                            className="rounded-[4px] bg-group-hold/[0.16] px-[5px] font-mono text-[10px] font-bold text-group-hold"
                             title={`${cell.held} held for a group block`}
                           >
                             {cell.held}
@@ -1340,7 +1340,7 @@ export default function CalendarTapeChart() {
                       </div>
                       <div>
                         <div className="text-[10px] uppercase text-fg-3">Held</div>
-                        <div className="font-mono text-res-tentative">{blk.held}</div>
+                        <div className="font-mono text-group-hold">{blk.held}</div>
                       </div>
                     </div>
                     <a

@@ -459,6 +459,12 @@ export default function CalendarTapeChart() {
             { value: "types", label: "Room types" },
           ]}
         />
+        <button
+          onClick={() => setNewRes({})}
+          className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi"
+        >
+          + New reservation
+        </button>
       </div>
 
       {/* Range + legend */}
@@ -546,13 +552,6 @@ export default function CalendarTapeChart() {
           <span style={{ color: RATE_SOURCE_COLOR.dynamic }}>dynamic</span>
           <span style={{ color: RATE_SOURCE_COLOR.manual }}>manual</span>
         </div>
-
-        <button
-          onClick={() => setNewRes({})}
-          className="ml-auto rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice transition-colors hover:bg-accent-violet-hi"
-        >
-          + New reservation
-        </button>
       </div>
 
       {/* Selection bar */}
@@ -696,20 +695,16 @@ export default function CalendarTapeChart() {
                             title={room.status}
                           />
                           <span className="font-mono text-12 text-fg-2">{room.roomNumber}</span>
-                          {(room.status === "OOO" || room.status === "OOS") && (
+                          {oooRoom && (
                             <span
-                              className="ml-auto rounded-[3px] px-1 py-px text-[9px] font-bold leading-none"
+                              className="ml-1 rounded-[3px] px-1 py-px text-[9px] font-bold leading-none"
                               style={{
-                                color: ROOM_STATUS_COLOR[room.status],
-                                border: `1px solid ${ROOM_STATUS_COLOR[room.status]}`,
+                                color: ROOM_STATUS_COLOR.OOO,
+                                border: `1px solid ${ROOM_STATUS_COLOR.OOO}`,
                               }}
-                              title={
-                                hardBlock?.reason ??
-                                roomBlocks[0]?.reason ??
-                                room.status
-                              }
+                              title={hardBlock?.reason ?? "Out of order"}
                             >
-                              {room.status}
+                              OOO
                             </span>
                           )}
                         </div>

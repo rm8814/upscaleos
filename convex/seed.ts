@@ -326,8 +326,14 @@ export const seed = internalMutation({
       "Presidential Suite": "Rp 6,900,000",
     };
 
+    const sellableRoomRows = roomRows.filter(
+      (r) => r.status !== "OOO" && r.status !== "OOS"
+    );
+
     for (let i = 0; i < guestIds.length; i++) {
-      const room = roomRows[(i * 3) % roomRows.length];
+      // i*7 mod N hits distinct rooms — no two seed guests share one — and
+      // we only place them in sellable rooms (never an OOO/OOS one).
+      const room = sellableRoomRows[(i * 7) % sellableRoomRows.length];
       const startOffset = (i % 7) - 3; // -3 .. +3 days from today
       const nights = 1 + (i % 4);
       const checkIn = addDays(TODAY, startOffset);
@@ -385,6 +391,18 @@ export const seed = internalMutation({
       const d = iso(addDays(TODAY, k));
       usedByDate.set(d, new Set());
     }
+    // Per-type sellable capacity, and a running per-type / per-night tally so
+    // the pace fill never pushes a room type past its own inventory.
+    const capByType = new Map<string, number>();
+    for (const r of sellableForPace)
+      capByType.set(r.type, (capByType.get(r.type) ?? 0) + 1);
+    const usedTypeByDate = new Map<string, Map<string, number>>();
+    const bumpType = (d: string, type: string, by = 1) => {
+      if (!usedTypeByDate.has(d)) usedTypeByDate.set(d, new Map());
+      const m = usedTypeByDate.get(d)!;
+      m.set(type, (m.get(type) ?? 0) + by);
+    };
+
     const existingRes = await ctx.db
       .query("reservations")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
@@ -393,6 +411,7 @@ export const seed = internalMutation({
       if (!r.roomId) continue;
       for (let d = r.checkIn; d < r.checkOut; d = iso(addDays(new Date(d + "T00:00:00Z"), 1))) {
         usedByDate.get(d)?.add(r.roomId);
+        if (r.roomType) bumpType(d, r.roomType);
       }
     }
 
@@ -407,12 +426,19 @@ export const seed = internalMutation({
       for (const room of sellableForPace) {
         if (toAdd <= 0) break;
         if (usedByDate.get(arrIso)!.has(room._id)) continue;
+        // leave one room per type free on every night for groups / walk-ins
+        const typeCeil = (capByType.get(room.type) ?? 0) - 1;
         const nights = 1 + ((k + paceGuest) % 3);
-        // don't create a stay that runs past our tracked window / collides
+        // don't create a stay that runs past our tracked window / collides /
+        // tips a room type over its inventory.
         let ok = true;
         for (let n = 0; n < nights; n++) {
           const nd = iso(addDays(arrDate, n));
-          if (!usedByDate.has(nd) || usedByDate.get(nd)!.has(room._id)) {
+          if (
+            !usedByDate.has(nd) ||
+            usedByDate.get(nd)!.has(room._id) ||
+            (usedTypeByDate.get(nd)?.get(room.type) ?? 0) >= typeCeil
+          ) {
             ok = false;
             break;
           }
@@ -438,7 +464,9 @@ export const seed = internalMutation({
           children: paceGuest % 5 === 0 ? 1 : 0,
         });
         for (let n = 0; n < nights; n++) {
-          usedByDate.get(iso(addDays(arrDate, n)))!.add(room._id);
+          const nd = iso(addDays(arrDate, n));
+          usedByDate.get(nd)!.add(room._id);
+          bumpType(nd, room.type);
         }
         toAdd -= 1;
         paceGuest += 1;
@@ -550,8 +578,8 @@ export const seed = internalMutation({
           "1 comp room per 20, free meeting room, 15:00 late checkout for VIPs.",
         contact: "Dewi Anggraini · dewi.a@astra.co.id · +62 811 900 4471",
         subs: [
-          { roomType: "Double Queen", blocked: 16, rate: "Rp 1,750,000" },
-          { roomType: "King Suite", blocked: 8, rate: "Rp 2,400,000" },
+          { roomType: "Double Queen", blocked: 3, rate: "Rp 1,750,000" },
+          { roomType: "King Suite", blocked: 2, rate: "Rp 2,400,000" },
         ],
         rooming: [
           { guest: "Dewi Anggraini", roomType: "King Suite", assign: true },
@@ -576,8 +604,8 @@ export const seed = internalMutation({
           "Complimentary bridal suite, welcome drinks, 20% spa discount for the party.",
         contact: "Putri Santoso · putri.s@gmail.com · +62 812 555 8890",
         subs: [
-          { roomType: "Deluxe Twin", blocked: 12, rate: "Rp 1,380,000" },
-          { roomType: "King Suite", blocked: 6, rate: "Rp 2,200,000" },
+          { roomType: "Deluxe Twin", blocked: 4, rate: "Rp 1,380,000" },
+          { roomType: "King Suite", blocked: 2, rate: "Rp 2,200,000" },
         ],
         rooming: [
           { guest: "Putri Santoso", roomType: "King Suite", assign: true },
@@ -599,12 +627,11 @@ export const seed = internalMutation({
         depositAmount: "Rp 12,000,000",
         concessions: "Early check-in, storage room for equipment.",
         contact: "Tour Logistics · logistics@jjfest.id",
-        subs: [{ roomType: "Double Queen", blocked: 10, rate: "Rp 1,600,000" }],
+        subs: [{ roomType: "Double Queen", blocked: 3, rate: "Rp 1,600,000" }],
         rooming: [
           { guest: "Andre Situmorang", roomType: "Double Queen", assign: true },
           { guest: "Kevin Halim", roomType: "Double Queen", assign: true },
-          { guest: "Marcus Tan", roomType: "Double Queen", assign: true },
-          { guest: "Denny Sumargo", roomType: "Double Queen", assign: true },
+          { guest: "Marcus Tan", roomType: "Double Queen", assign: false },
         ],
       },
       {
@@ -622,8 +649,8 @@ export const seed = internalMutation({
           "Pending contract — proposed 2 comp rooms and a hospitality suite.",
         contact: "Michael Chen · m.chen@techcorp.com · +65 8123 4567",
         subs: [
-          { roomType: "King Suite", blocked: 20, rate: "Rp 2,300,000" },
-          { roomType: "Presidential Suite", blocked: 10, rate: "Rp 6,200,000" },
+          { roomType: "King Suite", blocked: 4, rate: "Rp 2,300,000" },
+          { roomType: "Presidential Suite", blocked: 2, rate: "Rp 6,200,000" },
         ],
         rooming: [
           { guest: "Michael Chen (TechCorp)", roomType: "Presidential Suite", assign: false },

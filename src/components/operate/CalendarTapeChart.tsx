@@ -93,6 +93,9 @@ export default function CalendarTapeChart() {
     y: number;
   } | null>(null);
   const [releasing, setReleasing] = useState(false);
+  const [peek, setPeek] = useState<
+    { roomType: string; date: string; kind: "assigned" | "unassigned" } | null
+  >(null);
   const [newRes, setNewRes] = useState<Partial<NewResInit> | null>(null);
   const [assignWaitlistId, setAssignWaitlistId] = useState<string | null>(null);
 
@@ -186,23 +189,42 @@ export default function CalendarTapeChart() {
     }
     return Array.from(byType.entries()).map(([type, rs]) => {
       const occRow = board.typeOcc[type] ?? [];
-      const aggOcc = days.map(
-        (d) => occRow.find((x) => x.date === iso(d))?.occPct ?? 0
-      );
-      const rates = days.map((d) => {
-        const c = rateCell.get(`${type}|${iso(d)}`);
-        return { label: c ? money(c.rate) : "—", source: c?.source ?? "rack" };
+      const cells = days.map((d) => {
+        const dISO = iso(d);
+        const o = occRow.find((x) => x.date === dISO);
+        const c = rateCell.get(`${type}|${dISO}`);
+        return {
+          date: dISO,
+          rate: c ? money(c.rate) : "—",
+          rateSource: c?.source ?? "rack",
+          available: o?.available ?? 0,
+          assigned: o?.assigned ?? 0,
+          unassigned: o?.unassigned ?? 0,
+          held: o?.held ?? 0,
+          occPct: o?.occPct ?? 0,
+        };
       });
-      const holds = days.map(
-        (d) => board.groupHolds[type]?.[iso(d)] ?? 0
-      );
-      return { type, rooms: rs, aggOcc, rates, holds };
+      return { type, rooms: rs, cells };
     });
   }, [board, typeFilter, hkFilter, days, rateCell]);
 
   const occByDay = days.map(
     (d) => board?.occByDay.find((x) => x.date === iso(d)) ?? null
   );
+
+  // Reservations behind an available/assigned/unassigned box, for the peek.
+  const peekList = useMemo(() => {
+    if (!peek) return [];
+    const released = new Set(["cancelled", "departed", "no_show"]);
+    return allRes.filter(
+      (r) =>
+        !released.has(r.status) &&
+        r.roomType === peek.roomType &&
+        r.checkIn <= peek.date &&
+        r.checkOut > peek.date &&
+        (peek.kind === "assigned" ? !!r.roomId : !r.roomId)
+    );
+  }, [peek, allRes]);
 
   const blockColor = (r: BoardRes) =>
     colorBy === "channel"
@@ -383,7 +405,9 @@ export default function CalendarTapeChart() {
   const selectedRes = allRes.find((r) => r._id === openResId) ?? null;
   const ctxRes = allRes.find((r) => r._id === ctxMenu?.resId) ?? null;
 
-  const GRID = { gridTemplateColumns: `150px repeat(${DAYS}, 1fr)` } as React.CSSProperties;
+  const GRID = {
+    gridTemplateColumns: `150px repeat(${DAYS}, minmax(66px,1fr))`,
+  } as React.CSSProperties;
 
   const legend =
     colorBy === "status"
@@ -513,6 +537,23 @@ export default function CalendarTapeChart() {
         <span className="h-3 w-px bg-line" />
 
         <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <span className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan">
+            n
+          </span>
+          Available
+          <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
+            n
+          </span>
+          Assigned
+          <span className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo">
+            n
+          </span>
+          Unassigned
+        </div>
+
+        <span className="h-3 w-px bg-line" />
+
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
           <Zap className="h-3 w-3 text-fg-2" />
           Auto-assigned
         </div>
@@ -577,7 +618,7 @@ export default function CalendarTapeChart() {
 
       {/* Grid */}
       <Card className="overflow-x-auto p-0">
-        <div className="min-w-[860px]">
+        <div className="min-w-[1080px]">
           {/* header */}
           <div className="grid" style={GRID}>
             <div className="border-b border-line px-3 py-2.5 text-[11px] text-fg-3">
@@ -622,43 +663,100 @@ export default function CalendarTapeChart() {
                       · {g.rooms.length}
                     </span>
                   </div>
-                  {days.map((_, i) => (
-                    <div
-                      key={i}
-                      className="border-l border-line-soft py-2 text-center font-mono text-[10.5px]"
-                      style={{
-                        color: isCollapsed
-                          ? "var(--accent-cyan)"
-                          : RATE_SOURCE_COLOR[g.rates[i].source],
-                      }}
-                      title={
-                        isCollapsed
-                          ? `${g.aggOcc[i]}% sold`
-                          : `${g.rates[i].source} rate`
-                      }
-                    >
-                      {isCollapsed ? `${g.aggOcc[i]}%` : g.rates[i].label}
-                    </div>
-                  ))}
+                  {g.cells.map((cell, i) =>
+                    isCollapsed ? (
+                      <div
+                        key={i}
+                        onClick={(ev) => ev.stopPropagation()}
+                        className="flex flex-col items-center gap-1 border-l border-line-soft px-1 py-1.5"
+                      >
+                        <span
+                          className="font-mono text-[11px] font-semibold"
+                          style={{ color: RATE_SOURCE_COLOR[cell.rateSource] }}
+                          title={`${cell.rateSource} rate`}
+                        >
+                          {cell.rate}
+                        </span>
+                        <div className="flex flex-wrap justify-center gap-[3px]">
+                          <span
+                            className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan"
+                            title={`${cell.available} available`}
+                          >
+                            {cell.available}
+                          </span>
+                          {cell.assigned > 0 ? (
+                            <button
+                              onClick={() =>
+                                setPeek({
+                                  roomType: g.type,
+                                  date: cell.date,
+                                  kind: "assigned",
+                                })
+                              }
+                              title={`${cell.assigned} assigned — view`}
+                              className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2 hover:bg-fg-1/[0.18]"
+                            >
+                              {cell.assigned}
+                            </button>
+                          ) : (
+                            <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
+                              0
+                            </span>
+                          )}
+                          {cell.unassigned > 0 && (
+                            <button
+                              onClick={() =>
+                                setPeek({
+                                  roomType: g.type,
+                                  date: cell.date,
+                                  kind: "unassigned",
+                                })
+                              }
+                              title={`${cell.unassigned} sold, unassigned — view`}
+                              className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo hover:bg-room-ooo/30"
+                            >
+                              {cell.unassigned}
+                            </button>
+                          )}
+                          {cell.held > 0 && (
+                            <span
+                              className="rounded-[4px] bg-res-tentative/[0.16] px-[5px] font-mono text-[10px] font-bold text-res-tentative"
+                              title={`${cell.held} held for a group block`}
+                            >
+                              {cell.held}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={i}
+                        className="border-l border-line-soft py-2 text-center font-mono text-[10.5px]"
+                        style={{ color: RATE_SOURCE_COLOR[cell.rateSource] }}
+                        title={`${cell.rateSource} rate`}
+                      >
+                        {cell.rate}
+                      </div>
+                    )
+                  )}
                 </div>
 
                 {/* group-held inventory band — unpicked rooms in active blocks */}
-                {!isCollapsed && g.holds.some((h) => h > 0) && (
+                {!isCollapsed && g.cells.some((c) => c.held > 0) && (
                   <div className="grid border-b border-line-soft bg-deep/60" style={GRID}>
                     <div className="px-3 py-1.5 text-[10.5px] font-medium text-res-tentative">
                       Group hold
                     </div>
-                    {g.holds.map((h, i) => (
+                    {g.cells.map((c, i) => (
                       <div
                         key={i}
                         className="border-l border-line-soft py-1.5 text-center font-mono text-[10.5px]"
                         style={{
-                          color: h > 0 ? "var(--res-tentative)" : "var(--fg-4)",
-                          background: h > 0 ? "var(--res-tentative-wash, transparent)" : undefined,
+                          color: c.held > 0 ? "var(--res-tentative)" : "var(--fg-4)",
                         }}
-                        title={h > 0 ? `${h} rooms held for a group block` : undefined}
+                        title={c.held > 0 ? `${c.held} rooms held for a group block` : undefined}
                       >
-                        {h > 0 ? h : "·"}
+                        {c.held > 0 ? c.held : "·"}
                       </div>
                     ))}
                   </div>
@@ -1165,6 +1263,87 @@ export default function CalendarTapeChart() {
               <div className="mt-1.5 text-[10px] text-fg-4">
                 Room goes to Vacant Dirty; housekeeping inspects before it&apos;s
                 sellable again.
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* Peek — the reservations behind an assigned / unassigned box */}
+      {peek &&
+        createPortal(
+          <>
+            <div
+              onClick={() => setPeek(null)}
+              className="fixed inset-0 z-[55] bg-deepest/70 backdrop-blur-[6px]"
+            />
+            <div className="fixed left-1/2 top-1/2 z-[56] w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-deep p-5 shadow-3">
+              <div className="mb-3 flex items-start justify-between">
+                <div>
+                  <div className="font-display text-16 font-bold text-ice">
+                    {peek.kind === "assigned" ? "Assigned" : "Sold, unassigned"} ·{" "}
+                    {peek.roomType}
+                  </div>
+                  <div className="mt-0.5 text-12 text-fg-3">
+                    Night of {dmIso(peek.date)} · {peekList.length} reservation
+                    {peekList.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPeek(null)}
+                  className="text-fg-3 hover:text-ice"
+                  aria-label="Close"
+                >
+                  <X className="h-[18px] w-[18px]" />
+                </button>
+              </div>
+              <div className="upx-scroll max-h-[52vh] overflow-y-auto rounded-md border border-line">
+                {peekList.length === 0 && (
+                  <div className="px-3 py-4 text-13 text-fg-3">
+                    No matching reservations.
+                  </div>
+                )}
+                {peekList.map((r) => (
+                  <button
+                    key={r._id}
+                    onClick={() => {
+                      setOpenResId(r._id);
+                      setPeek(null);
+                    }}
+                    className="flex w-full items-center gap-3 border-b border-line-soft px-3 py-2.5 text-left last:border-0 hover:bg-elevated"
+                  >
+                    <span
+                      className="h-2 w-2 flex-none rounded-pill"
+                      style={{
+                        background: RES_STATUS_COLOR[r.status] ?? "var(--fg-3)",
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-13 font-semibold">
+                        {r.guestName}
+                      </div>
+                      <div className="text-[11px] text-fg-3">
+                        {dmIso(r.checkIn)} → {dmIso(r.checkOut)} ·{" "}
+                        {r.channel ?? "Direct"}
+                      </div>
+                    </div>
+                    <div className="flex-none text-right">
+                      <div className="font-mono text-12">
+                        {r.roomNumber && r.roomNumber !== "—"
+                          ? `Room ${r.roomNumber}`
+                          : "Unassigned"}
+                      </div>
+                      <div
+                        className="text-[10.5px]"
+                        style={{
+                          color: RES_STATUS_COLOR[r.status] ?? "var(--fg-3)",
+                        }}
+                      >
+                        {RES_STATUS_LABEL[r.status] ?? r.status}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           </>,

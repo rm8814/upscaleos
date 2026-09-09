@@ -188,15 +188,37 @@ export const getCalendarBoard = query({
 
     const typeOcc: Record<
       string,
-      { date: string; sold: number; sellable: number; occPct: number }[]
+      {
+        date: string;
+        assigned: number;
+        unassigned: number;
+        held: number;
+        sold: number;
+        sellable: number;
+        available: number;
+        occPct: number;
+      }[]
     > = {};
     for (const t of roomTypes) {
       const cap = sellableByType.get(t) ?? 0;
       typeOcc[t] = days.map((date) => {
-        const sold = resRows.filter(
+        const onBooks = resRows.filter(
           (r) => (r.roomType ?? "") === t && onBooksOn(r, date)
-        ).length;
-        return { date, sold, sellable: cap, occPct: occupancyPct(sold, cap) };
+        );
+        const assigned = onBooks.filter((r) => r.roomId).length;
+        const unassigned = onBooks.length - assigned;
+        const held = groupHolds[t]?.[date] ?? 0;
+        const sold = assigned + unassigned;
+        return {
+          date,
+          assigned,
+          unassigned,
+          held,
+          sold,
+          sellable: cap,
+          available: Math.max(0, cap - sold - held),
+          occPct: occupancyPct(sold, cap),
+        };
       });
     }
 

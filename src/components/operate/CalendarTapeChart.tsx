@@ -552,23 +552,6 @@ export default function CalendarTapeChart() {
         <span className="h-3 w-px bg-line" />
 
         <div className="flex items-center gap-1.5 text-12 text-fg-3">
-          <span className="rounded-[4px] bg-accent-cyan/10 px-[5px] font-mono text-[10px] font-bold text-accent-cyan">
-            n
-          </span>
-          Available
-          <span className="rounded-[4px] bg-fg-1/[0.08] px-[5px] font-mono text-[10px] font-bold text-fg-2">
-            n
-          </span>
-          Assigned
-          <span className="rounded-[4px] bg-room-ooo/[0.14] px-[5px] font-mono text-[10px] font-bold text-room-ooo">
-            n
-          </span>
-          Unassigned
-        </div>
-
-        <span className="h-3 w-px bg-line" />
-
-        <div className="flex items-center gap-1.5 text-12 text-fg-3">
           <Zap className="h-3 w-3 text-fg-2" />
           Auto-assigned
         </div>
@@ -598,15 +581,6 @@ export default function CalendarTapeChart() {
             style={{ background: "var(--group-hold)" }}
           />
           Group hold
-        </div>
-
-        <span className="h-3 w-px bg-line" />
-
-        <div className="flex items-center gap-1.5 text-12 text-fg-3">
-          <span className="text-fg-4">Rate</span>
-          <span style={{ color: RATE_SOURCE_COLOR.rack }}>rack</span>
-          <span style={{ color: RATE_SOURCE_COLOR.dynamic }}>dynamic</span>
-          <span style={{ color: RATE_SOURCE_COLOR.manual }}>manual</span>
         </div>
       </div>
 

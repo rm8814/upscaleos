@@ -259,7 +259,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Revenue by source / Room status / Channel mix */}
+      {/* Revenue by source / Channel mix / Room status */}
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-[1.4fr_1fr_1fr]">
         <Card className="p-4">
           <Eyebrow className="mb-2.5">Revenue by source · last 30 days</Eyebrow>
@@ -275,21 +275,6 @@ export default function DashboardPage() {
               </span>
             </div>
           ))}
-        </Card>
-
-        <Card className="p-4">
-          <Eyebrow className="mb-2.5">Room status</Eyebrow>
-          {(roomStatus ?? []).map((rs) => (
-            <div key={rs.status} className="flex items-center gap-2 py-1.5">
-              <span
-                className="h-2 w-2 rounded-pill"
-                style={{ background: ROOM_STATUS_COLOR[rs.status] }}
-              />
-              <span className="flex-1 text-[12.5px] text-fg-2">{rs.status}</span>
-              <span className="font-mono text-13 font-semibold text-ice">{rs.count}</span>
-            </div>
-          ))}
-          {!roomStatus && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
         </Card>
 
         <Card className="flex flex-col gap-2 p-4">
@@ -312,6 +297,21 @@ export default function DashboardPage() {
               </span>
             </div>
           ))}
+        </Card>
+
+        <Card className="p-4">
+          <Eyebrow className="mb-2.5">Room status</Eyebrow>
+          {(roomStatus ?? []).map((rs) => (
+            <div key={rs.status} className="flex items-center gap-2 py-1.5">
+              <span
+                className="h-2 w-2 rounded-pill"
+                style={{ background: ROOM_STATUS_COLOR[rs.status] }}
+              />
+              <span className="flex-1 text-[12.5px] text-fg-2">{rs.status}</span>
+              <span className="font-mono text-13 font-semibold text-ice">{rs.count}</span>
+            </div>
+          ))}
+          {!roomStatus && <div className="py-1.5 text-12 text-fg-3">Loading…</div>}
         </Card>
       </div>
 

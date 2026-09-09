@@ -100,20 +100,7 @@ export default function GroupsBlocksPage() {
         : `Cut-off is ${inDays(cutoffDays)}. ${unpicked} of ${g.blocked} blocked rooms are still unpicked — release them or extend the cut-off.`
     : "";
 
-  const newGroup = async () => {
-    if (!activeProperty) return;
-    const start = addIso(businessDate, 30);
-    await createGroup({
-      propertyId: activeProperty._id,
-      name: `New group block — ${fmtDate(start)}`,
-      startDate: start,
-      nights: 2,
-      roomType: "Double Queen",
-      blocked: 10,
-      rate: "Rp 1,850,000",
-    });
-    toast("Tentative group block created — open it to fill in the details", "success");
-  };
+  const [showNew, setShowNew] = useState(false);
 
   return (
     <div className="mx-auto max-w-content">
@@ -135,12 +122,25 @@ export default function GroupsBlocksPage() {
         </select>
         <PmsDateChip className="ml-auto" />
         <button
-          onClick={newGroup}
+          onClick={() => setShowNew(true)}
           className="rounded-sm bg-accent-violet px-3.5 py-2 text-13 font-medium text-ice hover:bg-accent-violet-hi"
         >
           + New group block
         </button>
       </div>
+
+      {showNew && activeProperty && (
+        <NewBlockModal
+          propertyId={activeProperty._id}
+          businessDate={businessDate}
+          onClose={() => setShowNew(false)}
+          onCreate={async (payload) => {
+            await createGroup({ propertyId: activeProperty._id, ...payload });
+            setShowNew(false);
+            toast("Tentative group block created", "success");
+          }}
+        />
+      )}
 
       <Card className="mb-5 overflow-x-auto p-0">
         <div className="min-w-[980px]">
@@ -561,5 +561,160 @@ export default function GroupsBlocksPage() {
         </>
       )}
     </div>
+  );
+}
+
+const ROOM_TYPES = ["Deluxe Twin", "Double Queen", "King Suite", "Presidential Suite"];
+
+function NewBlockModal({
+  propertyId,
+  businessDate,
+  onClose,
+  onCreate,
+}: {
+  propertyId: Id<"properties">;
+  businessDate: string;
+  onClose: () => void;
+  onCreate: (p: {
+    name: string;
+    startDate: string;
+    nights: number;
+    roomType: string;
+    blocked: number;
+    rate: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [roomType, setRoomType] = useState("Double Queen");
+  const [startDate, setStartDate] = useState(addIso(businessDate, 30));
+  const [nights, setNights] = useState(2);
+  const [blocked, setBlocked] = useState(8);
+  const [rate, setRate] = useState("1,850,000");
+  const [busy, setBusy] = useState(false);
+
+  const check = useQuery(api.groups.checkBlockAvailability, {
+    propertyId,
+    roomType,
+    startDate,
+    nights: Math.max(1, nights),
+    blocked: Math.max(0, blocked),
+  });
+
+  return (
+    <>
+      <div onClick={onClose} className="fixed inset-0 z-40 bg-deepest/70 backdrop-blur-[6px]" />
+      <div className="fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-deep p-5 shadow-3">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-display text-16 font-bold text-ice">New group block</div>
+          <button onClick={onClose} className="text-fg-3 hover:text-ice" aria-label="Close">
+            <X className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Group name"
+            className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-ice outline-none focus:border-accent-violet"
+          />
+          <div className="grid grid-cols-2 gap-2.5">
+            <select
+              value={roomType}
+              onChange={(e) => setRoomType(e.target.value)}
+              className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-fg-2"
+            >
+              {ROOM_TYPES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+            <input
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              placeholder="Nightly rate"
+              className="rounded-sm border border-line bg-ink px-2.5 py-2 font-mono text-13 text-ice outline-none focus:border-accent-violet"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            <label className="flex flex-col gap-1 text-[11px] text-fg-3">
+              Start
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => e.target.value && setStartDate(e.target.value)}
+                className="rounded-sm border border-line bg-ink px-2 py-1.5 font-mono text-[12px] text-ice"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] text-fg-3">
+              Nights
+              <input
+                type="number"
+                min={1}
+                value={nights}
+                onChange={(e) => setNights(Number(e.target.value))}
+                className="rounded-sm border border-line bg-ink px-2 py-1.5 font-mono text-[12px] text-ice"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] text-fg-3">
+              Rooms
+              <input
+                type="number"
+                min={1}
+                value={blocked}
+                onChange={(e) => setBlocked(Number(e.target.value))}
+                className="rounded-sm border border-line bg-ink px-2 py-1.5 font-mono text-[12px] text-ice"
+              />
+            </label>
+          </div>
+
+          {check && (
+            <div
+              className="rounded-md border px-3 py-2 text-[11.5px]"
+              style={{
+                borderColor:
+                  check.oversellBy > 0 ? "var(--room-ooo)" : "var(--line)",
+                color: check.oversellBy > 0 ? "var(--room-ooo)" : "var(--fg-2)",
+              }}
+            >
+              Tightest night {check.tightestDate}: {check.sellable} sellable ·{" "}
+              {check.committed} committed · {check.otherHeld} held by other groups
+              → <span className="font-mono">{check.free} free</span>
+              {check.oversellBy > 0 && (
+                <span className="font-mono">
+                  {" "}
+                  · oversells by {check.oversellBy}
+                </span>
+              )}
+            </div>
+          )}
+
+          <button
+            disabled={!name.trim() || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onCreate({
+                  name: name.trim(),
+                  startDate,
+                  nights: Math.max(1, nights),
+                  roomType,
+                  blocked: Math.max(1, blocked),
+                  rate: `Rp ${rate.replace(/[^\d]/g, "")}`,
+                });
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="mt-1 rounded-sm bg-accent-violet px-3 py-2.5 text-13 font-semibold text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+          >
+            {busy
+              ? "Creating…"
+              : check && check.oversellBy > 0
+                ? `Create anyway (oversells ${check.oversellBy})`
+                : "Create block"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }

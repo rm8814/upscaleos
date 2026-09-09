@@ -5,6 +5,7 @@ import type { Id, Doc } from "./_generated/dataModel";
 import { authorize, writeAudit } from "./authz";
 import { parseRp, quoteStay } from "./rates";
 import { reconcileFolioToStay } from "./folios";
+import { RELEASED_STATUSES, roomCountsByType } from "./occupancy";
 
 const rpNum = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -154,6 +155,36 @@ export async function snapshotGroupPickup(
   }
   return n;
 }
+
+/** Resize a sub-block's blocked count (can't go below rooms already picked). */
+export const setSubBlockBlocked = mutation({
+  args: { subBlockId: v.id("group_subblocks"), blocked: v.number() },
+  handler: async (ctx, args) => {
+    const sub = await ctx.db.get(args.subBlockId);
+    if (!sub) throw new Error("Sub-block not found");
+    const block = await ctx.db.get(sub.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    const picked = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_group", (q) => q.eq("groupId", block._id))
+        .collect()
+    ).filter((r) => r.roomType === sub.roomType && r.status !== "cancelled")
+      .length;
+    const next = Math.max(picked, Math.round(args.blocked));
+    await ctx.db.patch(args.subBlockId, { blocked: next });
+    await writeAudit(ctx, scope, "group.resize", {
+      propertyId: block.propertyId,
+      target: `${block.name} · ${sub.roomType}`,
+      detail: `blocked ${sub.blocked} → ${next}`,
+    });
+    return { blocked: next };
+  },
+});
 
 /** Manually release N held rooms from a sub-block back to general inventory. */
 export const releaseRooms = mutation({
@@ -450,6 +481,91 @@ export const get = query({
         };
       }),
       rooming,
+    };
+  },
+});
+
+/**
+ * House impact of holding `blocked` rooms of a type for a date window:
+ * on the tightest night, how many are sellable, already committed, held by
+ * other groups, and free — and by how much this block oversells.
+ */
+export const checkBlockAvailability = query({
+  args: {
+    propertyId: v.id("properties"),
+    roomType: v.string(),
+    startDate: v.string(),
+    nights: v.number(),
+    blocked: v.number(),
+    excludeGroupId: v.optional(v.id("group_blocks")),
+  },
+  handler: async (ctx, args) => {
+    const [rooms, reservations, blocks, subblocks] = await Promise.all([
+      ctx.db
+        .query("rooms")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db
+        .query("group_blocks")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect(),
+      ctx.db.query("group_subblocks").collect(),
+    ]);
+    const bd = (await ctx.db.get(args.propertyId))?.businessDate ?? args.startDate;
+    const sellable = roomCountsByType(rooms).sellable.get(args.roomType) ?? 0;
+
+    let worst = {
+      date: args.startDate,
+      committed: 0,
+      otherHeld: 0,
+      free: sellable,
+    };
+    for (let n = 0; n < args.nights; n++) {
+      const date = addDaysIso(args.startDate, n);
+      const committed = reservations.filter(
+        (r) =>
+          (r.roomType ?? "") === args.roomType &&
+          !RELEASED_STATUSES.has(r.status) &&
+          r.groupId !== args.excludeGroupId &&
+          r.checkIn <= date &&
+          r.checkOut > date
+      ).length;
+      let otherHeld = 0;
+      for (const g of blocks) {
+        if (g._id === args.excludeGroupId) continue;
+        if (g.status === "cancelled" || g.released === true) continue;
+        if (g.cutoffDate < bd) continue;
+        if (date < g.startDate || date >= addDaysIso(g.startDate, g.nights))
+          continue;
+        const sub = subblocks.find(
+          (s) => s.groupId === g._id && s.roomType === args.roomType
+        );
+        if (!sub) continue;
+        const picked = reservations.filter(
+          (r) =>
+            r.groupId === g._id &&
+            r.roomType === args.roomType &&
+            !RELEASED_STATUSES.has(r.status) &&
+            r.checkIn <= date &&
+            r.checkOut > date
+        ).length;
+        otherHeld += Math.max(0, sub.blocked - picked);
+      }
+      const free = sellable - committed - otherHeld;
+      if (free < worst.free) worst = { date, committed, otherHeld, free };
+    }
+    return {
+      roomType: args.roomType,
+      sellable,
+      tightestDate: worst.date,
+      committed: worst.committed,
+      otherHeld: worst.otherHeld,
+      free: Math.max(0, worst.free),
+      oversellBy: Math.max(0, args.blocked - worst.free),
     };
   },
 });

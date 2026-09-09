@@ -16,11 +16,22 @@ import {
 import ReservationSlideOver from "@/components/guests/ReservationSlideOver";
 import PmsDateChip from "@/components/common/PmsDateChip";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZES = [50, 100];
+// Guest · RSV · Booked · Arrival · Departure · Source · Room type · Room · Status · Value · action
 const GRID =
-  "grid grid-cols-[1.3fr_0.9fr_0.8fr_0.8fr_1.1fr_0.9fr_0.5fr_0.8fr_0.9fr_0.8fr] gap-2 px-3.5 min-w-[1000px]";
+  "grid grid-cols-[1.5fr_0.95fr_0.9fr_0.9fr_0.9fr_0.95fr_1fr_0.6fr_0.85fr_1fr_0.75fr] items-center gap-3 px-4 min-w-[1240px]";
 
 type Tab = "arrivals" | "inhouse" | "departures" | "all";
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const shortDate = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
+const bookedDate = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+};
 
 export default function ReservationListPage() {
   return (
@@ -55,6 +66,7 @@ function ReservationListInner() {
   const [status, setStatus] = useState("All");
   const [channel, setChannel] = useState("All");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [selected, setSelected] = useState<string | null>(null);
 
   const TODAY = activeProperty?.businessDate ?? "2026-09-08";
@@ -108,12 +120,13 @@ function ReservationListInner() {
       );
     if (qRoomType) rows = rows.filter((r) => r.roomType === qRoomType);
     if (qDate) rows = rows.filter((r) => r.checkIn <= qDate && r.checkOut > qDate);
-    return rows;
+    // Newest booking first.
+    return [...rows].sort((a, b) => b._creationTime - a._creationTime);
   }, [list, tab, search, status, channel, TODAY, qUnassigned, qRoomType, qDate]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pages - 1);
-  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
 
   const selectedRes = list.find((r) => r._id === selected) ?? null;
 
@@ -166,12 +179,13 @@ function ReservationListInner() {
               `reservations-${TODAY}.csv`,
               filtered.map((r) => ({
                 guest: r.guestName,
-                confirmation: `RSV-${r._id.slice(-6).toUpperCase()}`,
+                rsvNumber: `RSV-${r._id.slice(-6).toUpperCase()}`,
+                bookingDate: new Date(r._creationTime).toISOString().slice(0, 10),
                 arrival: r.checkIn,
                 departure: r.checkOut,
-                roomType: r.roomType,
-                room: r.roomNumber,
                 source: r.channel ?? "Direct",
+                roomType: r.roomType,
+                roomNumber: r.roomNumber,
                 status: RES_STATUS_LABEL[r.status] ?? r.status,
                 value: r.totalAmount,
               }))
@@ -245,79 +259,109 @@ function ReservationListInner() {
       <Card className="overflow-hidden p-0">
         <div className="upx-scroll overflow-x-auto">
           <div
-            className={`${GRID} border-b border-line py-2.5 text-[10px] uppercase tracking-[0.04em] text-fg-3`}
+            className={`${GRID} whitespace-nowrap border-b border-line bg-deep/40 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-fg-3`}
           >
             <div>Guest</div>
-            <div>RSV number</div>
+            <div>RSV #</div>
+            <div>Booked</div>
             <div>Arrival</div>
             <div>Departure</div>
-            <div>Room type</div>
             <div>Source</div>
+            <div>Room type</div>
             <div>Room</div>
             <div>Status</div>
-            <div>Value</div>
+            <div className="text-right">Value</div>
             <div />
           </div>
 
           {!reservations && (
-            <div className="px-3.5 py-4 text-13 text-fg-3">Loading reservations…</div>
+            <div className="px-4 py-4 text-13 text-fg-3">Loading reservations…</div>
           )}
           {reservations && pageRows.length === 0 && (
-            <div className="px-3.5 py-4 text-13 text-fg-3">No reservations match.</div>
+            <div className="px-4 py-4 text-13 text-fg-3">No reservations match.</div>
           )}
 
-          {pageRows.map((r) => (
-            <button
-              key={r._id}
-              onClick={() => setSelected(r._id)}
-              className={`${GRID} items-center border-b border-line-soft py-3 text-left text-12 transition-colors last:border-0 hover:bg-elevated`}
-            >
-              <div className="truncate font-semibold">{r.guestName}</div>
-              <div className="truncate font-mono text-[11px] text-fg-3">
-                RSV-{r._id.slice(-6).toUpperCase()}
-              </div>
-              <div className="font-mono text-[11px]">{r.checkIn}</div>
-              <div className="font-mono text-[11px]">{r.checkOut}</div>
-              <div className="truncate text-[11px] text-fg-2">{r.roomType}</div>
-              <div className="truncate text-[11px] text-fg-3">{r.channel ?? "Direct"}</div>
-              <div className="font-mono">{r.roomNumber}</div>
-              <div
-                className="text-[10.5px] font-semibold"
-                style={{ color: RES_STATUS_COLOR[r.status] }}
+          {pageRows.map((r) => {
+            const action =
+              r.status === "tentative"
+                ? "Confirm"
+                : r.status === "confirmed"
+                  ? r.checkIn <= TODAY
+                    ? "Check in"
+                    : "View"
+                  : r.status === "inhouse"
+                    ? "Check out"
+                    : r.status === "cancelled"
+                      ? "Reinstate"
+                      : "View";
+            return (
+              <button
+                key={r._id}
+                onClick={() => setSelected(r._id)}
+                className={`${GRID} border-b border-line-soft py-2.5 text-left text-12 transition-colors last:border-0 hover:bg-elevated`}
               >
-                {RES_STATUS_LABEL[r.status] ?? r.status}
-              </div>
-              <div className="font-mono text-[11.5px] font-semibold">{r.totalAmount}</div>
-              <div>
-                <span className="rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
-                  {r.status === "tentative"
-                    ? "Confirm"
-                    : r.status === "confirmed"
-                      ? r.checkIn <= TODAY
-                        ? "Check in"
-                        : "View"
-                      : r.status === "inhouse"
-                        ? "Check out"
-                        : r.status === "cancelled"
-                          ? "Reinstate"
-                          : "View"}
-                </span>
-              </div>
-            </button>
-          ))}
+                <div className="truncate font-semibold">{r.guestName}</div>
+                <div className="truncate font-mono text-[11px] text-fg-3">
+                  RSV-{r._id.slice(-6).toUpperCase()}
+                </div>
+                <div className="whitespace-nowrap font-mono text-[11px] text-fg-3">
+                  {bookedDate(r._creationTime)}
+                </div>
+                <div className="whitespace-nowrap font-mono text-[11px]">
+                  {shortDate(r.checkIn)}
+                </div>
+                <div className="whitespace-nowrap font-mono text-[11px]">
+                  {shortDate(r.checkOut)}
+                </div>
+                <div className="truncate text-[11px] text-fg-3">
+                  {r.channel ?? "Direct"}
+                </div>
+                <div className="truncate text-[11px] text-fg-2">{r.roomType}</div>
+                <div className="font-mono">{r.roomNumber}</div>
+                <div
+                  className="whitespace-nowrap text-[10.5px] font-semibold"
+                  style={{ color: RES_STATUS_COLOR[r.status] }}
+                >
+                  {RES_STATUS_LABEL[r.status] ?? r.status}
+                </div>
+                <div className="text-right font-mono text-[11.5px] font-semibold">
+                  {r.totalAmount}
+                </div>
+                <div className="text-right">
+                  <span className="whitespace-nowrap rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
+                    {action}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-12 text-fg-3">
           {filtered.length === 0
             ? "No results"
-            : `${safePage * PAGE_SIZE + 1}–${Math.min(
-                (safePage + 1) * PAGE_SIZE,
+            : `${safePage * pageSize + 1}–${Math.min(
+                (safePage + 1) * pageSize,
                 filtered.length
               )} of ${filtered.length}`}
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(0);
+            }}
+            className="rounded-sm border border-line bg-elevated px-2 py-1.5 text-12 text-fg-2"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={safePage === 0}
@@ -325,6 +369,9 @@ function ReservationListInner() {
           >
             Prev
           </button>
+          <span className="text-12 text-fg-3">
+            {safePage + 1} / {pages}
+          </span>
           <button
             onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
             disabled={safePage >= pages - 1}

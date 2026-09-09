@@ -482,18 +482,20 @@ export const getDashboardBoard = query({
       pct: revTotal ? Math.round((amount / revTotal) * 100) : 0,
     }));
 
-    // ---- 14-day occupancy outlook ----
+    // ---- occupancy outlook: today + the next 14 days ----
     //   Forward-looking, so it counts every booking on the books for the
     //   night (same basis as the reports pace tab) — a confirmed stay
     //   without a room assigned yet still fills a room.
-    const outlook = Array.from({ length: 14 }, (_, i) => {
-      const d = addDaysIso(today, i + 1); // tomorrow through +14
+    const outlook = Array.from({ length: 15 }, (_, i) => {
+      const d = addDaysIso(today, i);
       const onBooks = live.filter(
         (r) => r.checkIn <= d && r.checkOut > d
       ).length;
       return {
         date: d,
         dow: new Date(d + "T00:00:00Z").getUTCDay(),
+        dom: Number(d.slice(8, 10)),
+        isToday: i === 0,
         occPct: occupancyPct(onBooks, sellable),
       };
     });

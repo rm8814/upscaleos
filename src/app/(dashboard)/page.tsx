@@ -346,10 +346,12 @@ export default function DashboardPage() {
               </div>
             ))}
           </Card>
+        </div>
 
+        <div className="flex flex-col gap-3.5">
           <Card className="p-4">
             <div className="mb-3 flex items-baseline justify-between">
-              <Eyebrow>Occupancy outlook · next 14 days</Eyebrow>
+              <Eyebrow>Occupancy outlook · today + 14 days</Eyebrow>
               <div className="text-[11.5px] text-fg-3">
                 Avg{" "}
                 <span className="font-mono font-semibold text-ice">
@@ -363,13 +365,14 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
-            <div className="flex h-[130px] items-end gap-2">
+            <div className="flex h-[140px] items-end gap-1.5">
               {(board?.outlook ?? []).map((o) => (
                 <div
                   key={o.date}
-                  className="flex h-full flex-1 flex-col items-center justify-end gap-1.5"
+                  className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                  title={`${o.date} — ${o.occPct}%`}
                 >
-                  <div className="font-mono text-[10.5px] font-semibold text-fg-3">
+                  <div className="font-mono text-[10px] font-semibold text-fg-3">
                     {o.occPct}
                   </div>
                   <div className="flex h-24 w-full items-end overflow-hidden rounded-t-[4px] bg-deep">
@@ -377,8 +380,9 @@ export default function DashboardPage() {
                       className="w-full rounded-t-[4px]"
                       style={{
                         height: `${o.occPct}%`,
-                        background:
-                          o.occPct >= 85
+                        background: o.isToday
+                          ? "var(--accent-cyan)"
+                          : o.occPct >= 85
                             ? "var(--accent-violet)"
                             : o.occPct >= 70
                               ? "var(--accent-violet-hi)"
@@ -386,7 +390,20 @@ export default function DashboardPage() {
                       }}
                     />
                   </div>
-                  <div className="text-[10px] text-fg-4">{DOW_LETTER[o.dow]}</div>
+                  <div
+                    className={`text-[9.5px] leading-tight ${
+                      o.isToday ? "font-semibold text-accent-cyan" : "text-fg-4"
+                    }`}
+                  >
+                    {DOW_LETTER[o.dow]}
+                  </div>
+                  <div
+                    className={`font-mono text-[9.5px] leading-tight ${
+                      o.isToday ? "font-semibold text-accent-cyan" : "text-fg-4"
+                    }`}
+                  >
+                    {o.dom}
+                  </div>
                 </div>
               ))}
               {!board && (
@@ -396,9 +413,7 @@ export default function DashboardPage() {
               )}
             </div>
           </Card>
-        </div>
 
-        <div className="flex flex-col gap-3.5">
           <Card className="p-4">
             <Eyebrow className="mb-2.5">Tasks</Eyebrow>
             {!board && <div className="py-2 text-12 text-fg-3">Loading…</div>}

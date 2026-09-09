@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { useProperty } from "@/components/providers/PropertyProvider";
@@ -94,7 +94,6 @@ export default function RatesPage() {
   const { activeProperty } = useProperty();
   const toast = useToast();
   const [view, setView] = useState<"grid" | "seasons" | "rules">("grid");
-  const [dynamicDays, setDynamicDays] = useState<Set<number>>(new Set([5, 6, 12, 13]));
 
   const reservations = useQuery(
     api.reservations.getByProperty,
@@ -111,13 +110,36 @@ export default function RatesPage() {
       }),
     [todayIso]
   );
+  const windowTo = useMemo(
+    () => iso(days[days.length - 1] ?? new Date(todayIso + "T00:00:00Z")),
+    [days, todayIso]
+  );
 
-  const toggleDynamic = (i: number) =>
-    setDynamicDays((s) => {
-      const n = new Set(s);
-      n.has(i) ? n.delete(i) : n.add(i);
-      return n;
-    });
+  // Dynamic-pricing toggles, persisted per stay date.
+  const adjustments = useQuery(
+    api.rates.getAdjustments,
+    activeProperty
+      ? { propertyId: activeProperty._id, from: todayIso, to: windowTo }
+      : "skip"
+  );
+  const setDynamic = useMutation(api.rates.setDynamic);
+  const dynamicDates = useMemo(
+    () => new Set((adjustments ?? []).map((a) => a.date)),
+    [adjustments]
+  );
+
+  const toggleDynamic = async (dayIso: string) => {
+    if (!activeProperty) return;
+    try {
+      await setDynamic({
+        propertyId: activeProperty._id,
+        date: dayIso,
+        on: !dynamicDates.has(dayIso),
+      });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not update pricing", "error");
+    }
+  };
 
   const GRID = { gridTemplateColumns: `160px repeat(${DAYS}, minmax(84px,1fr))` };
 
@@ -188,22 +210,25 @@ export default function RatesPage() {
               <div className="sticky left-0 z-10 bg-deep px-3 py-2 text-[10px] text-fg-3">
                 Dynamic pricing
               </div>
-              {days.map((_, i) => (
-                <div key={i} className="flex items-center justify-center border-l border-line-soft py-2">
-                  <button
-                    onClick={() => toggleDynamic(i)}
-                    className="relative h-[18px] w-[34px] rounded-pill transition-colors"
-                    style={{
-                      background: dynamicDays.has(i) ? "var(--accent-violet)" : "var(--line)",
-                    }}
-                  >
-                    <span
-                      className="absolute top-0.5 h-3.5 w-3.5 rounded-pill bg-white transition-all"
-                      style={{ left: dynamicDays.has(i) ? 17 : 2 }}
-                    />
-                  </button>
-                </div>
-              ))}
+              {days.map((d, i) => {
+                const on = dynamicDates.has(iso(d));
+                return (
+                  <div key={i} className="flex items-center justify-center border-l border-line-soft py-2">
+                    <button
+                      onClick={() => toggleDynamic(iso(d))}
+                      className="relative h-[18px] w-[34px] rounded-pill transition-colors"
+                      style={{
+                        background: on ? "var(--accent-violet)" : "var(--line)",
+                      }}
+                    >
+                      <span
+                        className="absolute top-0.5 h-3.5 w-3.5 rounded-pill bg-white transition-all"
+                        style={{ left: on ? 17 : 2 }}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             {ROOM_TYPES.map((rt, rtIdx) => {
@@ -219,7 +244,7 @@ export default function RatesPage() {
                     <div className="text-[10.5px] text-fg-3">Base {money(rt.base)}</div>
                   </div>
                   {days.map((d, i) => {
-                    const dyn = dynamicDays.has(i);
+                    const dyn = dynamicDates.has(iso(d));
                     const dow = d.getUTCDay();
                     const rate = rackRate(rt.base, d) * (dyn ? 1.06 : 1);
                     const demand =

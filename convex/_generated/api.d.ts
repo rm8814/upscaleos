@@ -24,6 +24,7 @@ import type * as invoices from "../invoices.js";
 import type * as maintenance from "../maintenance.js";
 import type * as operate from "../operate.js";
 import type * as properties from "../properties.js";
+import type * as rates from "../rates.js";
 import type * as reservations from "../reservations.js";
 import type * as revenue from "../revenue.js";
 import type * as seed from "../seed.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   operate: typeof operate;
   properties: typeof properties;
+  rates: typeof rates;
   reservations: typeof reservations;
   revenue: typeof revenue;
   seed: typeof seed;

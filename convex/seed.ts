@@ -43,6 +43,7 @@ export const seed = internalMutation({
       "invoice_counters",
       "ar_transactions",
       "ar_accounts",
+      "rate_adjustments",
       "waitlist",
       "reservations",
       "rooms",

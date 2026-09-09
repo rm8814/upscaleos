@@ -311,4 +311,11 @@ export default defineSchema({
   })
     .index("by_property_asof", ["propertyId", "asOf"])
     .index("by_property_target", ["propertyId", "forDate", "asOf"]),
+
+  // ---- per-date rate adjustments (dynamic-pricing toggles on the grid) ---
+  rate_adjustments: defineTable({
+    propertyId: v.id("properties"),
+    date: v.string(), // stay date the adjustment applies to
+    pct: v.number(), // e.g. 0.06 = +6% on the rack rate
+  }).index("by_property_date", ["propertyId", "date"]),
 });

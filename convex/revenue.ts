@@ -4,6 +4,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { authorize } from "./authz";
 import { roomNightTaxes } from "./taxEngine";
+import { rateMultiplierFor } from "./rates";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -142,7 +143,13 @@ export const getStayQuote = query({
   handler: async (ctx, args) => {
     const nights: { date: string; rate: number }[] = [];
     for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
-      nights.push({ date: d, rate: nightlyRateFor(args.roomType, d) });
+      let rate = nightlyRateFor(args.roomType, d);
+      if (args.propertyId) {
+        rate = Math.round(
+          rate * (await rateMultiplierFor(ctx, args.propertyId, d))
+        );
+      }
+      nights.push({ date: d, rate });
     }
     const subtotal = nights.reduce((s, n) => s + n.rate, 0);
 

@@ -141,6 +141,7 @@ export default defineSchema({
     reservationId: v.id("reservations"),
     guestId: v.id("guests"),
     status: v.string(), // 'open' | 'closed'
+    ledger: v.optional(v.string()), // 'guest' | 'deposit' | 'city' (absent = guest)
     openedOn: v.string(), // business date it was opened
     closedOn: v.optional(v.string()),
   })
@@ -239,6 +240,28 @@ export default defineSchema({
   })
     .index("by_property", ["propertyId", "date"])
     .index("by_date", ["date"]),
+
+  // ---- city ledger / accounts receivable --------------------------------
+  ar_accounts: defineTable({
+    propertyId: v.id("properties"),
+    name: v.string(),
+    type: v.string(), // 'Corporate' | 'Travel agent' | 'OTA settlement'
+    creditLimit: v.number(), // 0 = no limit
+    matchChannel: v.optional(v.string()), // OTA channel this account settles
+  }).index("by_property", ["propertyId"]),
+
+  ar_transactions: defineTable({
+    accountId: v.id("ar_accounts"),
+    propertyId: v.id("properties"),
+    date: v.string(),
+    kind: v.string(), // 'invoice' | 'payment' | 'adjustment'
+    description: v.string(),
+    ref: v.string(),
+    amount: v.number(), // + charge onto A/R, - payment received
+    folioId: v.optional(v.id("folios")),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_property", ["propertyId"]),
 
   // ---- pace / booking curve: rooms & revenue on the books as of a date ----
   pickup_snapshots: defineTable({

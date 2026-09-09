@@ -58,10 +58,10 @@ UPSCALE is positioned as an **AI-powered hospitality management platform** for I
 **Casing**
 - **Sentence case** for everything — buttons, headers, menu items, table columns. ("Open positions", not "Open Positions".)
 - **ALL-CAPS with wide tracking (`var(--ls-eyebrow)`)** for eyebrow kickers and section labels only — never for headlines or buttons.
-- Numbers in IDR use **Indonesian thousand separators**: `Rp 12.450.000` (dot, not comma).
+- Numbers in IDR use **Indonesian thousand separators**: `Rp 12,450,000` (comma, not dot).
 
 **Currency & numeric formatting**
-- IDR: `Rp 12.450.000`  (no decimals for whole rupiah)
+- IDR: `Rp 12,450,000`  (no decimals for whole rupiah)
 - USD: `$1,250.00`
 - % change: `+3.24%` / `−1.08%` (true minus glyph `−`, not hyphen)
 - Trailing time qualifier in `--fg-3`: `+3.24% · 1D`

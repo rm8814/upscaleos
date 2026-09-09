@@ -38,6 +38,8 @@ export const seed = internalMutation({
       "group_blocks",
       "daily_stats",
       "pickup_snapshots",
+      "ar_transactions",
+      "ar_accounts",
       "waitlist",
       "reservations",
       "rooms",
@@ -588,6 +590,75 @@ export const seed = internalMutation({
       { agreementId: corpIds[2], year: "2026", roomsBooked: 110, roomsContracted: 300 },
     ];
     for (const p of productions) await ctx.db.insert("corporate_production", p);
+
+    // ---- city ledger / accounts receivable ----------------------
+    const arAccounts = [
+      {
+        name: "Accor Global",
+        type: "Corporate",
+        creditLimit: 150_000_000,
+        tx: [
+          { off: -90, kind: "invoice", ref: "INV-2026-0712", desc: "Corporate rate — Jun", amount: 40_000_000 },
+          { off: -58, kind: "invoice", ref: "INV-2026-0798", desc: "Corporate rate — Jul", amount: 22_200_000 },
+          { off: -38, kind: "invoice", ref: "INV-2026-0841", desc: "Group block — Aug", amount: 62_000_000 },
+          { off: -27, kind: "payment", ref: "PMT-3391", desc: "Payment received — bank transfer", amount: -40_000_000 },
+        ],
+      },
+      {
+        name: "TechCorp Inc",
+        type: "Travel agent",
+        creditLimit: 40_000_000,
+        tx: [
+          { off: -126, kind: "invoice", ref: "INV-2026-0655", desc: "TA allotment — May", amount: 23_000_000 },
+          { off: -82, kind: "invoice", ref: "INV-2026-0740", desc: "TA allotment — Jul", amount: 12_500_000 },
+          { off: -72, kind: "payment", ref: "PMT-3120", desc: "Payment received — cheque", amount: -18_000_000 },
+          { off: -48, kind: "invoice", ref: "INV-2026-0820", desc: "TA allotment — Aug", amount: 6_400_000 },
+        ],
+      },
+      {
+        name: "Booking.com settlement",
+        type: "OTA settlement",
+        creditLimit: 0,
+        matchChannel: "Booking.com",
+        tx: [
+          { off: -7, kind: "invoice", ref: "OTA-BK-09", desc: "Commission settlement (net)", amount: 18_600_000 },
+          { off: -3, kind: "payment", ref: "PAYOUT-771", desc: "Payout received", amount: -18_600_000 },
+        ],
+      },
+      {
+        name: "Agoda settlement",
+        type: "OTA settlement",
+        creditLimit: 0,
+        matchChannel: "Agoda",
+        tx: [
+          { off: -6, kind: "invoice", ref: "OTA-AG-09", desc: "Commission settlement (net)", amount: 9_400_000 },
+        ],
+      },
+      {
+        name: "Traveloka settlement",
+        type: "OTA settlement",
+        creditLimit: 0,
+        matchChannel: "Traveloka",
+        tx: [
+          { off: -5, kind: "invoice", ref: "OTA-TV-09", desc: "Commission settlement (net)", amount: 6_200_000 },
+        ],
+      },
+    ];
+    for (const a of arAccounts) {
+      const { tx, ...acc } = a;
+      const accId = await ctx.db.insert("ar_accounts", { ...acc, propertyId });
+      for (const t of tx) {
+        await ctx.db.insert("ar_transactions", {
+          accountId: accId,
+          propertyId,
+          date: iso(addDays(TODAY, t.off)),
+          kind: t.kind,
+          description: t.desc,
+          ref: t.ref,
+          amount: t.amount,
+        });
+      }
+    }
 
     return { success: true, rooms: roomRows.length, reservations: guestIds.length };
   },

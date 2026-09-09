@@ -4,6 +4,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
+import { transferClosedFoliosToCityLedger } from "./ar";
 import { nightlyRateFor } from "./revenue";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 
@@ -335,6 +336,10 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
       await closeFolio(ctx, r._id, newDate);
     }
   }
+
+  // A/R transfer: move just-closed folios that settle to a channel account
+  // off the guest ledger and onto the city ledger.
+  await transferClosedFoliosToCityLedger(ctx, id, newDate);
 
   await writeNightStats(ctx, id, oldDate, newDate);
 

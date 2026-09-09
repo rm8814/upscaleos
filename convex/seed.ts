@@ -298,13 +298,16 @@ export const seed = internalMutation({
       const startOffset = (i % 7) - 3; // -3 .. +3 days from today
       const nights = 1 + (i % 4);
       const checkIn = addDays(TODAY, startOffset);
-      const checkOut = addDays(checkIn, nights);
       const status =
         startOffset < -1
           ? "departed"
           : startOffset <= 0
             ? "inhouse"
             : resStatuses[i % resStatuses.length];
+      // A departed reservation must have already checked out — clamp to today.
+      const rawCheckOut = addDays(checkIn, nights);
+      const checkOut =
+        status === "departed" && rawCheckOut > TODAY ? TODAY : rawCheckOut;
       const rate = nightlyByType[room.type] ?? "Rp 1,850,000";
       const rupiah = Number(rate.replace(/[^\d]/g, ""));
       // A couple of upcoming bookings arrived without a room assigned.

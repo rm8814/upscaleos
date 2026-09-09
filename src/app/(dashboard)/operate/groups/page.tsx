@@ -56,6 +56,7 @@ export default function GroupsBlocksPage() {
   const addGuest = useMutation(api.groups.addRoomingGuest);
   const assignRoom = useMutation(api.reservations.assignOne);
   const recordDeposit = useMutation(api.groups.recordDeposit);
+  const setBillingMode = useMutation(api.groups.setBillingMode);
   const releaseRooms = useMutation(api.groups.releaseRooms);
   const extendCutoff = useMutation(api.groups.extendCutoff);
   const [depositDraft, setDepositDraft] = useState("");
@@ -503,13 +504,32 @@ export default function GroupsBlocksPage() {
 
                 <Card className="flex flex-col gap-2 p-3.5">
                   <Eyebrow>Billing &amp; concessions</Eyebrow>
-                  <div className="flex justify-between text-[12.5px]">
+                  <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-fg-3">Billing method</span>
-                    <span>
-                      {g.billing}{" "}
-                      <span className="text-fg-4">({g.billingMode})</span>
-                    </span>
+                    <select
+                      value={g.billingMode}
+                      onChange={async (e) => {
+                        try {
+                          await setBillingMode({
+                            groupId: g.id,
+                            mode: e.target.value,
+                          });
+                          toast(`Billing set to ${e.target.value}`, "success");
+                        } catch (err) {
+                          toast(
+                            err instanceof Error ? err.message : "Failed",
+                            "error"
+                          );
+                        }
+                      }}
+                      className="rounded-sm border border-line bg-ink px-2 py-1 text-12 text-ice outline-none focus:border-accent-violet"
+                    >
+                      <option value="individual">Individual folios</option>
+                      <option value="master">One folio — all rooms</option>
+                      <option value="split">Split — room to guests</option>
+                    </select>
                   </div>
+                  <div className="text-[11px] text-fg-4">{g.billing}</div>
                   {g.master.hasAccount && (
                     <div className="rounded-md border border-line bg-deep p-2.5 text-[12px]">
                       <div className="mb-1 text-[10.5px] uppercase tracking-wide text-fg-3">

@@ -1452,7 +1452,12 @@ export default function CalendarTapeChart() {
                 propertyId: activeProperty._id,
                 ...payload,
               });
-              toast(`Booked ${payload.rooms.length} rooms`, "success");
+              toast(
+                `Booked ${payload.rooms.length} rooms${
+                  payload.billingMode === "master" ? " · one folio" : ""
+                }`,
+                "success"
+              );
             } catch (e) {
               toast(
                 e instanceof Error ? e.message : "Could not book",
@@ -1488,6 +1493,7 @@ interface MultiPayload {
   checkOut: string;
   channel: string;
   status: string;
+  billingMode: string;
   rooms: { roomType: string; roomId?: Id<"rooms"> }[];
 }
 
@@ -1528,6 +1534,7 @@ function NewReservationModal({
   useEffect(() => setMounted(true), []);
   const multiRooms = init.multiRooms ?? [];
   const isMulti = multiRooms.length > 1;
+  const [oneFolio, setOneFolio] = useState(false);
 
   const [f, setF] = useState({
     guestName: init.guestName ?? "",
@@ -1601,13 +1608,27 @@ function NewReservationModal({
             <X className="h-[18px] w-[18px]" />
           </button>
         </div>
-        <div className="mb-4 text-[12.5px] text-fg-3">
-          {init.multi
-            ? `Booking ${init.multi} selected rooms together`
+        <div className="mb-3 text-[12.5px] text-fg-3">
+          {isMulti
+            ? `Booking ${multiRooms.length} rooms together — ${multiRooms
+                .map((m) => m.roomType)
+                .filter((t, i, a) => a.indexOf(t) === i)
+                .join(", ")}`
             : init.roomId
               ? `Prefilled from the ${f.roomType} track`
               : "Blank reservation"}
         </div>
+        {isMulti && (
+          <label className="mb-4 flex items-center gap-2 text-[12.5px] text-fg-2">
+            <input
+              type="checkbox"
+              checked={oneFolio}
+              onChange={(e) => setOneFolio(e.target.checked)}
+              className="accent-accent-violet"
+            />
+            Charge all rooms to one folio (booker pays)
+          </label>
+        )}
 
         <Eyebrow className="mb-2">Guest</Eyebrow>
         <div className="mb-4 grid grid-cols-2 gap-2.5">
@@ -1755,6 +1776,7 @@ function NewReservationModal({
                     checkOut: f.checkOut,
                     channel: f.channel,
                     status,
+                    billingMode: oneFolio ? "master" : "individual",
                     rooms: multiRooms.map((m) => ({
                       roomType: m.roomType,
                       roomId: m.roomId as Id<"rooms">,

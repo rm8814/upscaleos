@@ -314,6 +314,7 @@ export const list = query({
         id: g._id,
         name: g.name,
         kind: g.kind ?? "block",
+        billingMode: g.billingMode ?? "individual",
         externalRef: g.externalRef ?? null,
         status: g.status,
         released: g.released === true,
@@ -840,10 +841,11 @@ export async function appendPartyRooms(
 /** Create a multi-room booking as a kind:"transient" group. Auth-free core. */
 export async function createTransientCore(
   ctx: MutationCtx,
-  args: CoreArgs & { actorEmail?: string }
+  args: CoreArgs & { actorEmail?: string; billingMode?: string }
 ): Promise<Id<"group_blocks">> {
   if (args.rooms.length === 0) throw new Error("At least one room required");
   const status = args.status === "tentative" ? "tentative" : "confirmed";
+  const billingMode = args.billingMode === "master" ? "master" : "individual";
   const guestId = await sharedGuest(ctx, args.guestName, args.email, args.phone);
   const label =
     args.rooms.length > 1
@@ -860,14 +862,16 @@ export async function createTransientCore(
     cutoffDate: args.checkIn,
     contractLabel: "n/a",
     salesManager: args.actorEmail ?? "front desk",
-    billing: "Individual folios",
-    billingMode: "individual",
+    billing:
+      billingMode === "master" ? "One folio — all rooms" : "Individual folios",
+    billingMode,
     depositStatus: "Not received",
     depositAmount: "Rp 0",
     concessions: "",
     contact: args.email ?? args.phone ?? "",
   });
   const block = (await ctx.db.get(groupId))!;
+  if (billingMode === "master") await ensureGroupArAccount(ctx, block);
   await appendPartyRooms(ctx, block, guestId, args.rooms, {
     channel: args.channel,
     status,
@@ -892,6 +896,7 @@ export const createTransient = mutation({
     channel: v.string(),
     status: v.string(),
     externalRef: v.optional(v.string()),
+    billingMode: v.optional(v.string()), // 'individual' (default) | 'master'
     rooms: v.array(
       v.object({
         roomType: v.string(),
@@ -940,6 +945,45 @@ async function ensureGroupArAccount(
     groupId: block._id,
   });
 }
+
+/** Switch a group / party between billing modes. 'master' opens the group A/R
+ *  account so member folios settle there at checkout. */
+export const setBillingMode = mutation({
+  args: {
+    groupId: v.id("group_blocks"),
+    mode: v.string(), // 'individual' | 'master' | 'split'
+  },
+  handler: async (ctx, args) => {
+    const block = await ctx.db.get(args.groupId);
+    if (!block) throw new Error("Group not found");
+    const scope = await authorize(ctx, {
+      propertyId: block.propertyId,
+      requireProperty: "front_office",
+    });
+    const mode =
+      args.mode === "master"
+        ? "master"
+        : args.mode === "split"
+          ? "split"
+          : "individual";
+    await ctx.db.patch(args.groupId, {
+      billingMode: mode,
+      billing:
+        mode === "master"
+          ? "One folio — all rooms"
+          : mode === "split"
+            ? "Split — room to guests, extras to master"
+            : "Individual folios",
+    });
+    if (mode !== "individual") await ensureGroupArAccount(ctx, block);
+    await writeAudit(ctx, scope, "group.billing", {
+      propertyId: block.propertyId,
+      target: block.name,
+      detail: mode,
+    });
+    return { mode };
+  },
+});
 
 /** Record a group deposit against the master A/R account. */
 export const recordDeposit = mutation({

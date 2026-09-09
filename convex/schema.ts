@@ -23,6 +23,7 @@ export default defineSchema({
     autoAssignRooms: v.optional(v.boolean()), // pick a free room on reservation create
     autoNightAudit: v.optional(v.boolean()), // roll the business date on a schedule
     nightAuditTime: v.optional(v.string()), // 'HH:MM' in the property's timezone
+    auditSkipDate: v.optional(v.string()), // skip the scheduled auto-run for this wall date (one-off)
     policies: v.optional(
       v.object({
         cancellation: v.string(),

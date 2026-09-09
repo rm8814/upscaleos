@@ -31,10 +31,6 @@ const nextDay = (isoDate: string) => {
   return d.toISOString().slice(0, 10);
 };
 
-const WARNINGS = [
-  "2 folios have a negative balance — review before rolling the date.",
-  "1 reservation marked in-house has no room assigned.",
-];
 const EXCEPTIONS = [
   { text: "Room 312 — rate override below floor (Rp 980,000 vs. floor Rp 1,400,000)", resolved: false },
   { text: "Guest folio RSV-8DZAAJ — deposit not applied", resolved: false },
@@ -60,6 +56,11 @@ export default function NightAuditPage() {
   const member = useCurrentMember();
   const { accountRole } = useAccount();
   const rollBusinessDate = useMutation(api.properties.rollBusinessDate);
+  const skipAudit = useMutation(api.properties.skipScheduledAudit);
+  const readiness = useQuery(
+    api.properties.nightAuditReadiness,
+    activeProperty ? { id: activeProperty._id } : "skip"
+  );
 
   // Account owner/admin, or a property GM / night auditor, may run the audit.
   const AUDIT_PROPERTY_ROLES = ["gm", "night_auditor"];
@@ -71,8 +72,8 @@ export default function NightAuditPage() {
 
   const [expanded, setExpanded] = useState<string | null>("Reconcile POS postings");
   const [resolved, setResolved] = useState<Set<number>>(new Set([2]));
-  const [ranAll, setRanAll] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     from: string;
     to: string;
@@ -84,6 +85,10 @@ export default function NightAuditPage() {
     balanced?: boolean;
     outOfBalance?: { date: string; variance: number }[];
   } | null>(null);
+  const daysBehind = readiness?.daysBehind ?? 0;
+  const blockers = readiness?.blockers ?? [];
+  const upToDate = !!readiness && daysBehind === 0;
+  const ranAll = upToDate && !!result;
 
   const businessDate = activeProperty?.businessDate ?? "2026-09-08";
   const stats = useQuery(
@@ -104,33 +109,10 @@ export default function NightAuditPage() {
   const autoAudit = !!activeProperty?.autoNightAudit;
   const auditTime = activeProperty?.nightAuditTime ?? "03:00";
 
-  // Wall-clock date in the property's timezone — what the business date should
-  // reach once the audit is up to date.
-  const wallToday = useMemo(() => {
-    const tz = activeProperty?.timezone ?? "Asia/Makassar";
-    try {
-      return new Intl.DateTimeFormat("en-CA", {
-        timeZone: tz,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
-    } catch {
-      return new Date().toISOString().slice(0, 10);
-    }
-  }, [activeProperty?.timezone]);
-
-  const daysBehind = Math.max(
-    0,
-    Math.round(
-      (Date.parse(wallToday + "T00:00:00Z") -
-        Date.parse(businessDate + "T00:00:00Z")) /
-        86400000
-    )
-  );
-  // 1 day behind is the normal "audit hasn't run yet tonight" state; 2+ means a
-  // close was missed and the date needs to catch up.
+  const wallToday = readiness?.wallDate ?? businessDate;
+  // 2+ days behind means one or more closes were missed — bulk catch-up shows.
   const behind = daysBehind >= 2;
+  const canBulk = !!readiness?.canBulk;
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -161,17 +143,25 @@ export default function NightAuditPage() {
   const stepDone = (s: (typeof STEPS)[number]) => s.alwaysDone || ranAll;
   const doneCount = STEPS.filter(stepDone).length;
 
-  const runRemaining = async () => {
-    if (!activeProperty || running || ranAll || !canRun) return;
+  const run = async (mode: "one" | "bulk") => {
+    if (!activeProperty || running || !canRun) return;
     setRunning(true);
-    const r = await rollBusinessDate(
-      behind
-        ? { id: activeProperty._id, toDate: wallToday }
-        : { id: activeProperty._id }
-    );
-    setResult(r);
-    setRanAll(true);
+    setRunError(null);
+    try {
+      const r = await rollBusinessDate({ id: activeProperty._id, mode });
+      setResult(r);
+    } catch (e) {
+      setRunError(e instanceof Error ? e.message : "Night audit failed");
+    }
     setRunning(false);
+  };
+
+  const toggleSkip = async () => {
+    if (!activeProperty) return;
+    await skipAudit({
+      id: activeProperty._id,
+      skip: !readiness?.autoSkippedToday,
+    });
   };
 
   return (
@@ -179,10 +169,16 @@ export default function NightAuditPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="text-13 text-fg-3">Business date: {fmtDate(businessDate)}</div>
         {autoAudit ? (
-          <div className="text-12 text-fg-3">
-            Auto-run at <span className="font-mono text-fg-2">{auditTime}</span> — in{" "}
-            <span className="font-mono font-semibold text-ice">{countdown}</span>
-          </div>
+          readiness?.autoSkippedToday ? (
+            <div className="text-12 text-res-tentative">
+              Auto night audit <span className="font-semibold">skipped tonight</span> — run manually
+            </div>
+          ) : (
+            <div className="text-12 text-fg-3">
+              Auto-run at <span className="font-mono text-fg-2">{auditTime}</span> — in{" "}
+              <span className="font-mono font-semibold text-ice">{countdown}</span>
+            </div>
+          )
         ) : (
           <div className="text-12 text-fg-3">
             Automatic night audit is <span className="text-fg-2">off</span> — run it manually
@@ -209,30 +205,62 @@ export default function NightAuditPage() {
                     ? " · trial balance OK"
                     : ""
               }`
-            : `${doneCount} of ${STEPS.length} steps complete`}
+            : upToDate
+              ? "Business date is current"
+              : `${daysBehind} day${daysBehind === 1 ? "" : "s"} to close`}
         </div>
+
+        {autoAudit && !upToDate && (
+          <button
+            onClick={toggleSkip}
+            className="rounded-sm border border-line bg-fg-1/[0.06] px-3 py-2 text-[12.5px] text-fg-1 hover:border-line-strong"
+          >
+            {readiness?.autoSkippedToday ? "Un-skip tonight" : "Skip tonight's audit"}
+          </button>
+        )}
+        {behind && (
+          <button
+            onClick={() => run("bulk")}
+            disabled={!canRun || running || !canBulk}
+            title={
+              canBulk
+                ? ""
+                : `Clear before bulk run: ${blockers.map((b) => b.text).join("; ")}`
+            }
+            className="rounded-sm border border-accent-violet bg-violet-wash px-3 py-2 text-[12.5px] font-medium text-ice hover:bg-elevated disabled:opacity-40"
+          >
+            {running ? "Running…" : `Bulk run ${daysBehind} days`}
+          </button>
+        )}
         <button
-          onClick={runRemaining}
-          disabled={!activeProperty || running || ranAll || !canRun}
+          onClick={() => run("one")}
+          disabled={!activeProperty || running || upToDate || !canRun}
           className="rounded-sm bg-accent-violet px-3.5 py-2 text-[12.5px] font-medium text-ice hover:bg-accent-violet-hi disabled:opacity-40"
         >
           {running
             ? "Running…"
-            : ranAll
-              ? "Audit complete"
-              : behind
-                ? `Catch up ${daysBehind} days`
-                : "Run remaining steps"}
+            : upToDate
+              ? "Up to date"
+              : `Roll one day → ${dayLabel(readiness?.nextDate ?? nextDay(businessDate))}`}
         </button>
       </div>
 
-      {behind && !ranAll && (
+      {runError && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none text-room-ooo" />
+          {runError}
+        </div>
+      )}
+
+      {behind && !upToDate && (
         <div className="mb-3.5 flex items-start gap-2.5 rounded-md border border-room-ooo bg-ai-tint p-3 text-[12.5px] text-ice">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none text-room-ooo" />
           <div>
-            Night audit is <strong>{daysBehind} days behind</strong> — last close was{" "}
-            {fmtDate(businessDate)}. Running it now posts {daysBehind} days of departures and
-            advances the business date to {fmtDate(wallToday)}. Until then, the calendar and all
+            Night audit is <strong>{daysBehind} days behind</strong> — last close
+            was {fmtDate(businessDate)}. The default <strong>Roll one day</strong>{" "}
+            advances one date per click; use <strong>Bulk run</strong> to close
+            all {daysBehind} days at once (only when nothing is pending). Until
+            the date reaches {fmtDate(wallToday)}, the calendar and all
             arrival/departure counts still show {fmtDate(businessDate)}.
           </div>
         </div>
@@ -260,13 +288,33 @@ export default function NightAuditPage() {
           </div>
         ))}
 
-      <div className="mb-3.5 flex flex-col gap-2 rounded-lg border border-res-tentative bg-elevated p-3.5">
-        <Eyebrow>Pre-audit warnings</Eyebrow>
-        {WARNINGS.map((w) => (
-          <div key={w} className="flex items-center gap-2.5 text-13">
-            <AlertTriangle className="h-3.5 w-3.5 flex-none text-res-tentative" /> {w}
+      <div
+        className={`mb-3.5 flex flex-col gap-2 rounded-lg border bg-elevated p-3.5 ${
+          blockers.length ? "border-res-tentative" : "border-line"
+        }`}
+      >
+        <Eyebrow>
+          Pre-audit checks
+          {blockers.length === 0 && (
+            <span className="ml-2 text-[11px] font-normal text-accent-cyan">
+              all clear — bulk run available
+            </span>
+          )}
+        </Eyebrow>
+        {blockers.length === 0 ? (
+          <div className="flex items-center gap-2.5 text-13 text-fg-3">
+            <Check className="h-3.5 w-3.5 flex-none text-accent-cyan" />
+            Nothing pending — rooms assigned, housekeeping caught up, prior
+            closes balanced.
           </div>
-        ))}
+        ) : (
+          blockers.map((b) => (
+            <div key={b.code} className="flex items-center gap-2.5 text-13">
+              <AlertTriangle className="h-3.5 w-3.5 flex-none text-res-tentative" />{" "}
+              {b.text}
+            </div>
+          ))
+        )}
       </div>
 
       <Card className="mb-3.5 overflow-hidden p-0">

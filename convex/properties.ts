@@ -1,6 +1,6 @@
 import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
@@ -436,15 +436,150 @@ async function rollUpTo(
   };
 }
 
+const nextDayIso = (iso: string) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
 /**
- * Night-audit "Run remaining steps" calls this. On schedule it advances one
- * day; if the last close was several days ago it catches up to `toDate`,
- * posting each intervening day. Afterwards it runs the room auto-assign sweep
- * (when the property has that setting on) so newly-current arrivals that came
- * in without a room get one.
+ * What's blocking a bulk (multi-day) catch-up: things a human should clear
+ * before letting several closes run unattended. A single-day roll is always
+ * allowed — those items just carry forward.
+ */
+async function auditBlockers(
+  ctx: MutationCtx | QueryCtx,
+  id: Id<"properties">,
+  bizDate: string
+): Promise<{ code: string; text: string }[]> {
+  const [reservations, rooms, statsRows] = await Promise.all([
+    ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", id))
+      .collect(),
+    ctx.db
+      .query("rooms")
+      .withIndex("by_property", (q) => q.eq("propertyId", id))
+      .collect(),
+    ctx.db
+      .query("daily_stats")
+      .withIndex("by_property", (q) => q.eq("propertyId", id))
+      .collect(),
+  ]);
+  const out: { code: string; text: string }[] = [];
+
+  const inhouseNoRoom = reservations.filter(
+    (r) => r.status === "inhouse" && !r.roomId
+  ).length;
+  if (inhouseNoRoom)
+    out.push({
+      code: "inhouse_no_room",
+      text: `${inhouseNoRoom} in-house reservation${inhouseNoRoom > 1 ? "s have" : " has"} no room assigned`,
+    });
+
+  const staleArrivals = reservations.filter(
+    (r) =>
+      (r.status === "confirmed" || r.status === "tentative") &&
+      r.checkIn <= bizDate &&
+      !r.roomId
+  ).length;
+  if (staleArrivals)
+    out.push({
+      code: "unassigned_arrivals",
+      text: `${staleArrivals} arrival${staleArrivals > 1 ? "s" : ""} due today or earlier without a room`,
+    });
+
+  const dirty = rooms.filter((r) => r.status === "Vacant Dirty").length;
+  if (dirty > rooms.length * 0.4)
+    out.push({
+      code: "housekeeping",
+      text: `${dirty} rooms still vacant-dirty — housekeeping not caught up`,
+    });
+
+  const unbalanced = statsRows.filter((s) => !s.balanced).length;
+  if (unbalanced)
+    out.push({
+      code: "trial_balance",
+      text: `${unbalanced} prior close${unbalanced > 1 ? "s are" : " is"} out of trial balance`,
+    });
+
+  return out;
+}
+
+/** Readiness snapshot for the night-audit screen. */
+export const nightAuditReadiness = query({
+  args: { id: v.id("properties") },
+  handler: async (ctx, args) => {
+    const p = await ctx.db.get(args.id);
+    const bizDate = p?.businessDate ?? "2026-09-08";
+    // Wall date in the property's timezone.
+    let wallDate = new Date().toISOString().slice(0, 10);
+    try {
+      wallDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: p?.timezone ?? "Asia/Makassar",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      /* keep UTC fallback */
+    }
+    const daysBehind = Math.max(0, daysBetween(bizDate, wallDate));
+    const blockers = await auditBlockers(ctx, args.id, bizDate);
+    return {
+      businessDate: bizDate,
+      wallDate,
+      nextDate: nextDayIso(bizDate),
+      daysBehind,
+      pendingDays: Math.max(daysBehind, daysBehind >= 1 ? 1 : 0),
+      blockers,
+      canBulk: daysBehind >= 2 && blockers.length === 0,
+      autoSkippedToday: (p?.auditSkipDate ?? "") === wallDate,
+    };
+  },
+});
+
+/** Skip tonight's scheduled auto night audit (one-off). Manual runs still work. */
+export const skipScheduledAudit = mutation({
+  args: { id: v.id("properties"), skip: v.boolean() },
+  handler: async (ctx, args) => {
+    const scope = await authorize(ctx, {
+      propertyId: args.id,
+      requireProperty: "night_auditor",
+    });
+    const p = await ctx.db.get(args.id);
+    let wallDate = new Date().toISOString().slice(0, 10);
+    try {
+      wallDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: p?.timezone ?? "Asia/Makassar",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      /* fallback */
+    }
+    await ctx.db.patch(args.id, {
+      auditSkipDate: args.skip ? wallDate : undefined,
+    });
+    await writeAudit(ctx, scope, "audit.skip", {
+      propertyId: args.id,
+      detail: args.skip ? `skip ${wallDate}` : "un-skip",
+    });
+    return { skipped: args.skip, date: wallDate };
+  },
+});
+
+/**
+ * Advance the business date. Default (`mode: "one"`) rolls exactly one day.
+ * `mode: "bulk"` catches up to the wall-clock date, but only when nothing is
+ * blocking (see nightAuditReadiness) — otherwise it throws with the reasons.
  */
 export const rollBusinessDate = mutation({
-  args: { id: v.id("properties"), toDate: v.optional(v.string()) },
+  args: {
+    id: v.id("properties"),
+    mode: v.optional(v.union(v.literal("one"), v.literal("bulk"))),
+  },
   handler: async (ctx, args) => {
     await authorize(ctx, {
       propertyId: args.id,
@@ -452,10 +587,28 @@ export const rollBusinessDate = mutation({
     });
     const property = await ctx.db.get(args.id);
     const biz = property?.businessDate ?? "2026-09-08";
+    let wallDate = new Date().toISOString().slice(0, 10);
+    try {
+      wallDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: property?.timezone ?? "Asia/Makassar",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      /* fallback */
+    }
 
     const rolled =
-      args.toDate && args.toDate > biz
-        ? await rollUpTo(ctx, args.id, args.toDate, 60)
+      args.mode === "bulk" && wallDate > biz
+        ? await (async () => {
+            const blockers = await auditBlockers(ctx, args.id, biz);
+            if (blockers.length > 0)
+              throw new Error(
+                `Bulk run blocked: ${blockers.map((b) => b.text).join("; ")}`
+              );
+            return rollUpTo(ctx, args.id, wallDate, 60);
+          })()
         : await (async () => {
             const res = await rollOne(ctx, args.id);
             return {
@@ -534,6 +687,15 @@ export const runScheduledNightAudits = internalMutation({
 
       const bizDate = p.businessDate ?? "2026-09-08";
       if (wallTime < p.nightAuditTime || bizDate >= wallDate) continue;
+
+      // One-off "skip tonight" set from the night-audit screen — consume it.
+      if (p.auditSkipDate) {
+        if (p.auditSkipDate >= wallDate) {
+          await ctx.db.patch(p._id, { auditSkipDate: undefined });
+          continue;
+        }
+        await ctx.db.patch(p._id, { auditSkipDate: undefined });
+      }
 
       if (daysBetween(bizDate, wallDate) > MAX_AUTO_CATCHUP) {
         needsManualCatchup.push(p.name);

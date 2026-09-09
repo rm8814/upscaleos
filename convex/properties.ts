@@ -321,8 +321,14 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     .collect();
   const departedNow: Id<"reservations">[] = [];
   let noShows = 0;
+  let overstaysClosed = 0;
   for (const r of reservations) {
-    if (r.status === "inhouse" && r.checkOut <= newDate) {
+    // Overstay auto-close: an in-house guest whose departure day has already
+    // finished (checkOut <= the night that just ended) and who was never
+    // checked out. Guests due out *tomorrow* (checkOut === newDate) stay
+    // in-house so the front desk still sees and processes them as a
+    // "Departure today" on the new business date.
+    if (r.status === "inhouse" && r.checkOut <= oldDate) {
       await ctx.db.patch(r._id, { status: "departed" });
       if (r.roomId)
         await ctx.db.patch(r.roomId, {
@@ -331,15 +337,25 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
         });
       await closeFolio(ctx, r._id, newDate);
       departedNow.push(r._id);
+      overstaysClosed += 1;
     }
     // No-show: a booking whose whole arrival day has passed and never checked
-    // in. The room (if one was held) is released; no charge is posted — that
-    // needs a guarantee-type / cancellation policy the model doesn't have yet.
+    // in. No charge is posted — that needs a guarantee-type / cancellation
+    // policy the model doesn't have yet.
     else if (
       (r.status === "confirmed" || r.status === "tentative") &&
       r.checkIn < newDate
     ) {
       await ctx.db.patch(r._id, { status: "no_show" });
+      // Free the held room's housekeeping status if it was pre-blocked.
+      if (r.roomId) {
+        const room = await ctx.db.get(r.roomId);
+        if (room && room.status === "Occupied")
+          await ctx.db.patch(r.roomId, {
+            status: "Vacant Dirty",
+            updatedLabel: "just now",
+          });
+      }
       noShows += 1;
     }
   }
@@ -370,6 +386,7 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
     businessDate: newDate,
     previous: oldDate,
     noShows,
+    overstaysClosed,
     blocksReleased,
     roomsRestored,
   };
@@ -399,11 +416,13 @@ async function rollUpTo(
   let days = 0;
   let noShows = 0;
   let blocksReleased = 0;
+  let overstaysClosed = 0;
   while (current < target && days < cap) {
     const r = await rollOne(ctx, id);
     current = r.businessDate;
     noShows += r.noShows;
     blocksReleased += r.blocksReleased;
+    overstaysClosed += r.overstaysClosed;
     days += 1;
   }
   return {
@@ -413,6 +432,7 @@ async function rollUpTo(
     behind: current < target,
     noShows,
     blocksReleased,
+    overstaysClosed,
   };
 }
 
@@ -445,6 +465,7 @@ export const rollBusinessDate = mutation({
               behind: false,
               noShows: res.noShows,
               blocksReleased: res.blocksReleased,
+              overstaysClosed: res.overstaysClosed,
             };
           })();
 

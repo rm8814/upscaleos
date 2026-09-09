@@ -78,6 +78,9 @@ export default function NightAuditPage() {
     to: string;
     days: number;
     roomsAssigned: number;
+    noShows?: number;
+    overstaysClosed?: number;
+    blocksReleased?: number;
     balanced?: boolean;
     outOfBalance?: { date: string; variance: number }[];
   } | null>(null);
@@ -194,6 +197,10 @@ export default function NightAuditPage() {
                   ? ` · ${result.roomsAssigned} room${
                       result.roomsAssigned === 1 ? "" : "s"
                     } auto-assigned`
+                  : ""
+              }${result.noShows ? ` · ${result.noShows} no-show${result.noShows === 1 ? "" : "s"}` : ""}${
+                result.overstaysClosed
+                  ? ` · ${result.overstaysClosed} overstay${result.overstaysClosed === 1 ? "" : "s"} closed`
                   : ""
               }${
                 result.balanced === false

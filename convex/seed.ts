@@ -423,6 +423,15 @@ export const seed = internalMutation({
     for (const r of ebCandidates.slice(0, 2)) {
       await ctx.db.patch(r._id, { ratePlanId: planIds["PROMO-EB21"] });
     }
+    // one in-house stay on the Bed & Breakfast package, so its folio shows
+    // the breakfast component riding each room night
+    const bbStay = (
+      await ctx.db
+        .query("reservations")
+        .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+        .collect()
+    ).find((r) => r.status === "inhouse" && !r.corporateAccountId && !r.ratePlanId);
+    if (bbStay) await ctx.db.patch(bbStay._id, { ratePlanId: planIds["PKG-BB"] });
 
     // ---- group blocks + rooming lists -----------------------------
     const groupSeed = [
@@ -658,6 +667,23 @@ export const seed = internalMutation({
             description: t.name,
             amount: t.amount,
           });
+        }
+        // package components ride each room night
+        const plan = r.ratePlanId ? planSeed.find((p) => planIds[p.code] === r.ratePlanId) : null;
+        if (plan?.kind === "package" && plan.components) {
+          for (const c of plan.components) {
+            if (c.amount <= 0) continue;
+            await ctx.db.insert("folio_lines", {
+              folioId,
+              propertyId,
+              date: d,
+              kind: "fnb",
+              code: c.code,
+              description: `${c.label} · ${plan.code}`,
+              amount: c.amount,
+              source: "package",
+            });
+          }
         }
       }
     }

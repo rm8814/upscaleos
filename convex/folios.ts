@@ -74,6 +74,32 @@ async function postNight(
       amount: t.amount,
     });
   }
+
+  // A package rate plan rides its components along with every room night.
+  if (res.ratePlanId) {
+    const plan = await ctx.db.get(res.ratePlanId);
+    if (plan && plan.kind === "package" && plan.components) {
+      for (const c of plan.components) {
+        if (c.amount <= 0) continue; // inclusive / informational only
+        if (
+          existing.some(
+            (l) => l.code === c.code && l.date === date && !l.voided
+          )
+        )
+          continue;
+        await ctx.db.insert("folio_lines", {
+          folioId: folio._id,
+          propertyId: folio.propertyId,
+          date,
+          kind: "fnb",
+          code: c.code,
+          description: `${c.label} · ${plan.code}`,
+          amount: c.amount,
+          source: "package",
+        });
+      }
+    }
+  }
 }
 
 /**
@@ -217,7 +243,10 @@ export async function reconcileFolioToStay(
     .withIndex("by_folio", (q) => q.eq("folioId", folio._id))
     .collect();
   for (const l of lines) {
-    if ((l.kind !== "room" && l.kind !== "tax") || l.voided) continue;
+    if (l.voided) continue;
+    const isRoomSide = l.kind === "room" || l.kind === "tax";
+    const isPackage = l.source === "package";
+    if (!isRoomSide && !isPackage) continue;
     if (!inStay.has(l.date) || opts.repriceExisting) {
       await ctx.db.patch(l._id, { voided: true });
     }

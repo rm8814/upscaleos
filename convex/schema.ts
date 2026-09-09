@@ -153,6 +153,7 @@ export default defineSchema({
     etaLabel: v.optional(v.string()), // e.g. '14:20'
     roomAutoAssigned: v.optional(v.boolean()), // room was picked by auto-assign, not a person
     groupId: v.optional(v.id("group_blocks")), // part of a group block's rooming list
+    bookingRoomIndex: v.optional(v.number()), // 1-based position within a multi-room booking
     externalRef: v.optional(v.string()), // channel/OTA booking reference, for idempotent ingest
     corporateAccountId: v.optional(v.id("corporate_agreements")), // negotiated-rate agreement
     ratePlanId: v.optional(v.id("rate_plans")), // first-class rate plan driving the price
@@ -227,6 +228,10 @@ export default defineSchema({
   group_blocks: defineTable({
     propertyId: v.id("properties"),
     name: v.string(),
+    // 'block'     — an event group: cut-off, attrition, contract, forecast
+    // 'transient' — a multi-room booking (family, OTA party): no event fields
+    kind: v.optional(v.string()), // absent = 'block'
+    externalRef: v.optional(v.string()), // OTA / parent confirmation number
     status: v.string(), // 'Definite' | 'Tentative' | 'In-house'
     startDate: v.string(),
     nights: v.number(),

@@ -15,8 +15,11 @@ import {
 } from "@/components/upx/primitives";
 import ReservationSlideOver from "@/components/guests/ReservationSlideOver";
 import PmsDateChip from "@/components/common/PmsDateChip";
+import { ChevronRight, ChevronDown } from "lucide-react";
 
 const PAGE_SIZES = [10, 50, 100];
+const parseRp = (s: string) => Number((s ?? "").replace(/[^\d]/g, "")) || 0;
+const fmtRp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 // Guest · RSV · Booked · Arrival · Departure · Source · Room type · Room · Status · Value · action
 const GRID =
   "grid grid-cols-[1.6fr_1fr_0.95fr_0.85fr_0.85fr_1fr_1.1fr_0.6fr_0.9fr_1fr_0.8fr] items-center gap-3 px-4 min-w-[1260px]";
@@ -32,6 +35,83 @@ const bookedDate = (ms: number) => {
   const d = new Date(ms);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
 };
+
+type Row = {
+  _id: string;
+  _creationTime: number;
+  guestName: string;
+  checkIn: string;
+  checkOut: string;
+  channel?: string;
+  roomType: string;
+  roomNumber: string;
+  status: string;
+  totalAmount: string;
+  groupId?: string;
+  groupName?: string | null;
+  groupKind?: string | null;
+  groupExternalRef?: string | null;
+  bookingRoomIndex?: number;
+};
+
+/** RSV number: solo → RSV-XXXXXX; part of a booking/group → RSV-BASE-NN. */
+function rsvNumber(r: Row, indexInGroup?: number) {
+  if (r.groupId) {
+    const base = (r.groupExternalRef ?? r.groupId.slice(-6)).toUpperCase();
+    const n = r.bookingRoomIndex ?? indexInGroup ?? 1;
+    return `RSV-${base}-${String(n).padStart(2, "0")}`;
+  }
+  return `RSV-${r._id.slice(-6).toUpperCase()}`;
+}
+
+type Unit =
+  | { kind: "single"; row: Row; sortAt: number }
+  | {
+      kind: "group";
+      groupId: string;
+      name: string;
+      groupKind: string;
+      base: string;
+      rows: Row[];
+      sortAt: number;
+    };
+
+function buildUnits(rows: Row[]): Unit[] {
+  const groups = new Map<string, Row[]>();
+  const singles: Row[] = [];
+  for (const r of rows) {
+    if (r.groupId) {
+      if (!groups.has(r.groupId)) groups.set(r.groupId, []);
+      groups.get(r.groupId)!.push(r);
+    } else singles.push(r);
+  }
+  const units: Unit[] = singles.map((row) => ({
+    kind: "single" as const,
+    row,
+    sortAt: row._creationTime,
+  }));
+  for (const [groupId, gr] of groups) {
+    if (gr.length === 1) {
+      units.push({ kind: "single", row: gr[0], sortAt: gr[0]._creationTime });
+      continue;
+    }
+    gr.sort(
+      (a, b) =>
+        (a.bookingRoomIndex ?? 0) - (b.bookingRoomIndex ?? 0) ||
+        a._creationTime - b._creationTime
+    );
+    units.push({
+      kind: "group",
+      groupId,
+      name: gr[0].groupName ?? gr[0].guestName,
+      groupKind: gr[0].groupKind ?? "block",
+      base: (gr[0].groupExternalRef ?? groupId.slice(-6)).toUpperCase(),
+      rows: gr,
+      sortAt: Math.max(...gr.map((x) => x._creationTime)),
+    });
+  }
+  return units.sort((a, b) => b.sortAt - a.sortAt);
+}
 
 export default function ReservationListPage() {
   return (
@@ -120,13 +200,26 @@ function ReservationListInner() {
       );
     if (qRoomType) rows = rows.filter((r) => r.roomType === qRoomType);
     if (qDate) rows = rows.filter((r) => r.checkIn <= qDate && r.checkOut > qDate);
-    // Newest booking first.
-    return [...rows].sort((a, b) => b._creationTime - a._creationTime);
+    return rows as unknown as Row[];
   }, [list, tab, search, status, channel, TODAY, qUnassigned, qRoomType, qDate]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  // Fold rows that share a group into one booking unit; newest booking first.
+  const units = useMemo(() => buildUnits(filtered), [filtered]);
+
+  const pages = Math.max(1, Math.ceil(units.length / pageSize));
   const safePage = Math.min(page, pages - 1);
-  const pageRows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const pageUnits = units.slice(
+    safePage * pageSize,
+    safePage * pageSize + pageSize
+  );
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
 
   const selectedRes = list.find((r) => r._id === selected) ?? null;
 
@@ -179,7 +272,7 @@ function ReservationListInner() {
               `reservations-${TODAY}.csv`,
               filtered.map((r) => ({
                 guest: r.guestName,
-                rsvNumber: `RSV-${r._id.slice(-6).toUpperCase()}`,
+                rsvNumber: rsvNumber(r),
                 bookingDate: new Date(r._creationTime).toISOString().slice(0, 10),
                 arrival: r.checkIn,
                 departure: r.checkOut,
@@ -277,62 +370,107 @@ function ReservationListInner() {
           {!reservations && (
             <div className="px-4 py-4 text-13 text-fg-3">Loading reservations…</div>
           )}
-          {reservations && pageRows.length === 0 && (
+          {reservations && pageUnits.length === 0 && (
             <div className="px-4 py-4 text-13 text-fg-3">No reservations match.</div>
           )}
 
-          {pageRows.map((r) => {
-            const action =
-              r.status === "tentative"
-                ? "Confirm"
-                : r.status === "confirmed"
-                  ? r.checkIn <= TODAY
-                    ? "Check in"
-                    : "View"
-                  : r.status === "inhouse"
-                    ? "Check out"
-                    : r.status === "cancelled"
-                      ? "Reinstate"
-                      : "View";
+          {pageUnits.map((u) => {
+            if (u.kind === "single")
+              return (
+                <ResRow
+                  key={u.row._id}
+                  r={u.row}
+                  today={TODAY}
+                  onOpen={() => setSelected(u.row._id)}
+                />
+              );
+            const open = expanded.has(u.groupId);
+            const assigned = u.rows.filter(
+              (x) => x.roomNumber && x.roomNumber !== "—"
+            ).length;
+            const types = [...new Set(u.rows.map((x) => x.roomType))];
+            const statuses = [...new Set(u.rows.map((x) => x.status))];
+            const value = u.rows.reduce((s, x) => s + parseRp(x.totalAmount), 0);
             return (
-              <button
-                key={r._id}
-                onClick={() => setSelected(r._id)}
-                className={`${GRID} border-b border-line-soft py-2.5 text-left text-12 transition-colors last:border-0 hover:bg-elevated`}
-              >
-                <div className="truncate font-semibold">{r.guestName}</div>
-                <div className="truncate font-mono text-[11px] text-fg-3">
-                  RSV-{r._id.slice(-6).toUpperCase()}
-                </div>
-                <div className="whitespace-nowrap font-mono text-[11px] text-fg-3">
-                  {bookedDate(r._creationTime)}
-                </div>
-                <div className="whitespace-nowrap font-mono text-[11px]">
-                  {shortDate(r.checkIn)}
-                </div>
-                <div className="whitespace-nowrap font-mono text-[11px]">
-                  {shortDate(r.checkOut)}
-                </div>
-                <div className="truncate text-[11px] text-fg-3">
-                  {r.channel ?? "Direct"}
-                </div>
-                <div className="truncate text-[11px] text-fg-2">{r.roomType}</div>
-                <div className="font-mono">{r.roomNumber}</div>
-                <div
-                  className="whitespace-nowrap text-[10.5px] font-semibold"
-                  style={{ color: RES_STATUS_COLOR[r.status] }}
+              <div key={u.groupId} className="border-b border-line-soft last:border-0">
+                <button
+                  onClick={() => toggle(u.groupId)}
+                  className={`${GRID} w-full py-2.5 text-left text-12 transition-colors hover:bg-elevated`}
                 >
-                  {RES_STATUS_LABEL[r.status] ?? r.status}
-                </div>
-                <div className="font-mono text-[11.5px] font-semibold">
-                  {r.totalAmount}
-                </div>
-                <div>
-                  <span className="whitespace-nowrap rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
-                    {action}
-                  </span>
-                </div>
-              </button>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    {open ? (
+                      <ChevronDown className="h-3.5 w-3.5 flex-none text-fg-3" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 flex-none text-fg-3" />
+                    )}
+                    <span className="truncate font-semibold">{u.name}</span>
+                    <span
+                      className="flex-none rounded-[3px] border px-1 text-[9px] font-bold uppercase"
+                      style={{
+                        color:
+                          u.groupKind === "transient"
+                            ? "var(--accent-cyan)"
+                            : "var(--group-hold)",
+                        borderColor:
+                          u.groupKind === "transient"
+                            ? "var(--accent-cyan)"
+                            : "var(--group-hold)",
+                      }}
+                    >
+                      {u.groupKind === "transient" ? "Party" : "Group"}
+                    </span>
+                  </div>
+                  <div className="truncate font-mono text-[11px] text-fg-3">
+                    RSV-{u.base}
+                  </div>
+                  <div className="whitespace-nowrap font-mono text-[11px] text-fg-3">
+                    {bookedDate(u.sortAt)}
+                  </div>
+                  <div className="whitespace-nowrap font-mono text-[11px]">
+                    {shortDate(u.rows[0].checkIn)}
+                  </div>
+                  <div className="whitespace-nowrap font-mono text-[11px]">
+                    {shortDate(u.rows[0].checkOut)}
+                  </div>
+                  <div className="truncate text-[11px] text-fg-3">
+                    {u.rows[0].channel ?? "Direct"}
+                  </div>
+                  <div className="truncate text-[11px] text-fg-2">
+                    {types.length === 1 ? types[0] : "Mixed"}
+                  </div>
+                  <div className="font-mono text-[11px]">
+                    {assigned}/{u.rows.length} rm
+                  </div>
+                  <div
+                    className="whitespace-nowrap text-[10.5px] font-semibold"
+                    style={{
+                      color:
+                        statuses.length === 1
+                          ? RES_STATUS_COLOR[statuses[0]]
+                          : "var(--fg-2)",
+                    }}
+                  >
+                    {statuses.length === 1
+                      ? RES_STATUS_LABEL[statuses[0]] ?? statuses[0]
+                      : "Mixed"}
+                  </div>
+                  <div className="font-mono text-[11.5px] font-semibold">
+                    {fmtRp(value)}
+                  </div>
+                  <div />
+                </button>
+                {open &&
+                  u.rows.map((r, i) => (
+                    <ResRow
+                      key={r._id}
+                      r={r}
+                      today={TODAY}
+                      indexInGroup={i + 1}
+                      nested
+                      onOpen={() => setSelected(r._id)}
+                    />
+                  ))}
+              </div>
             );
           })}
         </div>
@@ -340,12 +478,12 @@ function ReservationListInner() {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-12 text-fg-3">
-          {filtered.length === 0
+          {units.length === 0
             ? "No results"
             : `${safePage * pageSize + 1}–${Math.min(
                 (safePage + 1) * pageSize,
-                filtered.length
-              )} of ${filtered.length}`}
+                units.length
+              )} of ${units.length} bookings`}
         </span>
         <div className="flex items-center gap-2">
           <select
@@ -386,5 +524,73 @@ function ReservationListInner() {
         <ReservationSlideOver res={selectedRes} onClose={() => setSelected(null)} />
       )}
     </div>
+  );
+}
+
+function ResRow({
+  r,
+  today,
+  onOpen,
+  nested,
+  indexInGroup,
+}: {
+  r: Row;
+  today: string;
+  onOpen: () => void;
+  nested?: boolean;
+  indexInGroup?: number;
+}) {
+  const action =
+    r.status === "tentative"
+      ? "Confirm"
+      : r.status === "confirmed"
+        ? r.checkIn <= today
+          ? "Check in"
+          : "View"
+        : r.status === "inhouse"
+          ? "Check out"
+          : r.status === "cancelled"
+            ? "Reinstate"
+            : "View";
+  return (
+    <button
+      onClick={onOpen}
+      className={`${GRID} w-full py-2.5 text-left text-12 transition-colors last:border-0 hover:bg-elevated ${
+        nested
+          ? "border-b border-line-soft bg-deep/30"
+          : "border-b border-line-soft"
+      }`}
+    >
+      <div className={`truncate ${nested ? "pl-5 text-fg-2" : "font-semibold"}`}>
+        {nested ? `Room ${indexInGroup}` : r.guestName}
+      </div>
+      <div className="truncate font-mono text-[11px] text-fg-3">
+        {rsvNumber(r, indexInGroup)}
+      </div>
+      <div className="whitespace-nowrap font-mono text-[11px] text-fg-3">
+        {bookedDate(r._creationTime)}
+      </div>
+      <div className="whitespace-nowrap font-mono text-[11px]">
+        {shortDate(r.checkIn)}
+      </div>
+      <div className="whitespace-nowrap font-mono text-[11px]">
+        {shortDate(r.checkOut)}
+      </div>
+      <div className="truncate text-[11px] text-fg-3">{r.channel ?? "Direct"}</div>
+      <div className="truncate text-[11px] text-fg-2">{r.roomType}</div>
+      <div className="font-mono">{r.roomNumber}</div>
+      <div
+        className="whitespace-nowrap text-[10.5px] font-semibold"
+        style={{ color: RES_STATUS_COLOR[r.status] }}
+      >
+        {RES_STATUS_LABEL[r.status] ?? r.status}
+      </div>
+      <div className="font-mono text-[11.5px] font-semibold">{r.totalAmount}</div>
+      <div>
+        <span className="whitespace-nowrap rounded-sm border border-line bg-fg-1/[0.06] px-2 py-1 text-[10.5px] text-fg-1">
+          {action}
+        </span>
+      </div>
+    </button>
   );
 }

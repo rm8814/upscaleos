@@ -156,6 +156,12 @@ export async function assignPropertyRooms(
 }
 
 async function joinGuestAndRoom(ctx: QueryCtx, rows: Doc<"reservations">[]) {
+  const groupCache = new Map<string, Doc<"group_blocks"> | null>();
+  const getGroup = async (id: Id<"group_blocks">) => {
+    const k = id as string;
+    if (!groupCache.has(k)) groupCache.set(k, await ctx.db.get(id));
+    return groupCache.get(k) ?? null;
+  };
   return Promise.all(
     rows.map(async (r) => {
       const guest = await ctx.db.get(r.guestId);
@@ -166,12 +172,16 @@ async function joinGuestAndRoom(ctx: QueryCtx, rows: Doc<"reservations">[]) {
         roomNumber = roomNumber ?? room?.roomNumber ?? undefined;
         roomType = roomType ?? room?.type ?? undefined;
       }
+      const group = r.groupId ? await getGroup(r.groupId) : null;
       return {
         ...r,
         guestName: guest?.name ?? "Unknown guest",
         guestTier: guest?.loyaltyTier ?? "Silver",
         roomNumber: roomNumber ?? "—",
         roomType: roomType ?? "—",
+        groupName: group?.name ?? null,
+        groupKind: group?.kind ?? (group ? "block" : null),
+        groupExternalRef: group?.externalRef ?? null,
       };
     })
   );

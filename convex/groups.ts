@@ -313,6 +313,8 @@ export const list = query({
       out.push({
         id: g._id,
         name: g.name,
+        kind: g.kind ?? "block",
+        externalRef: g.externalRef ?? null,
         status: g.status,
         released: g.released === true,
         startDate: g.startDate,
@@ -514,6 +516,8 @@ export const get = query({
     return {
       id: g._id,
       name: g.name,
+      kind: g.kind ?? "block",
+      externalRef: g.externalRef ?? null,
       status: g.status,
       startDate: g.startDate,
       nights: g.nights,
@@ -702,6 +706,161 @@ export const create = mutation({
       propertyId: args.propertyId,
       target: args.name,
       detail: `${args.blocked} ${args.roomType} · ${args.startDate}`,
+    });
+    return groupId;
+  },
+});
+
+const nights = (a: string, b: string) =>
+  Math.max(
+    1,
+    Math.round(
+      (Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000
+    )
+  );
+
+/**
+ * A multi-room booking — one guest / party / OTA confirmation holding several
+ * rooms. Modelled as a `kind: "transient"` group so it shares the calendar
+ * lane, folio routing and reservation-list grouping with event blocks, but
+ * without cut-off / attrition / contract.
+ */
+export const createTransient = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    guestName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    channel: v.string(),
+    status: v.string(), // 'confirmed' | 'tentative'
+    externalRef: v.optional(v.string()),
+    rooms: v.array(
+      v.object({
+        roomType: v.string(),
+        roomId: v.optional(v.id("rooms")),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const scope = await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "front_office",
+    });
+    if (args.rooms.length === 0) throw new Error("At least one room required");
+    const n = nights(args.checkIn, args.checkOut);
+    const status =
+      args.status === "tentative" ? "tentative" : "confirmed";
+
+    // Shared guest record for the whole party.
+    const guests = await ctx.db.query("guests").collect();
+    const match = guests.find(
+      (g) =>
+        (args.email && g.email.toLowerCase() === args.email.toLowerCase()) ||
+        g.name.toLowerCase() === args.guestName.toLowerCase()
+    );
+    const guestId =
+      match?._id ??
+      (await ctx.db.insert("guests", {
+        name: args.guestName,
+        email:
+          args.email ||
+          `${args.guestName.toLowerCase().replace(/[^a-z]+/g, ".")}@guest.upscale.id`,
+        phone: args.phone || "—",
+        loyaltyTier: "Silver",
+      }));
+
+    const label =
+      args.rooms.length > 1
+        ? `${args.guestName} · ${args.rooms.length} rooms`
+        : `${args.guestName} party`;
+    const groupId = await ctx.db.insert("group_blocks", {
+      propertyId: args.propertyId,
+      name: label,
+      kind: "transient",
+      externalRef: args.externalRef,
+      status: status === "tentative" ? "Tentative" : "Definite",
+      startDate: args.checkIn,
+      nights: n,
+      cutoffDate: args.checkIn, // no cut-off concept for a transient booking
+      contractLabel: "n/a",
+      salesManager: scope.email ?? "front desk",
+      billing: "Individual folios",
+      billingMode: "individual",
+      depositStatus: "Not received",
+      depositAmount: "Rp 0",
+      concessions: "",
+      contact: args.email ?? args.phone ?? "",
+    });
+    const block = (await ctx.db.get(groupId))!;
+
+    // One sub-block per distinct room type (blocked == picked, so held = 0).
+    const byType = new Map<string, number>();
+    for (const r of args.rooms)
+      byType.set(r.roomType, (byType.get(r.roomType) ?? 0) + 1);
+    const planByType = new Map<string, Id<"rate_plans">>();
+    for (const [roomType, count] of byType) {
+      const q = await quoteStay(ctx, {
+        propertyId: args.propertyId,
+        roomType,
+        checkIn: args.checkIn,
+        checkOut: args.checkOut,
+      });
+      const subId = await ctx.db.insert("group_subblocks", {
+        groupId,
+        propertyId: args.propertyId,
+        roomType,
+        blocked: count,
+        rate: rpNum(q.nights[0]?.rate ?? 0),
+      });
+      const planId = await ensureSubBlockPlan(
+        ctx,
+        block,
+        (await ctx.db.get(subId))!
+      );
+      planByType.set(roomType, planId);
+    }
+
+    // One reservation per physical room.
+    let idx = 0;
+    for (const room of args.rooms) {
+      idx += 1;
+      const ratePlanId = planByType.get(room.roomType);
+      const q = await quoteStay(ctx, {
+        propertyId: args.propertyId,
+        roomType: room.roomType,
+        checkIn: args.checkIn,
+        checkOut: args.checkOut,
+        ratePlanId,
+      });
+      let roomNumber: string | undefined;
+      if (room.roomId) roomNumber = (await ctx.db.get(room.roomId))?.roomNumber;
+      await ctx.db.insert("reservations", {
+        guestId,
+        propertyId: args.propertyId,
+        roomId: room.roomId,
+        roomNumber,
+        checkIn: args.checkIn,
+        checkOut: args.checkOut,
+        status,
+        rate: rpNum(q.nights[0]?.rate ?? 0),
+        totalAmount: rpNum(q.total),
+        channel: args.channel,
+        roomType: room.roomType,
+        adults: 2,
+        children: 0,
+        groupId,
+        bookingRoomIndex: idx,
+        externalRef: args.externalRef,
+        ratePlanId,
+      });
+    }
+
+    await writeAudit(ctx, scope, "booking.multiroom", {
+      propertyId: args.propertyId,
+      target: args.guestName,
+      detail: `${args.rooms.length} rooms · ${args.checkIn}→${args.checkOut} · ${args.channel}`,
     });
     return groupId;
   },

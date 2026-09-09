@@ -70,6 +70,7 @@ export default function CalendarTapeChart() {
   const updateDates = useMutation(api.reservations.updateDates);
   const setStatus = useMutation(api.reservations.setStatus);
   const createRes = useMutation(api.reservations.create);
+  const createTransient = useMutation(api.groups.createTransient);
   const removeWaitlist = useMutation(api.waitlist.remove);
   const assignOne = useMutation(api.reservations.assignOne);
   const clearBlock = useMutation(api.operate.clearRoomBlock);
@@ -591,7 +592,15 @@ export default function CalendarTapeChart() {
             {selected.size} room{selected.size > 1 ? "s" : ""} selected
           </span>
           <button
-            onClick={() => setNewRes({ multi: selected.size })}
+            onClick={() => {
+              const multiRooms = [...selected]
+                .map((id) => {
+                  const rm = (board?.rooms ?? []).find((r) => r._id === id);
+                  return rm ? { roomId: rm._id, roomType: rm.type } : null;
+                })
+                .filter(Boolean) as { roomId: string; roomType: string }[];
+              setNewRes({ multi: multiRooms.length, multiRooms });
+            }}
             className="rounded-sm bg-accent-violet px-3 py-1.5 text-12 font-medium text-ice hover:bg-accent-violet-hi"
           >
             Book together
@@ -1437,6 +1446,22 @@ export default function CalendarTapeChart() {
             setNewRes(null);
             setAssignWaitlistId(null);
           }}
+          onCreateMulti={async (payload) => {
+            try {
+              await createTransient({
+                propertyId: activeProperty._id,
+                ...payload,
+              });
+              toast(`Booked ${payload.rooms.length} rooms`, "success");
+            } catch (e) {
+              toast(
+                e instanceof Error ? e.message : "Could not book",
+                "error"
+              );
+            }
+            setSelected(new Set());
+            setNewRes(null);
+          }}
         />
       )}
     </div>
@@ -1452,6 +1477,18 @@ interface NewResInit {
   checkIn: string;
   checkOut: string;
   multi: number;
+  multiRooms: { roomId: string; roomType: string }[];
+}
+
+interface MultiPayload {
+  guestName: string;
+  email?: string;
+  phone?: string;
+  checkIn: string;
+  checkOut: string;
+  channel: string;
+  status: string;
+  rooms: { roomType: string; roomId?: Id<"rooms"> }[];
 }
 
 interface CreatePayload {
@@ -1476,6 +1513,7 @@ function NewReservationModal({
   roomTypeNames,
   onClose,
   onCreate,
+  onCreateMulti,
 }: {
   init: Partial<NewResInit>;
   today: string;
@@ -1484,9 +1522,12 @@ function NewReservationModal({
   roomTypeNames: string[];
   onClose: () => void;
   onCreate: (p: CreatePayload) => Promise<void>;
+  onCreateMulti: (p: MultiPayload) => Promise<void>;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const multiRooms = init.multiRooms ?? [];
+  const isMulti = multiRooms.length > 1;
 
   const [f, setF] = useState({
     guestName: init.guestName ?? "",
@@ -1703,28 +1744,45 @@ function NewReservationModal({
               disabled={!canSubmit}
               onClick={async () => {
                 setBusy(true);
-                await onCreate({
-                  guestName: f.guestName.trim(),
-                  email: f.email.trim() || undefined,
-                  phone: f.phone.trim() || undefined,
-                  checkIn: f.checkIn,
-                  checkOut: f.checkOut,
-                  roomId: f.roomId ? (f.roomId as Id<"rooms">) : undefined,
-                  roomType: f.roomType,
-                  channel: f.channel,
-                  status:
-                    f.status === "Confirmed"
-                      ? "confirmed"
-                      : f.status === "Tentative"
-                        ? "tentative"
-                        : "confirmed",
-                  adults: f.adults,
-                  children: f.children,
-                });
+                const status =
+                  f.status === "Tentative" ? "tentative" : "confirmed";
+                if (isMulti) {
+                  await onCreateMulti({
+                    guestName: f.guestName.trim(),
+                    email: f.email.trim() || undefined,
+                    phone: f.phone.trim() || undefined,
+                    checkIn: f.checkIn,
+                    checkOut: f.checkOut,
+                    channel: f.channel,
+                    status,
+                    rooms: multiRooms.map((m) => ({
+                      roomType: m.roomType,
+                      roomId: m.roomId as Id<"rooms">,
+                    })),
+                  });
+                } else {
+                  await onCreate({
+                    guestName: f.guestName.trim(),
+                    email: f.email.trim() || undefined,
+                    phone: f.phone.trim() || undefined,
+                    checkIn: f.checkIn,
+                    checkOut: f.checkOut,
+                    roomId: f.roomId ? (f.roomId as Id<"rooms">) : undefined,
+                    roomType: f.roomType,
+                    channel: f.channel,
+                    status,
+                    adults: f.adults,
+                    children: f.children,
+                  });
+                }
               }}
               className="rounded-sm bg-accent-violet px-4 py-2.5 text-13 font-semibold text-ice transition-colors hover:bg-accent-violet-hi disabled:opacity-40"
             >
-              {busy ? "Creating…" : "Create reservation"}
+              {busy
+                ? "Creating…"
+                : isMulti
+                  ? `Book ${multiRooms.length} rooms`
+                  : "Create reservation"}
             </button>
           </div>
         </div>

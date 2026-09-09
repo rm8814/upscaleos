@@ -51,6 +51,7 @@ export const seed = internalMutation({
       "waitlist",
       "reservations",
       "rooms",
+      "room_types",
       "maintenance_tickets",
       "guests",
       "expenses",
@@ -151,6 +152,30 @@ export const seed = internalMutation({
       await ctx.db.insert("taxes", { ...t, propertyId });
     }
 
+    // ---- room types (first-class; base rate feeds the rate engine) -----
+    const TYPE_SPEC = [
+      { name: "Deluxe Twin", baseRate: 1_450_000, maxAdults: 2, maxChildren: 1, bedConfig: "2 twin", sizeSqm: 28 },
+      { name: "Double Queen", baseRate: 1_850_000, maxAdults: 4, maxChildren: 2, bedConfig: "2 queen", sizeSqm: 34 },
+      { name: "King Suite", baseRate: 2_600_000, maxAdults: 2, maxChildren: 2, bedConfig: "1 king", sizeSqm: 48 },
+      { name: "Presidential Suite", baseRate: 6_900_000, maxAdults: 4, maxChildren: 2, bedConfig: "1 king + sofa", sizeSqm: 96 },
+    ];
+    const typeByName: Record<string, (typeof TYPE_SPEC)[number]> = {};
+    for (let i = 0; i < TYPE_SPEC.length; i++) {
+      const t = TYPE_SPEC[i];
+      typeByName[t.name] = t;
+      await ctx.db.insert("room_types", {
+        propertyId,
+        name: t.name,
+        baseRate: t.baseRate,
+        maxAdults: t.maxAdults,
+        maxChildren: t.maxChildren,
+        bedConfig: t.bedConfig,
+        sizeSqm: t.sizeSqm,
+        sortOrder: i,
+        active: true,
+      });
+    }
+
     // ---- rooms: 5 floors × 6 rooms = 30 --------------------------------
     const roomRows: {
       _id: import("./_generated/dataModel").Id<"rooms">;
@@ -159,6 +184,7 @@ export const seed = internalMutation({
       status: string;
     }[] = [];
 
+    const VIEWS = ["Ocean", "Garden", "City", "None"];
     let seq = 0;
     for (let floor = 1; floor <= 5; floor++) {
       for (let n = 1; n <= 6; n++) {
@@ -173,6 +199,7 @@ export const seed = internalMutation({
           status === "OOO" || status === "OOS"
             ? "—"
             : ATTENDANTS[seq % (ATTENDANTS.length - 1)];
+        const ts = typeByName[type];
         const _id = await ctx.db.insert("rooms", {
           propertyId,
           roomNumber,
@@ -183,6 +210,13 @@ export const seed = internalMutation({
           updatedLabel: `${(seq * 7) % 55 + 3}m ago`,
           priority: status === "Vacant Dirty" && n === 2,
           notes: undefined,
+          active: true,
+          maxAdults: ts?.maxAdults,
+          maxChildren: ts?.maxChildren,
+          bedConfig: ts?.bedConfig,
+          accessible: floor === 1 && n <= 2,
+          view: floor >= 4 ? "Ocean" : VIEWS[(floor + n) % VIEWS.length],
+          smoking: false,
         });
         roomRows.push({ _id, roomNumber, type, status });
       }

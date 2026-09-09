@@ -92,6 +92,28 @@ export default defineSchema({
     updatedLabel: v.optional(v.string()), // e.g. '8m ago'
     priority: v.optional(v.boolean()),
     notes: v.optional(v.string()),
+    active: v.optional(v.boolean()), // false = retired: out of sale, history kept
+    maxAdults: v.optional(v.number()),
+    maxChildren: v.optional(v.number()),
+    bedConfig: v.optional(v.string()), // '1 king', '2 twin'
+    connectingRoomId: v.optional(v.id("rooms")),
+    accessible: v.optional(v.boolean()),
+    view: v.optional(v.string()), // 'Ocean' | 'Garden' | 'City' | 'None'
+    smoking: v.optional(v.boolean()),
+  }).index("by_property", ["propertyId"]),
+
+  // ---- room types: first-class, per property. Base rate feeds the rate
+  //      engine (rateModel applies the DOW / season curve on top). --------
+  room_types: defineTable({
+    propertyId: v.id("properties"),
+    name: v.string(),
+    baseRate: v.number(),
+    maxAdults: v.number(),
+    maxChildren: v.number(),
+    bedConfig: v.string(),
+    sizeSqm: v.optional(v.number()),
+    sortOrder: v.number(),
+    active: v.boolean(),
   }).index("by_property", ["propertyId"]),
   maintenance_tickets: defineTable({
     title: v.string(),

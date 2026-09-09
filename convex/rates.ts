@@ -9,7 +9,9 @@ export const parseRp = (s: string | undefined) =>
   Number((s ?? "").replace(/[^\d]/g, "")) || 0;
 import {
   ROOM_TYPES,
-  nightlyRateFor,
+  BASE_RATE,
+  DEFAULT_BASE,
+  nightlyRateForBase,
   addDaysIso,
   money,
 } from "./rateModel";
@@ -19,6 +21,38 @@ const DYNAMIC_PCT = 0.06; // the grid's dynamic-pricing toggle uplift
 
 type Ctx = QueryCtx | MutationCtx;
 export type RateSource = "rack" | "dynamic" | "manual";
+
+/**
+ * Per-type base rate for a property, from the room_types table. Falls back to
+ * the code table (rateModel.BASE_RATE) for any type without a row — so a
+ * fresh install still prices before Room setup is used.
+ */
+export async function loadBaseRates(
+  ctx: Ctx,
+  propertyId: Id<"properties">
+): Promise<{
+  base: (roomType: string) => number;
+  rack: (roomType: string, iso: string) => number;
+  types: string[];
+}> {
+  const rows = await ctx.db
+    .query("room_types")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+  const byName = new Map(rows.map((r) => [r.name, r.baseRate]));
+  const base = (roomType: string) =>
+    byName.get(roomType) ?? BASE_RATE[roomType] ?? DEFAULT_BASE;
+  return {
+    base,
+    rack: (roomType: string, iso: string) =>
+      nightlyRateForBase(base(roomType), iso),
+    types: rows.length
+      ? [...rows]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((r) => r.name)
+      : [...ROOM_TYPES],
+  };
+}
 
 /* -------------------------------------------------- rate resolution ------ */
 
@@ -63,13 +97,8 @@ export async function effectiveNightlyRate(
   roomType: string,
   date: string
 ): Promise<number> {
-  return applyRateRules(
-    ctx,
-    propertyId,
-    roomType,
-    date,
-    nightlyRateFor(roomType, date)
-  );
+  const { rack } = await loadBaseRates(ctx, propertyId);
+  return applyRateRules(ctx, propertyId, roomType, date, rack(roomType, date));
 }
 
 /**
@@ -185,8 +214,9 @@ export async function loadReservationRates(
   ctx: Ctx,
   propertyId: Id<"properties">
 ) {
-  const [rules, agreements, plans] = await Promise.all([
+  const [rules, bases, agreements, plans] = await Promise.all([
     loadRateRules(ctx, propertyId),
+    loadBaseRates(ctx, propertyId),
     ctx.db
       .query("corporate_agreements")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
@@ -204,7 +234,7 @@ export async function loadReservationRates(
     const engine = rules(
       res.roomType ?? "",
       date,
-      nightlyRateFor(res.roomType ?? "", date)
+      bases.rack(res.roomType ?? "", date)
     );
     if (res.ratePlanId) {
       const plan = planById.get(res.ratePlanId);
@@ -271,6 +301,7 @@ export async function quoteStay(
   total: number;
 }> {
   const rules = await loadRateRules(ctx, args.propertyId);
+  const bases = await loadBaseRates(ctx, args.propertyId);
   const taxRows = await ctx.db
     .query("taxes")
     .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
@@ -286,7 +317,7 @@ export async function quoteStay(
 
   const nights: { date: string; rate: number }[] = [];
   for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
-    const engine = rules(args.roomType, d, nightlyRateFor(args.roomType, d));
+    const engine = rules(args.roomType, d, bases.rack(args.roomType, d));
     let rate = engine;
     if (plan) rate = resolvePlanRate(plan, engine, agreementRate);
     else if (agreementRate > 0) rate = agreementRate;
@@ -346,7 +377,7 @@ export async function buildRateGrid(
   from: string,
   to: string
 ): Promise<{ roomType: string; date: string; rate: number; source: RateSource }[]> {
-  const [adjustments, overrides] = await Promise.all([
+  const [adjustments, overrides, bases] = await Promise.all([
     ctx.db
       .query("rate_adjustments")
       .withIndex("by_property_date", (q) => q.eq("propertyId", propertyId))
@@ -355,6 +386,7 @@ export async function buildRateGrid(
       .query("rate_overrides")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect(),
+    loadBaseRates(ctx, propertyId),
   ]);
   const adjByDate = new Map(
     adjustments
@@ -373,9 +405,9 @@ export async function buildRateGrid(
     rate: number;
     source: RateSource;
   }[] = [];
-  for (const roomType of ROOM_TYPES) {
+  for (const roomType of bases.types) {
     for (let d = from; d <= to; d = addDaysIso(d, 1)) {
-      const rack = nightlyRateFor(roomType, d);
+      const rack = bases.rack(roomType, d);
       const pct = adjByDate.get(d);
       const manual = ovByCell.get(`${roomType}|${d}`);
       let rate = rack;

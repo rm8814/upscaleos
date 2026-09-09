@@ -14,6 +14,7 @@ import type * as ar from "../ar.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
 import type * as channels from "../channels.js";
+import type * as commissions from "../commissions.js";
 import type * as crons from "../crons.js";
 import type * as folios from "../folios.js";
 import type * as groups from "../groups.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authz: typeof authz;
   channels: typeof channels;
+  commissions: typeof commissions;
   crons: typeof crons;
   folios: typeof folios;
   groups: typeof groups;

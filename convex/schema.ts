@@ -383,4 +383,15 @@ export default defineSchema({
     .index("by_property", ["propertyId"])
     .index("by_property_kind", ["propertyId", "kind"])
     .index("by_agreement", ["agreementId"]),
+
+  // ---- distribution channel terms: OTA commission + who collects --------
+  //   collection: 'merchant' -> OTA charges the guest, remits hotel net
+  //               'hotel'    -> hotel charges the guest, invoices OTA commission
+  channel_terms: defineTable({
+    propertyId: v.id("properties"),
+    channel: v.string(), // 'Booking.com', 'Agoda', 'Expedia', 'Traveloka'
+    commissionPct: v.number(), // e.g. 0.15 = 15% of gross room revenue
+    collection: v.string(),
+    active: v.boolean(),
+  }).index("by_property", ["propertyId"]),
 });

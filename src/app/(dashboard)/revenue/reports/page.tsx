@@ -73,15 +73,25 @@ function tableFor(tab: ReportTab, d: Reports): Table {
       };
     case "source":
       return {
-        cols: ["Source", "Rooms", "Room-nights", "ADR", "Revenue OTB"],
+        cols: [
+          "Source",
+          "Rooms",
+          "Room-nights",
+          "ADR",
+          "Revenue OTB",
+          "Commission",
+          "Net revenue",
+        ],
         rows: d.bySource.map((r) => [
           r.source,
           String(r.rooms),
           String(r.roomNights),
           r.adr,
           r.revenue,
+          r.commission,
+          r.netRevenue,
         ]),
-        note: "On-the-books production for the next 30 nights.",
+        note: "On-the-books production for the next 30 nights. Commission from configured channel terms.",
       };
     case "roomType":
       return {

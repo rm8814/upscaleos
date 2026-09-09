@@ -4,6 +4,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import { addDaysIso, money } from "./rateModel";
 import { loadReservationRates } from "./rates";
+import { loadChannelTerms } from "./commissions";
 import {
   sellableRoomCount,
   roomCountsByType,
@@ -53,6 +54,7 @@ export const getReports = query({
     const sellableTotal = sellableRoomCount(rooms);
     const { sellable: sellableByType } = roomCountsByType(rooms);
     const rate = await loadReservationRates(ctx, args.propertyId);
+    const channels = await loadChannelTerms(ctx, args.propertyId);
 
     const onBooks = (d: string): Doc<"reservations">[] =>
       reservations.filter(
@@ -105,7 +107,12 @@ export const getReports = query({
     const prodDates = Array.from({ length: 30 }, (_, i) => addDaysIso(bd, i));
     const bySourceMap = new Map<
       string,
-      { roomNights: number; revenue: number; keys: Set<string> }
+      {
+        roomNights: number;
+        revenue: number;
+        commission: number;
+        keys: Set<string>;
+      }
     >();
     const byTypeMap = new Map<
       string,
@@ -117,9 +124,15 @@ export const getReports = query({
         const src = r.channel ?? "Direct";
         const s =
           bySourceMap.get(src) ??
-          { roomNights: 0, revenue: 0, keys: new Set<string>() };
+          {
+            roomNights: 0,
+            revenue: 0,
+            commission: 0,
+            keys: new Set<string>(),
+          };
         s.roomNights += 1;
         s.revenue += amt;
+        s.commission += channels.commissionOn(r.channel, amt);
         s.keys.add(r._id);
         bySourceMap.set(src, s);
 
@@ -140,6 +153,8 @@ export const getReports = query({
         roomNights: v.roomNights,
         adr: money(v.roomNights ? v.revenue / v.roomNights : 0),
         revenue: money(v.revenue),
+        commission: money(v.commission),
+        netRevenue: money(v.revenue - v.commission),
       }))
       .sort((a, b) => b.roomNights - a.roomNights);
     const byRoomType = [...byTypeMap.entries()]

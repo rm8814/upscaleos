@@ -46,6 +46,7 @@ export const seed = internalMutation({
       "rate_adjustments",
       "rate_overrides",
       "rate_plans",
+      "channel_terms",
       "room_blocks",
       "waitlist",
       "reservations",
@@ -389,6 +390,17 @@ export const seed = internalMutation({
         r.roomType === "King Suite" &&
         (r.status === "inhouse" || r.status === "confirmed")
     );
+    // ---- distribution channel terms (OTA commission) ------------
+    const channelTerms = [
+      { channel: "Booking.com", commissionPct: 0.15, collection: "merchant" },
+      { channel: "Agoda", commissionPct: 0.18, collection: "merchant" },
+      { channel: "Expedia", commissionPct: 0.17, collection: "hotel" },
+      { channel: "Traveloka", commissionPct: 0.12, collection: "merchant" },
+    ];
+    for (const c of channelTerms) {
+      await ctx.db.insert("channel_terms", { ...c, propertyId, active: true });
+    }
+
     // ---- rate plans (first-class, sellable price definitions) ----
     const planSeed = [
       { code: "BAR", name: "Best Available Rate", kind: "bar", pricing: "engine", active: true },

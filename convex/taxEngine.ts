@@ -1,4 +1,5 @@
 import type { Doc } from "./_generated/dataModel";
+import { codeForTax } from "./transactionCodes";
 
 /**
  * Property tax engine. Drives folio tax postings from the `taxes` rows a
@@ -20,13 +21,6 @@ export interface TaxLine {
   code: string;
   amount: number;
 }
-
-const slug = (s: string) =>
-  s
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 12);
 
 function parseRate(rate: string): { kind: "pct" | "fixed"; value: number } {
   const t = rate.trim();
@@ -75,7 +69,7 @@ export function roomNightTaxes(
     if (amount > 0) {
       taxLines.push({
         name: t.name,
-        code: `TX-${slug(t.name)}`,
+        code: codeForTax(t.name),
         amount: Math.round(amount),
       });
     }
@@ -104,7 +98,7 @@ export function chargeTaxes(
     if (amount > 0) {
       taxLines.push({
         name: t.name,
-        code: `TX-${slug(t.name)}`,
+        code: codeForTax(t.name),
         amount: Math.round(amount),
       });
     }

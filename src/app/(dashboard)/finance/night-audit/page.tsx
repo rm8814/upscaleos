@@ -88,6 +88,12 @@ export default function NightAuditPage() {
     activeProperty ? { propertyId: activeProperty._id, limit: 30 } : "skip"
   );
   const lastClose = stats?.[0];
+  const journal = useQuery(
+    api.history.revenueJournal,
+    activeProperty && lastClose
+      ? { propertyId: activeProperty._id, date: lastClose.date }
+      : "skip"
+  );
   const lastAuditLabel = lastClose
     ? `${dayLabel(lastClose.date)}, ${new Date(lastClose.closedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
     : "—";
@@ -142,7 +148,7 @@ export default function NightAuditPage() {
   }, [nowMs, auditTime]);
 
   const STEPS = [
-    { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and 21% service + tax posted to open folios.", alwaysDone: true, affected: undefined as { room: string; text: string }[] | undefined },
+    { icon: DoorClosed, label: "Post room & tax charges", detail: "Nightly room revenue and each configured tax posted to open folios.", alwaysDone: true, affected: undefined as { room: string; text: string }[] | undefined },
     { icon: Receipt, label: "Reconcile POS postings", detail: "F&B and outlet charges matched to folios.", alwaysDone: true, affected: [{ room: "204", text: "Ombak Restaurant · Rp 380,000 unmatched — posted to house account" }] },
     { icon: CreditCard, label: "Settle card batches", detail: "Card terminal batch closed and settled to bank.", alwaysDone: true, affected: undefined },
     { icon: RefreshCw, label: "Roll business date", detail: behind ? `Catch up ${daysBehind} days — advance from ${fmtDate(businessDate)} to ${fmtDate(wallToday)}, posting each day's departures.` : `Advance system date from ${fmtDate(businessDate)} to ${fmtDate(nextDay(businessDate))}.`, alwaysDone: false, affected: undefined },
@@ -301,6 +307,50 @@ export default function NightAuditPage() {
                   ))}
                 </div>
               )}
+              {isOpen && s.label === "Generate revenue journal" && (
+                <div className="px-4 pb-4 pl-[45px]">
+                  {!journal ? (
+                    <div className="text-12 text-fg-3">
+                      Runs when the business date rolls — the journal covers the
+                      night that just closed.
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-md border border-line">
+                      <div className="grid grid-cols-[60px_1fr_1fr_auto] gap-2 border-b border-line bg-deep px-3 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+                        <div>GL</div>
+                        <div>Account</div>
+                        <div>Code</div>
+                        <div className="text-right">Amount</div>
+                      </div>
+                      {journal.rows.map((r) => (
+                        <div
+                          key={r.code}
+                          className="grid grid-cols-[60px_1fr_1fr_auto] gap-2 border-b border-line-soft px-3 py-1.5 text-[12px] last:border-0"
+                        >
+                          <div className="font-mono text-fg-3">{r.gl}</div>
+                          <div>{r.label}</div>
+                          <div className="font-mono text-fg-3">
+                            {r.code} · {r.count}
+                          </div>
+                          <div className="text-right font-mono">{r.amountLabel}</div>
+                        </div>
+                      ))}
+                      <div className="flex flex-col gap-1 bg-deep px-3 py-2 text-[12px]">
+                        <Row3 label="Revenue" value={journal.revenueLabel} />
+                        <Row3 label="Taxes collected" value={journal.taxesLabel} />
+                        <Row3 label="Settlement" value={journal.settlementLabel} />
+                        <div className="mt-1 border-t border-line pt-1">
+                          <Row3
+                            label="To guest / city ledger"
+                            value={journal.arMovementLabel}
+                            strong
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -402,6 +452,29 @@ export default function NightAuditPage() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Row3({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className={strong ? "font-semibold text-ice" : "text-fg-3"}>
+        {label}
+      </span>
+      <span
+        className={`font-mono ${strong ? "text-14 font-semibold text-ice" : ""}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

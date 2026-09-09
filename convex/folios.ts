@@ -5,6 +5,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { nightlyRateFor } from "./revenue";
 import { roomNightTaxes, chargeTaxes } from "./taxEngine";
+import { codeForPayment } from "./transactionCodes";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -298,7 +299,7 @@ export const recordPayment = mutation({
       propertyId: folio.propertyId,
       date: args.businessDate,
       kind: "payment",
-      code: `PAY-${args.method.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 10)}`,
+      code: codeForPayment(args.method),
       description: `Payment — ${args.method}`,
       amount: -amt,
       method: args.method,

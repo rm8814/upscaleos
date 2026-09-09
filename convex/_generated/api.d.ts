@@ -27,6 +27,7 @@ import type * as seed from "../seed.js";
 import type * as taxEngine from "../taxEngine.js";
 import type * as taxes from "../taxes.js";
 import type * as team from "../team.js";
+import type * as transactionCodes from "../transactionCodes.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   taxEngine: typeof taxEngine;
   taxes: typeof taxes;
   team: typeof team;
+  transactionCodes: typeof transactionCodes;
   waitlist: typeof waitlist;
 }>;
 

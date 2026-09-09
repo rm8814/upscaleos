@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { lookupCode, codeForKind } from "./transactionCodes";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 const addIso = (iso: string, n: number) => {
@@ -119,5 +120,71 @@ export const pickupSummary = query({
       });
     }
     return { latest, prev, rows };
+  },
+});
+
+/**
+ * Revenue journal for one business date: every folio posting grouped by
+ * transaction code / GL account, split into revenue, taxes collected and
+ * settlement (payments by method). `arMovement` is what landed on or came off
+ * the guest ledger — charges + tax not yet paid.
+ */
+export const revenueJournal = query({
+  args: { propertyId: v.id("properties"), date: v.string() },
+  handler: async (ctx, args) => {
+    const lines = (
+      await ctx.db
+        .query("folio_lines")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+        .collect()
+    ).filter((l) => l.date === args.date && !l.voided);
+
+    const byCode = new Map<
+      string,
+      { code: string; label: string; gl: string; type: string; amount: number; count: number }
+    >();
+    for (const l of lines) {
+      const code = l.code ?? codeForKind(l.kind);
+      const meta = lookupCode(code);
+      const row =
+        byCode.get(code) ??
+        {
+          code,
+          label: meta.label,
+          gl: meta.gl,
+          type: meta.type,
+          amount: 0,
+          count: 0,
+        };
+      row.amount += l.amount;
+      row.count += 1;
+      byCode.set(code, row);
+    }
+
+    const rows = [...byCode.values()].sort((a, b) => a.gl.localeCompare(b.gl));
+    const sum = (t: string) =>
+      rows.filter((r) => r.type === t).reduce((s, r) => s + r.amount, 0);
+
+    const revenue = sum("revenue");
+    const taxes = sum("tax");
+    const adjustments = sum("adjustment");
+    const settlement = -sum("payment") || 0; // payment amounts are negative; avoid -0
+    const totalCharges = revenue + taxes + adjustments;
+
+    const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+    return {
+      date: args.date,
+      rows: rows.map((r) => ({ ...r, amountLabel: money(r.amount) })),
+      revenue,
+      revenueLabel: money(revenue),
+      taxes,
+      taxesLabel: money(taxes),
+      settlement,
+      settlementLabel: money(settlement),
+      totalCharges,
+      totalChargesLabel: money(totalCharges),
+      arMovement: totalCharges - settlement,
+      arMovementLabel: money(totalCharges - settlement),
+    };
   },
 });

@@ -151,6 +151,7 @@ export default defineSchema({
     propertyId: v.id("properties"),
     date: v.string(), // business date the line posted for
     kind: v.string(), // 'room' | 'tax' | 'service' | 'fnb' | 'payment' | 'adjustment'
+    code: v.optional(v.string()), // transaction code (RM, TX-GOV, FB, PAY-CASH…)
     description: v.string(),
     amount: v.number(), // positive = charge, negative = payment / credit
     method: v.optional(v.string()), // payment method, for 'payment' lines

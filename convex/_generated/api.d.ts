@@ -24,6 +24,7 @@ import type * as properties from "../properties.js";
 import type * as reservations from "../reservations.js";
 import type * as revenue from "../revenue.js";
 import type * as seed from "../seed.js";
+import type * as taxEngine from "../taxEngine.js";
 import type * as taxes from "../taxes.js";
 import type * as team from "../team.js";
 import type * as waitlist from "../waitlist.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   reservations: typeof reservations;
   revenue: typeof revenue;
   seed: typeof seed;
+  taxEngine: typeof taxEngine;
   taxes: typeof taxes;
   team: typeof team;
   waitlist: typeof waitlist;

@@ -951,7 +951,12 @@ function NewReservationModal({
   const quote = useQuery(
     api.revenue.getStayQuote,
     validRange
-      ? { roomType: f.roomType, checkIn: f.checkIn, checkOut: f.checkOut }
+      ? {
+          roomType: f.roomType,
+          checkIn: f.checkIn,
+          checkOut: f.checkOut,
+          propertyId,
+        }
       : "skip"
   );
   const available = useQuery(

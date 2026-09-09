@@ -1,5 +1,6 @@
 import { internalMutation } from "./_generated/server";
 import { nightlyRateFor } from "./revenue";
+import { roomNightTaxes } from "./taxEngine";
 
 /**
  * Wipes and reseeds the demo property. Idempotent — safe to run repeatedly.
@@ -527,23 +528,30 @@ export const seed = internalMutation({
         d <= lastNight && d <= businessDateIso;
         d = iso(addDays(new Date(d + "T00:00:00Z"), 1))
       ) {
-        const roomRate = nightlyRateFor(r.roomType, d);
+        const gross = nightlyRateFor(r.roomType, d);
+        const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {
+          firstNight: d === r.checkIn,
+        });
         await ctx.db.insert("folio_lines", {
           folioId,
           propertyId,
           date: d,
           kind: "room",
+          code: "RM",
           description: `Room — ${r.roomType} · night of ${d}`,
-          amount: roomRate,
+          amount: roomNet,
         });
-        await ctx.db.insert("folio_lines", {
-          folioId,
-          propertyId,
-          date: d,
-          kind: "tax",
-          description: "Service + government tax (21%)",
-          amount: Math.round(roomRate * 0.21),
-        });
+        for (const t of taxLines) {
+          await ctx.db.insert("folio_lines", {
+            folioId,
+            propertyId,
+            date: d,
+            kind: "tax",
+            code: t.code,
+            description: t.name,
+            amount: t.amount,
+          });
+        }
       }
     }
 

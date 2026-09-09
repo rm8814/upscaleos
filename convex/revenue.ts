@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { authorize } from "./authz";
+import { roomNightTaxes } from "./taxEngine";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -132,14 +133,37 @@ export const getRates = query({
 
 /** Priced quote for a stay: per-night rates, subtotal, tax and total. */
 export const getStayQuote = query({
-  args: { roomType: v.string(), checkIn: v.string(), checkOut: v.string() },
-  handler: (_ctx, args) => {
+  args: {
+    roomType: v.string(),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    propertyId: v.optional(v.id("properties")),
+  },
+  handler: async (ctx, args) => {
     const nights: { date: string; rate: number }[] = [];
     for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
       nights.push({ date: d, rate: nightlyRateFor(args.roomType, d) });
     }
     const subtotal = nights.reduce((s, n) => s + n.rate, 0);
-    const tax = Math.round(subtotal * TAX_RATE);
+
+    let tax: number;
+    if (args.propertyId) {
+      const taxRows = await ctx.db
+        .query("taxes")
+        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId!))
+        .collect();
+      tax = nights.reduce(
+        (s, n, i) =>
+          s +
+          roomNightTaxes(taxRows, n.rate, { firstNight: i === 0 }).taxLines.reduce(
+            (a, t) => a + t.amount,
+            0
+          ),
+        0
+      );
+    } else {
+      tax = Math.round(subtotal * TAX_RATE);
+    }
     return {
       nights,
       nightCount: nights.length,

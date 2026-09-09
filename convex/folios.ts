@@ -4,9 +4,16 @@ import { authorize } from "./authz";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { nightlyRateFor } from "./revenue";
+import { roomNightTaxes, chargeTaxes } from "./taxEngine";
 
-const TAX_RATE = 0.21; // 11% government + 10% service
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
+
+async function propertyTaxes(ctx: QueryCtx, propertyId: Id<"properties">) {
+  return ctx.db
+    .query("taxes")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+}
 
 const addDaysIso = (iso: string, n: number) => {
   const d = new Date(iso + "T00:00:00Z");
@@ -39,23 +46,32 @@ async function postNight(
     .collect();
   if (existing.some((l) => l.kind === "room" && l.date === date)) return;
 
-  const room = nightlyRateFor(res.roomType ?? "", date);
+  const gross = nightlyRateFor(res.roomType ?? "", date);
+  const taxes = await propertyTaxes(ctx, folio.propertyId);
+  const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {
+    firstNight: date === res.checkIn,
+  });
+
   await ctx.db.insert("folio_lines", {
     folioId: folio._id,
     propertyId: folio.propertyId,
     date,
     kind: "room",
+    code: "RM",
     description: `Room — ${res.roomType ?? "Room"} · night of ${date}`,
-    amount: room,
+    amount: roomNet,
   });
-  await ctx.db.insert("folio_lines", {
-    folioId: folio._id,
-    propertyId: folio.propertyId,
-    date,
-    kind: "tax",
-    description: "Service + government tax (21%)",
-    amount: Math.round(room * TAX_RATE),
-  });
+  for (const t of taxLines) {
+    await ctx.db.insert("folio_lines", {
+      folioId: folio._id,
+      propertyId: folio.propertyId,
+      date,
+      kind: "tax",
+      code: t.code,
+      description: t.name,
+      amount: t.amount,
+    });
+  }
 }
 
 /**
@@ -282,6 +298,7 @@ export const recordPayment = mutation({
       propertyId: folio.propertyId,
       date: args.businessDate,
       kind: "payment",
+      code: `PAY-${args.method.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 10)}`,
       description: `Payment — ${args.method}`,
       amount: -amt,
       method: args.method,
@@ -309,16 +326,34 @@ export const postCharge = mutation({
     });
     const amt = Math.abs(Math.round(args.amount));
     if (!amt) throw new Error("Amount must be greater than zero");
+    const kind = (args.kind ?? "fnb") as "fnb" | "service";
+    const taxes = await propertyTaxes(ctx, folio.propertyId);
+    const { net, taxLines } = chargeTaxes(taxes, amt, kind);
+
     await ctx.db.insert("folio_lines", {
       folioId: folio._id,
       propertyId: folio.propertyId,
       date: args.businessDate,
-      kind: args.kind ?? "fnb",
+      kind,
+      code: kind === "fnb" ? "FB" : "SV",
       description: args.description,
-      amount: amt,
+      amount: net,
       source: args.source,
       postedAt: Date.now(),
     });
+    for (const t of taxLines) {
+      await ctx.db.insert("folio_lines", {
+        folioId: folio._id,
+        propertyId: folio.propertyId,
+        date: args.businessDate,
+        kind: "tax",
+        code: t.code,
+        description: t.name,
+        amount: t.amount,
+        source: args.source,
+        postedAt: Date.now(),
+      });
+    }
   },
 });
 

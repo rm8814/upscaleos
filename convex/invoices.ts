@@ -2,7 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { authorize } from "./authz";
+import { authorize, writeAudit } from "./authz";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -117,11 +117,18 @@ export const issue = mutation({
       )
       .first();
     if (!folio) throw new Error("No folio for that reservation");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: folio.propertyId,
       requireProperty: "front_office",
     });
-    return issueInvoiceForFolio(ctx, folio._id);
+    const id = await issueInvoiceForFolio(ctx, folio._id);
+    const inv = id ? await ctx.db.get(id) : null;
+    await writeAudit(ctx, scope, "invoice.issue", {
+      propertyId: folio.propertyId,
+      target: inv?.number,
+      detail: inv ? money(inv.total) : undefined,
+    });
+    return id;
   },
 });
 
@@ -130,7 +137,7 @@ export const voidInvoice = mutation({
   handler: async (ctx, args) => {
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv) throw new Error("Invoice not found");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: inv.propertyId,
       requireProperty: "gm",
     });
@@ -138,6 +145,11 @@ export const voidInvoice = mutation({
     await ctx.db.patch(args.invoiceId, {
       status: "void",
       voidReason: args.reason,
+    });
+    await writeAudit(ctx, scope, "invoice.void", {
+      propertyId: inv.propertyId,
+      target: inv.number,
+      detail: args.reason,
     });
   },
 });
@@ -148,7 +160,10 @@ export const creditNote = mutation({
   handler: async (ctx, args) => {
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv) throw new Error("Invoice not found");
-    await authorize(ctx, { propertyId: inv.propertyId, requireProperty: "gm" });
+    const scope = await authorize(ctx, {
+      propertyId: inv.propertyId,
+      requireProperty: "gm",
+    });
     if (inv.status === "credit_note")
       throw new Error("Can't credit a credit note");
 
@@ -157,7 +172,7 @@ export const creditNote = mutation({
       inv.propertyId,
       inv.year
     );
-    return ctx.db.insert("invoices", {
+    const cnId = await ctx.db.insert("invoices", {
       propertyId: inv.propertyId,
       number,
       year: inv.year,
@@ -177,6 +192,12 @@ export const creditNote = mutation({
       balance: -inv.balance,
       lines: inv.lines.map((l) => ({ ...l, amount: -l.amount })),
     });
+    await writeAudit(ctx, scope, "invoice.credit_note", {
+      propertyId: inv.propertyId,
+      target: `${number} (for ${inv.number})`,
+      detail: args.reason,
+    });
+    return cnId;
   },
 });
 

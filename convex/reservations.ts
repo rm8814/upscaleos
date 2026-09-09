@@ -9,7 +9,7 @@ import {
   reverseFolioCharges,
   reconcileFolioToStay,
 } from "./folios";
-import { authorize } from "./authz";
+import { authorize, writeAudit } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
 import { quoteStay } from "./rates";
 import { RELEASED_STATUSES, READY_ROOM_STATUSES } from "./occupancy";
@@ -221,7 +221,7 @@ export const create = mutation({
     corporateAgreementId: v.optional(v.id("corporate_agreements")),
   },
   handler: async (ctx, args) => {
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: args.propertyId,
       requireProperty: "front_office",
     });
@@ -259,7 +259,7 @@ export const create = mutation({
       checkOut: args.checkOut,
       corporateAgreementId: args.corporateAgreementId,
     });
-    return await ctx.db.insert("reservations", {
+    const id = await ctx.db.insert("reservations", {
       guestId,
       propertyId: args.propertyId,
       roomId,
@@ -276,6 +276,12 @@ export const create = mutation({
       roomAutoAssigned,
       corporateAccountId: args.corporateAgreementId,
     });
+    await writeAudit(ctx, scope, "reservation.create", {
+      propertyId: args.propertyId,
+      target: args.guestName,
+      detail: `${args.roomType} · ${args.checkIn}→${args.checkOut} · ${args.channel}`,
+    });
+    return id;
   },
 });
 
@@ -289,7 +295,7 @@ export const updateDates = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return;
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: res.propertyId,
       requireProperty: "front_office",
     });
@@ -336,6 +342,15 @@ export const updateDates = mutation({
         repriceExisting: typeChanged,
       });
     }
+    if (typeChanged || datesChanged) {
+      await writeAudit(ctx, scope, "reservation.dates", {
+        propertyId: res.propertyId,
+        target: (await ctx.db.get(res.guestId))?.name,
+        detail: `${res.checkIn}→${res.checkOut} ⇒ ${args.checkIn}→${args.checkOut}${
+          typeChanged ? ` · ${res.roomType}→${effectiveType}` : ""
+        }`,
+      });
+    }
   },
 });
 
@@ -344,7 +359,7 @@ export const setStatus = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) return;
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: res.propertyId,
       requireProperty: "front_office",
     });
@@ -394,6 +409,18 @@ export const setStatus = mutation({
     else if (next === "cancelled") {
       await reverseFolioCharges(ctx, args.id, bd);
     }
+
+    const verb =
+      next === "inhouse" && prev !== "inhouse"
+        ? "check-in"
+        : next === "departed" && prev === "inhouse"
+          ? "check-out"
+          : `${prev}→${next}`;
+    await writeAudit(ctx, scope, "reservation.status", {
+      propertyId: res.propertyId,
+      target: (await ctx.db.get(res.guestId))?.name,
+      detail: verb,
+    });
   },
 });
 
@@ -406,7 +433,7 @@ export const setCorporate = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.id);
     if (!res) throw new Error("Reservation not found");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: res.propertyId,
       requireProperty: "front_office",
     });
@@ -427,6 +454,15 @@ export const setCorporate = mutation({
     });
     const bd = await businessDate(ctx, res.propertyId);
     await reconcileFolioToStay(ctx, args.id, bd, { repriceExisting: true });
+
+    const agreement = args.corporateAgreementId
+      ? await ctx.db.get(args.corporateAgreementId)
+      : null;
+    await writeAudit(ctx, scope, "reservation.corporate", {
+      propertyId: res.propertyId,
+      target: (await ctx.db.get(res.guestId))?.name,
+      detail: agreement ? `linked ${agreement.accountName}` : "unlinked",
+    });
   },
 });
 

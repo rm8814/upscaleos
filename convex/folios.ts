@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { authorize } from "./authz";
+import { authorize, writeAudit } from "./authz";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { roomNightTaxes, chargeTaxes } from "./taxEngine";
@@ -349,7 +349,7 @@ export const recordPayment = mutation({
   handler: async (ctx, args) => {
     const res = await ctx.db.get(args.reservationId);
     if (!res) throw new Error("Reservation not found");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: res.propertyId,
       requireProperty: "front_office",
     });
@@ -383,6 +383,13 @@ export const recordPayment = mutation({
       method: args.method,
       postedAt: Date.now(),
     });
+    await writeAudit(ctx, scope, "folio.payment", {
+      propertyId: res.propertyId,
+      target: (await ctx.db.get(res.guestId))?.name,
+      detail: `${money(amt)} · ${args.method}${
+        folio.ledger === "deposit" ? " · deposit" : ""
+      }`,
+    });
   },
 });
 
@@ -399,7 +406,7 @@ export const postCharge = mutation({
   handler: async (ctx, args) => {
     const folio = await folioForReservation(ctx, args.reservationId);
     if (!folio) throw new Error("No folio for that reservation");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: folio.propertyId,
       requireProperty: "front_office",
     });
@@ -433,6 +440,11 @@ export const postCharge = mutation({
         postedAt: Date.now(),
       });
     }
+    await writeAudit(ctx, scope, "folio.charge", {
+      propertyId: folio.propertyId,
+      target: args.description,
+      detail: `${money(amt)}${args.source ? ` · ${args.source}` : ""}`,
+    });
   },
 });
 
@@ -442,10 +454,15 @@ export const voidLine = mutation({
   handler: async (ctx, args) => {
     const line = await ctx.db.get(args.lineId);
     if (!line) throw new Error("Line not found");
-    await authorize(ctx, {
+    const scope = await authorize(ctx, {
       propertyId: line.propertyId,
       requireProperty: "front_office",
     });
     await ctx.db.patch(args.lineId, { voided: true });
+    await writeAudit(ctx, scope, "folio.void", {
+      propertyId: line.propertyId,
+      target: line.description,
+      detail: money(line.amount),
+    });
   },
 });

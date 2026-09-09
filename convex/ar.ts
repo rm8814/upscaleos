@@ -2,7 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { authorize } from "./authz";
+import { authorize, writeAudit } from "./authz";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 const daysBetween = (a: string, b: string) =>
@@ -184,7 +184,10 @@ export const recordPayment = mutation({
   handler: async (ctx, args) => {
     const acc = await ctx.db.get(args.accountId);
     if (!acc) throw new Error("Account not found");
-    await authorize(ctx, { propertyId: acc.propertyId, requireProperty: "gm" });
+    const scope = await authorize(ctx, {
+      propertyId: acc.propertyId,
+      requireProperty: "gm",
+    });
     const amt = Math.abs(Math.round(args.amount));
     if (!amt) throw new Error("Amount must be greater than zero");
     const today = await businessDate(ctx, acc.propertyId);
@@ -199,6 +202,11 @@ export const recordPayment = mutation({
       description: `Payment received — ${args.method}`,
       ref: `PMT-${3400 + count}`,
       amount: -amt,
+    });
+    await writeAudit(ctx, scope, "ar.payment", {
+      propertyId: acc.propertyId,
+      target: acc.name,
+      detail: `${money(amt)} · ${args.method}`,
     });
   },
 });

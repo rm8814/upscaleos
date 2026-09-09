@@ -367,6 +367,83 @@ export const seed = internalMutation({
       void resId;
     }
 
+    // ---- forward booking pace ----------------------------------
+    //   Fill the next 20 stay dates so the dashboard outlook, reports pace
+    //   / forecast and the pickup curve show a realistic tapering shape
+    //   instead of collapsing to zero a week out.
+    const sellableForPace = roomRows.filter(
+      (r) => r.status !== "OOO" && r.status !== "OOS"
+    );
+    const usedByDate = new Map<string, Set<string>>();
+    // pre-load the rooms already committed by the bookings above
+    for (
+      let k = 0;
+      k <= 24;
+      k++
+    ) {
+      const d = iso(addDays(TODAY, k));
+      usedByDate.set(d, new Set());
+    }
+    const existingRes = await ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect();
+    for (const r of existingRes) {
+      if (!r.roomId) continue;
+      for (let d = r.checkIn; d < r.checkOut; d = iso(addDays(new Date(d + "T00:00:00Z"), 1))) {
+        usedByDate.get(d)?.add(r.roomId);
+      }
+    }
+
+    let paceGuest = 0;
+    for (let k = 1; k <= 20; k++) {
+      const arrDate = addDays(TODAY, k);
+      const arrIso = iso(arrDate);
+      const targetOcc = Math.max(0.3, 0.72 - k * 0.02);
+      const target = Math.round(sellableForPace.length * targetOcc);
+      const covered = [...usedByDate.get(arrIso)!].length;
+      let toAdd = target - covered;
+      for (const room of sellableForPace) {
+        if (toAdd <= 0) break;
+        if (usedByDate.get(arrIso)!.has(room._id)) continue;
+        const nights = 1 + ((k + paceGuest) % 3);
+        // don't create a stay that runs past our tracked window / collides
+        let ok = true;
+        for (let n = 0; n < nights; n++) {
+          const nd = iso(addDays(arrDate, n));
+          if (!usedByDate.has(nd) || usedByDate.get(nd)!.has(room._id)) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) continue;
+        const checkOutIso = iso(addDays(arrDate, nights));
+        const rate = nightlyByType[room.type] ?? "Rp 1,850,000";
+        const rupiah = Number(rate.replace(/[^\d]/g, ""));
+        const status = k <= 6 ? "confirmed" : paceGuest % 3 === 0 ? "tentative" : "confirmed";
+        await ctx.db.insert("reservations", {
+          guestId: guestIds[paceGuest % guestIds.length],
+          propertyId,
+          roomId: room._id,
+          checkIn: arrIso,
+          checkOut: checkOutIso,
+          status,
+          rate,
+          totalAmount: `Rp ${(rupiah * nights).toLocaleString("en-US")}`,
+          channel: channels[paceGuest % channels.length],
+          roomNumber: room.roomNumber,
+          roomType: room.type,
+          adults: 1 + (paceGuest % 3),
+          children: paceGuest % 5 === 0 ? 1 : 0,
+        });
+        for (let n = 0; n < nights; n++) {
+          usedByDate.get(iso(addDays(arrDate, n)))!.add(room._id);
+        }
+        toAdd -= 1;
+        paceGuest += 1;
+      }
+    }
+
     // ---- corporate agreements + negotiated-rate tagging ----------
     // (before the folio pass, so tagged folios post at the negotiated rate)
     const corporates = [
@@ -387,7 +464,8 @@ export const seed = internalMutation({
     ).filter(
       (r) =>
         r.roomType === "King Suite" &&
-        (r.status === "inhouse" || r.status === "confirmed")
+        (r.status === "inhouse" || r.status === "confirmed") &&
+        r.checkIn <= iso(addDays(TODAY, 4)) // near-term stays only
     );
     // ---- distribution channel terms (OTA commission) ------------
     const channelTerms = [

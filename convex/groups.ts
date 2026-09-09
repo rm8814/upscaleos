@@ -6,6 +6,7 @@ import { authorize, writeAudit } from "./authz";
 import { parseRp, quoteStay } from "./rates";
 import { reconcileFolioToStay } from "./folios";
 import { RELEASED_STATUSES, roomCountsByType } from "./occupancy";
+import { buildRateGrid } from "./rates";
 
 const rpNum = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -409,6 +410,87 @@ export const get = query({
     const guaranteed = Math.round(blocked * (g.guaranteedPct ?? 1));
     const attritionShortfall = Math.max(0, guaranteed - projectedPickup);
 
+    // ---- P&L: what the block is worth vs. selling those rooms transient ----
+    const windowDates: string[] = [];
+    for (let n = 0; n < g.nights; n++)
+      windowDates.push(addDaysIso(g.startDate, n));
+    const bar = await buildRateGrid(
+      ctx,
+      g.propertyId,
+      g.startDate,
+      addDaysIso(g.startDate, g.nights)
+    );
+    const barAt = new Map(
+      bar.map((c) => [`${c.roomType}|${c.date}`, c.rate])
+    );
+    const allRes = await ctx.db
+      .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", g.propertyId))
+      .collect();
+    const sellableByType = roomCountsByType(
+      await ctx.db
+        .query("rooms")
+        .withIndex("by_property", (q) => q.eq("propertyId", g.propertyId))
+        .collect()
+    ).sellable;
+
+    let groupRoomRevenue = 0;
+    let displacedRoomNights = 0;
+    let displacementCost = 0; // BAR - group rate on nights we'd have sold
+    let barBlended = 0;
+    let barCells = 0;
+    for (const s of subs) {
+      const grpRate = parseRp(s.rate);
+      const sp = pickedByType.get(s.roomType) ?? 0;
+      groupRoomRevenue += sp * g.nights * grpRate;
+      const cap = sellableByType.get(s.roomType) ?? 0;
+      const held = g.released === true ? 0 : Math.max(0, s.blocked - sp);
+      for (const date of windowDates) {
+        const barRate = barAt.get(`${s.roomType}|${date}`) ?? grpRate;
+        barBlended += barRate;
+        barCells += 1;
+        const transient = allRes.filter(
+          (r) =>
+            (r.roomType ?? "") === s.roomType &&
+            !r.groupId &&
+            !RELEASED_STATUSES.has(r.status) &&
+            r.checkIn <= date &&
+            r.checkOut > date
+        ).length;
+        // if transient demand alone would fill ≥75% of the type, every held
+        // room is displacing a sale we'd otherwise have made at BAR.
+        if (cap > 0 && transient / cap >= 0.75) {
+          displacedRoomNights += held;
+          displacementCost += held * Math.max(0, barRate - grpRate);
+        }
+      }
+    }
+    const avgBar = barCells ? Math.round(barBlended / barCells) : 0;
+    const compCost =
+      Math.floor(blocked / 25) * avgBar * g.nights; // 1 comp per 25 rooms
+    const roomNights = picked * g.nights;
+    const netContribution =
+      groupRoomRevenue +
+      (g.fbMinimum ?? 0) -
+      compCost -
+      displacementCost;
+    const pnl = {
+      roomNights,
+      roomRevenue: groupRoomRevenue,
+      roomRevenueLabel: rpNum(groupRoomRevenue),
+      adr: roomNights ? Math.round(groupRoomRevenue / roomNights) : 0,
+      adrLabel: rpNum(roomNights ? groupRoomRevenue / roomNights : 0),
+      fbMinimum: g.fbMinimum ?? 0,
+      fbMinimumLabel: rpNum(g.fbMinimum ?? 0),
+      compCost,
+      compCostLabel: rpNum(compCost),
+      displacedRoomNights,
+      displacementCost,
+      displacementCostLabel: rpNum(displacementCost),
+      netContribution,
+      netContributionLabel: rpNum(netContribution),
+    };
+
     // Master A/R account: charges, deposits/payments, outstanding.
     const arAcc = (
       await ctx.db
@@ -469,6 +551,7 @@ export const get = query({
       cutoffDays,
       guaranteed,
       attritionShortfall,
+      pnl,
       subBlocks: subs.map((s) => {
         const sp = pickedByType.get(s.roomType) ?? 0;
         return {

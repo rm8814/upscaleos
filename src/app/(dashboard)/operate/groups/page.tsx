@@ -343,6 +343,46 @@ export default function GroupsBlocksPage() {
                   )}
                 </Card>
 
+                <Card className="p-3.5">
+                  <Eyebrow className="mb-2">Block P&amp;L</Eyebrow>
+                  <div className="flex flex-col gap-1 text-[12.5px]">
+                    <Line
+                      k={`Room revenue · ${g.pnl.roomNights} rn @ ${g.pnl.adrLabel}`}
+                      v={g.pnl.roomRevenueLabel}
+                    />
+                    <Line k="F&B / meeting minimum" v={g.pnl.fbMinimumLabel} />
+                    <Line
+                      k="Comp rooms (1 per 25)"
+                      v={`(${g.pnl.compCostLabel})`}
+                      muted
+                    />
+                    <Line
+                      k={`Displaced transient · ${g.pnl.displacedRoomNights} rn`}
+                      v={`(${g.pnl.displacementCostLabel})`}
+                      muted
+                    />
+                    <div className="mt-1 flex justify-between border-t border-line-soft pt-1 font-semibold">
+                      <span>Net contribution</span>
+                      <span
+                        className="font-mono"
+                        style={{
+                          color:
+                            g.pnl.netContribution >= 0
+                              ? "var(--accent-cyan)"
+                              : "var(--room-ooo)",
+                        }}
+                      >
+                        {g.pnl.netContributionLabel}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[10.5px] text-fg-4">
+                      Displacement counts held rooms on nights transient demand
+                      alone would fill ≥ 75% of the type, valued at BAR − group
+                      rate.
+                    </div>
+                  </div>
+                </Card>
+
                 <div>
                   <Eyebrow className="mb-2">Sub-blocks</Eyebrow>
                   <Card className="overflow-hidden p-0">
@@ -716,5 +756,14 @@ function NewBlockModal({
         </div>
       </div>
     </>
+  );
+}
+
+function Line({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-fg-3">{k}</span>
+      <span className={`font-mono ${muted ? "text-fg-3" : "text-fg-1"}`}>{v}</span>
+    </div>
   );
 }

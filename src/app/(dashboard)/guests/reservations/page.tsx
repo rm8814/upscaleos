@@ -73,18 +73,24 @@ function ReservationListInner() {
     await assignRooms({ propertyId: activeProperty._id });
     setAssigning(false);
   };
+  const RELEASED = new Set(["cancelled", "departed", "no_show"]);
+  const isArrival = (r: (typeof list)[number]) =>
+    r.checkIn === TODAY && !RELEASED.has(r.status);
+  const isDeparture = (r: (typeof list)[number]) =>
+    r.checkOut === TODAY && r.status !== "cancelled" && r.status !== "no_show";
+
   const tabCounts = {
-    arrivals: list.filter((r) => r.checkIn === TODAY).length,
+    arrivals: list.filter(isArrival).length,
     inhouse: list.filter((r) => r.status === "inhouse").length,
-    departures: list.filter((r) => r.checkOut === TODAY).length,
+    departures: list.filter(isDeparture).length,
     all: list.length,
   };
 
   const filtered = useMemo(() => {
     let rows = list;
-    if (tab === "arrivals") rows = rows.filter((r) => r.checkIn === TODAY);
+    if (tab === "arrivals") rows = rows.filter(isArrival);
     if (tab === "inhouse") rows = rows.filter((r) => r.status === "inhouse");
-    if (tab === "departures") rows = rows.filter((r) => r.checkOut === TODAY);
+    if (tab === "departures") rows = rows.filter(isDeparture);
     if (search)
       rows = rows.filter(
         (r) =>

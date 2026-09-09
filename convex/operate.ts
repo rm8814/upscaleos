@@ -671,8 +671,12 @@ export const getDashboardStats = query({
       occupancyPct: occupancyPct(occupied, sellable),
       dirty: rooms.filter((r) => r.status === "Vacant Dirty").length,
       ooo: rooms.filter((r) => r.status === "OOO").length,
-      arrivalsToday: reservations.filter((r) => r.checkIn === today).length,
-      departuresToday: reservations.filter((r) => r.checkOut === today).length,
+      arrivalsToday: reservations.filter(
+        (r) => r.checkIn === today && !RELEASED_STATUSES.has(r.status)
+      ).length,
+      departuresToday: reservations.filter(
+        (r) => r.checkOut === today && r.status !== "cancelled" && r.status !== "no_show"
+      ).length,
       inHouse,
       openTickets: tickets.filter((t) => t.status !== "Resolved").length,
       businessDate: today,

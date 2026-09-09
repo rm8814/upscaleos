@@ -194,7 +194,9 @@ export const getArrivalsToday = query({
       .collect();
     return joinGuestAndRoom(
       ctx,
-      rows.filter((r) => r.checkIn === today)
+      rows.filter(
+        (r) => r.checkIn === today && !RELEASED_STATUSES.has(r.status)
+      )
     );
   },
 });

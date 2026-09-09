@@ -1,5 +1,5 @@
 import { internalMutation } from "./_generated/server";
-import { nightlyRateFor } from "./revenue";
+import { nightlyRateFor } from "./rateModel";
 import { roomNightTaxes } from "./taxEngine";
 import { issueInvoiceForFolio } from "./invoices";
 

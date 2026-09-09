@@ -58,19 +58,7 @@ const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const money = (n: number) => Math.round(n).toLocaleString("en-US");
 
-// Mirrors convex/revenue.ts nightlyRateFor so the grid matches booking prices.
-function seasonMult(d: Date): number {
-  const m = d.getUTCMonth() + 1;
-  const day = d.getUTCDate();
-  if ((m === 12 && day >= 20) || (m === 1 && day <= 5)) return 1.35;
-  if (m >= 7 && m <= 9) return 1.15;
-  if (m === 2 || m === 3) return 0.85;
-  if (m >= 4 && m <= 6) return 1.0;
-  return 1.05;
-}
-function rackRate(base: number, d: Date): number {
-  return Math.round(base * (DOW_MULT[d.getUTCDay()] ?? 1) * seasonMult(d));
-}
+// Rates come from api.rates.getRatesGrid — the grid does no rate math itself.
 const dm = (d: Date) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const queueDate = (iso: string, offset: number) => {
@@ -123,31 +111,33 @@ export default function RatesPage() {
     [days, todayIso]
   );
 
-  // Dynamic-pricing toggles, persisted per stay date.
-  const adjustments = useQuery(
-    api.rates.getAdjustments,
+  // The whole grid — effective rate + which rule produced it — from Convex.
+  // The page does no rate math of its own.
+  const grid = useQuery(
+    api.rates.getRatesGrid,
     activeProperty
       ? { propertyId: activeProperty._id, from: todayIso, to: windowTo }
       : "skip"
   );
-  const setDynamic = useMutation(api.rates.setDynamic);
+  const cell = useMemo(() => {
+    const m = new Map<
+      string,
+      { rate: number; source: "rack" | "dynamic" | "manual" }
+    >();
+    for (const c of grid ?? [])
+      m.set(`${c.roomType}|${c.date}`, { rate: c.rate, source: c.source });
+    return m;
+  }, [grid]);
   const dynamicDates = useMemo(
-    () => new Set((adjustments ?? []).map((a) => a.date)),
-    [adjustments]
+    () =>
+      new Set(
+        (grid ?? []).filter((c) => c.source === "dynamic").map((c) => c.date)
+      ),
+    [grid]
   );
 
-  const overrides = useQuery(
-    api.rates.getOverrides,
-    activeProperty
-      ? { propertyId: activeProperty._id, from: todayIso, to: windowTo }
-      : "skip"
-  );
+  const setDynamic = useMutation(api.rates.setDynamic);
   const setManualRate = useMutation(api.rates.setManualRate);
-  const overrideMap = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const o of overrides ?? []) m.set(`${o.roomType}|${o.date}`, o.amount);
-    return m;
-  }, [overrides]);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -303,14 +293,12 @@ export default function RatesPage() {
                   </div>
                   {days.map((d, i) => {
                     const dayIsoTop = iso(d);
-                    const dyn = dynamicDates.has(dayIsoTop);
                     const dow = d.getUTCDay();
-                    const rackVal = rackRate(rt.base, d);
                     const cellKey = `${rt.name}|${dayIsoTop}`;
-                    const manual = overrideMap.get(cellKey);
-                    const rate = dyn
-                      ? rackVal * 1.06
-                      : (manual ?? rackVal);
+                    const c = cell.get(cellKey);
+                    const rate = c?.rate ?? 0;
+                    const dyn = c?.source === "dynamic";
+                    const manual = c?.source === "manual";
                     const demand =
                       DOW_MULT[dow] >= 1.25 ? "high" : DOW_MULT[dow] <= 0.95 ? "low" : "mid";
                     const dayIso = iso(d);
@@ -368,12 +356,12 @@ export default function RatesPage() {
                             className="rounded-[3px] px-1 font-mono text-[11px] font-semibold hover:bg-fg-1/[0.08]"
                             style={{
                               color:
-                                manual !== undefined
+                                manual
                                   ? "var(--accent-cyan)"
                                   : "var(--fg-1)",
                             }}
                             title={
-                              manual !== undefined
+                              manual
                                 ? "Manual rate — click to edit, clear to reset"
                                 : "Click to set a manual rate"
                             }

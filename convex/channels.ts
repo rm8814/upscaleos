@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assignPropertyRooms, findOrCreateGuest } from "./reservations";
-import { nightlyRateFor } from "./revenue";
+import { quoteStay } from "./rates";
 import { authorize } from "./authz";
 
 const addDaysIso = (iso: string, n: number) => {
@@ -12,13 +12,6 @@ const addDaysIso = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 const fmtRp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
-const stayTotal = (roomType: string, checkIn: string, checkOut: string) => {
-  let t = 0;
-  for (let d = checkIn; d < checkOut; d = addDaysIso(d, 1)) {
-    t += nightlyRateFor(roomType, d);
-  }
-  return t || nightlyRateFor(roomType, checkIn);
-};
 
 const ROOM_TYPES = [
   "Deluxe Twin",
@@ -62,15 +55,20 @@ async function ingestOne(ctx: MutationCtx, args: IngestArgs) {
     args.email,
     args.phone
   );
-  const total = stayTotal(args.roomType, args.checkIn, args.checkOut);
+  const q = await quoteStay(ctx, {
+    propertyId: args.propertyId,
+    roomType: args.roomType,
+    checkIn: args.checkIn,
+    checkOut: args.checkOut,
+  });
   const reservationId = await ctx.db.insert("reservations", {
     guestId,
     propertyId: args.propertyId,
     checkIn: args.checkIn,
     checkOut: args.checkOut,
     status: "confirmed",
-    rate: fmtRp(nightlyRateFor(args.roomType, args.checkIn)),
-    totalAmount: fmtRp(total),
+    rate: fmtRp(q.nights[0]?.rate ?? 0),
+    totalAmount: fmtRp(q.total),
     channel: args.channel,
     roomType: args.roomType,
     adults: args.adults ?? 2,

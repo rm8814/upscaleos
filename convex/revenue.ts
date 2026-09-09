@@ -3,75 +3,45 @@ import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { authorize } from "./authz";
-import { roomNightTaxes } from "./taxEngine";
-import { applyRateRules } from "./rates";
+import { nightlyRateFor, addDaysIso, money } from "./rateModel";
+import { effectiveNightlyRate, loadRateRules, quoteStay } from "./rates";
+
+// Re-exported for callers that historically priced against the rack rate.
+// New code should use rates.effectiveNightlyRate / rates.quoteStay.
+export { nightlyRateFor };
 
 const FALLBACK_TODAY = "2026-09-08";
-
-// Rate model: base per room type × day-of-week factor × season factor.
-const BASE: Record<string, number> = {
-  "Deluxe Twin": 1_450_000,
-  "Double Queen": 1_850_000,
-  "King Suite": 2_600_000,
-  "Presidential Suite": 6_900_000,
-};
-const NIGHTLY = BASE; // legacy alias used by the KPI code below
-const DOW_MULT = [0.9, 0.92, 0.95, 1.0, 1.08, 1.25, 1.3]; // Sun..Sat
-const TAX_RATE = 0.21;
-
-function seasonMult(iso: string): number {
-  const [, mStr, dStr] = iso.split("-");
-  const m = Number(mStr);
-  const d = Number(dStr);
-  if ((m === 12 && d >= 20) || (m === 1 && d <= 5)) return 1.35; // peak
-  if (m >= 7 && m <= 9) return 1.15; // high
-  if (m === 2 || m === 3) return 0.85; // low
-  if (m >= 4 && m <= 6) return 1.0; // shoulder
-  return 1.05;
-}
-
-/** The rack nightly rate for a room type on a given date. */
-export function nightlyRateFor(roomType: string, iso: string): number {
-  const base = BASE[roomType] ?? 1_850_000;
-  const dow = new Date(iso + "T00:00:00Z").getUTCDay();
-  return Math.round(base * (DOW_MULT[dow] ?? 1) * seasonMult(iso));
-}
 
 async function businessDate(ctx: QueryCtx, propertyId: Id<"properties">) {
   const p = await ctx.db.get(propertyId);
   return p?.businessDate ?? FALLBACK_TODAY;
 }
 
-const addDaysIso = (iso: string, delta: number) => {
-  const d = new Date(iso + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-};
-const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
-const nightlyRate = (r: Doc<"reservations">) => {
-  const parsed = Number((r.rate ?? "").replace(/[^\d]/g, ""));
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  return NIGHTLY[r.roomType ?? ""] ?? 1_850_000;
-};
 const pctDelta = (cur: number, prev: number) =>
   prev > 0 ? ((cur - prev) / prev) * 100 : null;
 const fmtDelta = (d: number | null) =>
   d === null ? "—" : `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
 
-/** Room revenue / rooms sold / availability across a set of stay-nights. */
+/**
+ * Room revenue / rooms sold / availability across a set of stay-nights.
+ * Occupancy basis matches daily_stats: a reservation counts only if it holds a
+ * room. Revenue uses the effective nightly rate (same resolver as the folio),
+ * not the string cached on the reservation.
+ */
 function windowStats(
   reservations: Doc<"reservations">[],
   sellableRooms: number,
-  nights: string[]
+  nights: string[],
+  rate: (roomType: string, date: string) => number
 ) {
   let roomsSold = 0;
   let roomRevenue = 0;
   for (const d of nights) {
     for (const r of reservations) {
-      if (r.status === "cancelled") continue;
+      if (r.status === "cancelled" || !r.roomId) continue;
       if (r.checkIn <= d && d < r.checkOut) {
         roomsSold += 1;
-        roomRevenue += nightlyRate(r);
+        roomRevenue += rate(r.roomType ?? "", d);
       }
     }
   }
@@ -120,13 +90,21 @@ export const applyRateSuggestion = mutation({
   },
 });
 
-/** Nightly rack rates for a room type over [from, to). */
+/** Effective nightly rates (rules applied) for a room type over [from, to). */
 export const getRates = query({
-  args: { roomType: v.string(), from: v.string(), to: v.string() },
-  handler: (_ctx, args) => {
+  args: {
+    propertyId: v.id("properties"),
+    roomType: v.string(),
+    from: v.string(),
+    to: v.string(),
+  },
+  handler: async (ctx, args) => {
     const out: { date: string; rate: number }[] = [];
     for (let d = args.from; d < args.to; d = addDaysIso(d, 1)) {
-      out.push({ date: d, rate: nightlyRateFor(args.roomType, d) });
+      out.push({
+        date: d,
+        rate: await effectiveNightlyRate(ctx, args.propertyId, args.roomType, d),
+      });
     }
     return out;
   },
@@ -135,51 +113,24 @@ export const getRates = query({
 /** Priced quote for a stay: per-night rates, subtotal, tax and total. */
 export const getStayQuote = query({
   args: {
+    propertyId: v.id("properties"),
     roomType: v.string(),
     checkIn: v.string(),
     checkOut: v.string(),
-    propertyId: v.optional(v.id("properties")),
   },
   handler: async (ctx, args) => {
-    const nights: { date: string; rate: number }[] = [];
-    for (let d = args.checkIn; d < args.checkOut; d = addDaysIso(d, 1)) {
-      let rate = nightlyRateFor(args.roomType, d);
-      if (args.propertyId) {
-        rate = await applyRateRules(ctx, args.propertyId, args.roomType, d, rate);
-      }
-      nights.push({ date: d, rate });
-    }
-    const subtotal = nights.reduce((s, n) => s + n.rate, 0);
-
-    let tax: number;
-    if (args.propertyId) {
-      const taxRows = await ctx.db
-        .query("taxes")
-        .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId!))
-        .collect();
-      tax = nights.reduce(
-        (s, n, i) =>
-          s +
-          roomNightTaxes(taxRows, n.rate, { firstNight: i === 0 }).taxLines.reduce(
-            (a, t) => a + t.amount,
-            0
-          ),
-        0
-      );
-    } else {
-      tax = Math.round(subtotal * TAX_RATE);
-    }
+    const q = await quoteStay(ctx, args);
     return {
-      nights,
-      nightCount: nights.length,
-      subtotal,
-      subtotalLabel: money(subtotal),
-      tax,
-      taxLabel: money(tax),
-      total: subtotal + tax,
-      totalLabel: money(subtotal + tax),
-      firstNight: nights[0]?.rate ?? 0,
-      firstNightLabel: money(nights[0]?.rate ?? 0),
+      nights: q.nights,
+      nightCount: q.nights.length,
+      subtotal: q.subtotal,
+      subtotalLabel: money(q.subtotal),
+      tax: q.tax,
+      taxLabel: money(q.tax),
+      total: q.total,
+      totalLabel: money(q.total),
+      firstNight: q.nights[0]?.rate ?? 0,
+      firstNightLabel: money(q.nights[0]?.rate ?? 0),
     };
   },
 });
@@ -230,8 +181,11 @@ export const getKpis = query({
       addDaysIso(anchor, -(2 * count - 1 - i))
     );
 
-    const cur = windowStats(reservations, sellable, nights);
-    const prev = windowStats(reservations, sellable, priorNights);
+    const rules = await loadRateRules(ctx, args.propertyId);
+    const rate = (rt: string, d: string) =>
+      rules(rt, d, nightlyRateFor(rt, d));
+    const cur = windowStats(reservations, sellable, nights, rate);
+    const prev = windowStats(reservations, sellable, priorNights, rate);
 
     return {
       revenue: money(cur.roomRevenue),

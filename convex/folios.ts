@@ -3,10 +3,9 @@ import { v } from "convex/values";
 import { authorize } from "./authz";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { nightlyRateFor } from "./revenue";
 import { roomNightTaxes, chargeTaxes } from "./taxEngine";
 import { codeForPayment } from "./transactionCodes";
-import { applyRateRules } from "./rates";
+import { effectiveNightlyRate } from "./rates";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 
@@ -48,12 +47,11 @@ async function postNight(
     .collect();
   if (existing.some((l) => l.kind === "room" && l.date === date)) return;
 
-  const gross = await applyRateRules(
+  const gross = await effectiveNightlyRate(
     ctx,
     folio.propertyId,
     res.roomType ?? "",
-    date,
-    nightlyRateFor(res.roomType ?? "", date)
+    date
   );
   const taxes = await propertyTaxes(ctx, folio.propertyId);
   const { roomNet, taxLines } = roomNightTaxes(taxes, gross, {

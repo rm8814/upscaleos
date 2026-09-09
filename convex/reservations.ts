@@ -8,9 +8,9 @@ import {
   reopenFolio,
   voidFolioIfUnpaid,
 } from "./folios";
-import { nightlyRateFor } from "./revenue";
 import { authorize } from "./authz";
 import { issueInvoiceForFolio } from "./invoices";
+import { quoteStay } from "./rates";
 
 const FALLBACK_TODAY = "2026-09-08";
 
@@ -20,19 +20,6 @@ async function businessDate(ctx: QueryCtx, propertyId: Id<"properties">) {
 }
 
 const fmtRp = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
-const addIso = (iso: string, n: number) => {
-  const d = new Date(iso + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-/** Sum of nightly rack rates across [checkIn, checkOut). */
-const stayTotal = (roomType: string, checkIn: string, checkOut: string) => {
-  let total = 0;
-  for (let d = checkIn; d < checkOut; d = addIso(d, 1)) {
-    total += nightlyRateFor(roomType, d);
-  }
-  return total || nightlyRateFor(roomType, checkIn);
-};
 /**
  * First bookable room of `roomType` at this property with no stay overlapping
  * [checkIn, checkOut). `ignoreId` lets a reservation exclude its own row when
@@ -244,8 +231,14 @@ export const create = mutation({
       const room = await ctx.db.get(roomId);
       roomNumber = room?.roomNumber;
     }
-    const rate = nightlyRateFor(args.roomType, args.checkIn);
-    const total = stayTotal(args.roomType, args.checkIn, args.checkOut);
+    // Estimate via the single pricing path (rules + tax). The folio remains
+    // the source of truth for what's actually owed; this is a cached estimate.
+    const q = await quoteStay(ctx, {
+      propertyId: args.propertyId,
+      roomType: args.roomType,
+      checkIn: args.checkIn,
+      checkOut: args.checkOut,
+    });
     return await ctx.db.insert("reservations", {
       guestId,
       propertyId: args.propertyId,
@@ -253,8 +246,8 @@ export const create = mutation({
       checkIn: args.checkIn,
       checkOut: args.checkOut,
       status: args.status,
-      rate: fmtRp(rate),
-      totalAmount: fmtRp(total),
+      rate: fmtRp(q.nights[0]?.rate ?? 0),
+      totalAmount: fmtRp(q.total),
       channel: args.channel,
       roomNumber,
       roomType: args.roomType,
@@ -298,11 +291,16 @@ export const updateDates = mutation({
       }
     }
 
-    // Re-price against the (possibly new) room type and dates.
-    patch.rate = fmtRp(nightlyRateFor(effectiveType, args.checkIn));
-    patch.totalAmount = fmtRp(
-      stayTotal(effectiveType, args.checkIn, args.checkOut)
-    );
+    // Re-price the cached estimate against the (possibly new) room type and
+    // dates via the single pricing path.
+    const q = await quoteStay(ctx, {
+      propertyId: res.propertyId,
+      roomType: effectiveType,
+      checkIn: args.checkIn,
+      checkOut: args.checkOut,
+    });
+    patch.rate = fmtRp(q.nights[0]?.rate ?? 0);
+    patch.totalAmount = fmtRp(q.total);
 
     await ctx.db.patch(args.id, patch);
   },

@@ -6,7 +6,7 @@ import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
 import { issueInvoiceForFolio } from "./invoices";
-import { nightlyRateFor } from "./revenue";
+import { nightlyRateFor } from "./rateModel";
 import { loadRateRules } from "./rates";
 import { authorize, resolveScope, currentEmail, writeAudit } from "./authz";
 

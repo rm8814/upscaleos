@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import { addDaysIso, money } from "./rateModel";
-import { loadReservationRates } from "./rates";
+import { loadReservationRates, loadBaseRates } from "./rates";
 import { loadChannelTerms } from "./commissions";
 import {
   sellableRoomCount,
@@ -157,6 +157,11 @@ export const getReports = query({
         netRevenue: money(v.revenue - v.commission),
       }))
       .sort((a, b) => b.roomNights - a.roomNights);
+    const { types: typeOrder } = await loadBaseRates(ctx, args.propertyId);
+    const typeRank = (t: string) => {
+      const i = typeOrder.indexOf(t);
+      return i === -1 ? 999 : i;
+    };
     const byRoomType = [...byTypeMap.entries()]
       .map(([roomType, v]) => {
         const cap = (sellableByType.get(roomType) ?? 0) * prodDates.length;
@@ -169,7 +174,11 @@ export const getReports = query({
           revenue: money(v.revenue),
         };
       })
-      .sort((a, b) => b.revenue.localeCompare(a.revenue));
+      .sort(
+        (a, b) =>
+          typeRank(a.roomType) - typeRank(b.roomType) ||
+          a.roomType.localeCompare(b.roomType)
+      );
 
     /* ---- forecast: 4 weeks forward, on the books ---- */
     const forecast = Array.from({ length: 4 }, (_, w) => {

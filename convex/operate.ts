@@ -10,6 +10,7 @@ import {
   blockedRoomIds,
 } from "./occupancy";
 import { groupHeldRooms } from "./groups";
+import { loadBaseRates } from "./rates";
 import { addDaysIso } from "./rateModel";
 
 import type { QueryCtx, MutationCtx } from "./_generated/server";
@@ -340,11 +341,22 @@ export const getAvailability = query({
       return true;
     });
 
-    return result.map((r) => ({
-      _id: r._id,
-      roomNumber: r.roomNumber,
-      type: r.type,
-    }));
+    const { types } = await loadBaseRates(ctx, args.propertyId);
+    const rank = (t: string) => {
+      const i = types.indexOf(t);
+      return i === -1 ? 999 : i;
+    };
+    return result
+      .sort(
+        (a, b) =>
+          rank(a.type) - rank(b.type) ||
+          a.roomNumber.localeCompare(b.roomNumber)
+      )
+      .map((r) => ({
+        _id: r._id,
+        roomNumber: r.roomNumber,
+        type: r.type,
+      }));
   },
 });
 
@@ -379,11 +391,18 @@ export const getRoomCounts = query({
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect();
     const { total, sellable } = roomCountsByType(rooms);
-    return [...total.keys()].map((type) => ({
-      roomType: type,
-      total: total.get(type) ?? 0,
-      sellable: sellable.get(type) ?? 0,
-    }));
+    const { types } = await loadBaseRates(ctx, args.propertyId);
+    const rank = (t: string) => {
+      const i = types.indexOf(t);
+      return i === -1 ? 999 : i;
+    };
+    return [...total.keys()]
+      .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+      .map((type) => ({
+        roomType: type,
+        total: total.get(type) ?? 0,
+        sellable: sellable.get(type) ?? 0,
+      }));
   },
 });
 

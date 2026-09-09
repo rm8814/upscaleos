@@ -45,6 +45,7 @@ export const seed = internalMutation({
       "ar_accounts",
       "rate_adjustments",
       "rate_overrides",
+      "room_blocks",
       "waitlist",
       "reservations",
       "rooms",
@@ -248,8 +249,38 @@ export const seed = internalMutation({
         slaText: "Done",
       },
     ];
+    const ticketIds: Record<string, import("./_generated/dataModel").Id<"maintenance_tickets">> = {};
     for (const t of tickets) {
-      await ctx.db.insert("maintenance_tickets", { ...t, propertyId });
+      ticketIds[t.ticketCode] = await ctx.db.insert("maintenance_tickets", {
+        ...t,
+        propertyId,
+      });
+    }
+
+    // ---- room blocks: give the seeded OOO/OOS rooms a reason + dates ----
+    const BLOCK_REASONS = [
+      { reason: "Bathroom re-grout", days: 4, ticket: "MT-1041" },
+      { reason: "Deep clean after water leak", days: 2 },
+      { reason: "Carpet replacement", days: 6 },
+      { reason: "Balcony rail repair", days: 3, ticket: "MT-1042" },
+      { reason: "Aircon compressor swap", days: 5 },
+      { reason: "Full refurbishment", days: 20 },
+    ];
+    let bi = 0;
+    for (const r of roomRows) {
+      if (r.status !== "OOO" && r.status !== "OOS") continue;
+      const spec = BLOCK_REASONS[bi % BLOCK_REASONS.length];
+      bi++;
+      await ctx.db.insert("room_blocks", {
+        propertyId,
+        roomId: r._id,
+        kind: r.status,
+        from: iso(addDays(TODAY, -1)),
+        to: iso(addDays(TODAY, spec.days)),
+        reason: spec.reason,
+        ticketId: spec.ticket ? ticketIds[spec.ticket] : undefined,
+        createdBy: "eng@grandsamudra.upscale.id",
+      });
     }
 
     // ---- guests + reservations --------------------------------------

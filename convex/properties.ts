@@ -6,6 +6,7 @@ import { assignPropertyRooms } from "./reservations";
 import { postNightlyToOpenFolios, closeFolio } from "./folios";
 import { transferClosedFoliosToCityLedger } from "./ar";
 import { releasePastCutoff } from "./groups";
+import { expireRoomBlocks } from "./operate";
 import { issueInvoiceForFolio } from "./invoices";
 import { loadReservationRates } from "./rates";
 import { sellableRoomCount, roomsSoldOn } from "./occupancy";
@@ -360,10 +361,17 @@ async function rollOne(ctx: MutationCtx, id: Id<"properties">) {
   // Release group blocks past their cut-off — the unpicked rooms go back to
   // general inventory.
   const blocksReleased = await releasePastCutoff(ctx, id, newDate);
+  const roomsRestored = await expireRoomBlocks(ctx, id, newDate);
 
   await writeNightStats(ctx, id, oldDate, newDate);
 
-  return { businessDate: newDate, previous: oldDate, noShows, blocksReleased };
+  return {
+    businessDate: newDate,
+    previous: oldDate,
+    noShows,
+    blocksReleased,
+    roomsRestored,
+  };
 }
 
 const MAX_AUTO_CATCHUP = 14; // days; a larger gap needs a manual catch-up

@@ -31,8 +31,11 @@ export default function MaintenanceHub() {
   const { activeProperty } = useProperty();
   const arg = activeProperty ? { propertyId: activeProperty._id } : "skip";
   const tickets = useQuery(api.operate.getMaintenanceTickets, arg);
+  const roomBlocks = useQuery(api.operate.getRoomBlocks, arg);
+  const rooms = useQuery(api.operate.getRooms, arg);
   const resolveTicket = useMutation(api.maintenance.resolveTicket);
   const createTicket = useMutation(api.operate.createTicket);
+  const clearRoomBlock = useMutation(api.operate.clearRoomBlock);
   const toast = useToast();
 
   const [priority, setPriority] = useState("All");
@@ -44,16 +47,34 @@ export default function MaintenanceHub() {
     location: "",
     priority: "Medium",
     assignee: "Budi (in-house)",
+    blockRoomId: "",
   });
   const [saving, setSaving] = useState(false);
+
+  const emptyForm = {
+    title: "",
+    location: "",
+    priority: "Medium",
+    assignee: "Budi (in-house)",
+    blockRoomId: "",
+  };
 
   const submitTicket = async () => {
     if (!activeProperty || !form.title.trim() || saving) return;
     setSaving(true);
-    await createTicket({ propertyId: activeProperty._id, ...form });
+    await createTicket({
+      propertyId: activeProperty._id,
+      title: form.title,
+      location: form.location,
+      priority: form.priority,
+      assignee: form.assignee,
+      blockRoomId: form.blockRoomId
+        ? (form.blockRoomId as Doc<"rooms">["_id"])
+        : undefined,
+    });
     setSaving(false);
     setNewOpen(false);
-    setForm({ title: "", location: "", priority: "Medium", assignee: "Budi (in-house)" });
+    setForm(emptyForm);
     toast("Maintenance ticket created", "success");
   };
 
@@ -182,6 +203,52 @@ export default function MaintenanceHub() {
             </div>
             <div className="text-12 text-fg-3">{t.created}</div>
           </button>
+        ))}
+      </Card>
+
+      {/* Rooms out of order / service */}
+      <Card className="mt-3.5 overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+          <Eyebrow>Rooms out of order / service</Eyebrow>
+          <span className="font-mono text-[11px] text-fg-3">
+            {roomBlocks ? `${roomBlocks.length} active` : "—"}
+          </span>
+        </div>
+        {!roomBlocks && <div className="px-4 py-4 text-13 text-fg-3">Loading blocks…</div>}
+        {roomBlocks && roomBlocks.length === 0 && (
+          <div className="px-4 py-4 text-13 text-fg-3">
+            Every room is sellable — nothing blocked.
+          </div>
+        )}
+        {(roomBlocks ?? []).map((b) => (
+          <div
+            key={b._id}
+            className="grid grid-cols-[0.7fr_0.7fr_1.6fr_1.1fr_0.9fr_0.7fr] items-center gap-2.5 border-b border-line-soft px-4 py-3 text-13 last:border-0"
+          >
+            <div className="font-mono font-semibold text-ice">{b.roomNumber}</div>
+            <div
+              className="text-[11px] font-bold"
+              style={{ color: b.active ? "var(--room-ooo)" : "var(--fg-3)" }}
+            >
+              {b.kind}
+            </div>
+            <div className="truncate text-12 text-fg-2">{b.reason}</div>
+            <div className="font-mono text-[11.5px] text-fg-3">
+              {b.from} → {b.to || "open"}
+            </div>
+            <div className="text-[11.5px] text-fg-3">
+              {b.ticketId ? "linked ticket" : b.active ? "active" : "future"}
+            </div>
+            <button
+              onClick={async () => {
+                await clearRoomBlock({ blockId: b._id });
+                toast(`Room ${b.roomNumber} released`, "success");
+              }}
+              className="justify-self-end rounded-sm border border-line px-2.5 py-1 text-[11.5px] text-fg-1 transition-colors hover:border-line-strong"
+            >
+              Clear
+            </button>
+          </div>
         ))}
       </Card>
 
@@ -336,6 +403,18 @@ export default function MaintenanceHub() {
                   <option>PT Kolam Sehat</option>
                 </select>
               </div>
+              <select
+                value={form.blockRoomId}
+                onChange={(e) => setForm((f) => ({ ...f, blockRoomId: e.target.value }))}
+                className="rounded-sm border border-line bg-ink px-2.5 py-2 text-13 text-fg-2"
+              >
+                <option value="">Don&apos;t block a room</option>
+                {(rooms ?? []).map((r) => (
+                  <option key={r._id} value={r._id}>
+                    Take room {r.roomNumber} ({r.type}) out of order until resolved
+                  </option>
+                ))}
+              </select>
               <button
                 onClick={submitTicket}
                 disabled={!form.title.trim() || saving}

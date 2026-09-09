@@ -318,6 +318,22 @@ export default defineSchema({
     .index("by_property_asof", ["propertyId", "asOf"])
     .index("by_property_target", ["propertyId", "forDate", "asOf"]),
 
+  // ---- scheduled out-of-order / out-of-service room blocks --------------
+  room_blocks: defineTable({
+    propertyId: v.id("properties"),
+    roomId: v.id("rooms"),
+    kind: v.string(), // 'OOO' | 'OOS'
+    from: v.string(), // inclusive
+    to: v.string(), // exclusive ('' = open-ended)
+    reason: v.string(),
+    ticketId: v.optional(v.id("maintenance_tickets")), // linked work order
+    createdBy: v.optional(v.string()),
+    clearedOn: v.optional(v.string()),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_room", ["roomId"])
+    .index("by_ticket", ["ticketId"]),
+
   // ---- per-date rate adjustments (dynamic-pricing toggles on the grid) ---
   rate_adjustments: defineTable({
     propertyId: v.id("properties"),

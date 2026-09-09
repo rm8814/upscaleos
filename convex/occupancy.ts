@@ -27,6 +27,22 @@ export function sellableRoom(r: Doc<"rooms">): boolean {
   return !OUT_OF_SERVICE.has(r.status);
 }
 
+/** A room_block covers `date` (from inclusive, to exclusive; '' to = open). */
+export function blockCovers(b: Doc<"room_blocks">, date: string): boolean {
+  if (b.clearedOn) return false;
+  return b.from <= date && (b.to === "" || date < b.to);
+}
+
+/** roomIds that are out of order/service on `date` per active room_blocks. */
+export function blockedRoomIds(
+  blocks: Doc<"room_blocks">[],
+  date: string
+): Set<string> {
+  return new Set(
+    blocks.filter((b) => blockCovers(b, date)).map((b) => b.roomId)
+  );
+}
+
 export function sellableRoomCount(rooms: Doc<"rooms">[]): number {
   return rooms.filter(sellableRoom).length;
 }

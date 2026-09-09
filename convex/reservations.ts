@@ -39,13 +39,17 @@ async function pickFreeRoom(
 ): Promise<Id<"rooms"> | undefined> {
   const bd = await businessDate(ctx, propertyId);
   const sameDay = checkIn <= bd; // arrives today or is overdue
-  const [rooms, existing] = await Promise.all([
+  const [rooms, existing, blocks] = await Promise.all([
     ctx.db
       .query("rooms")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect(),
     ctx.db
       .query("reservations")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect(),
+    ctx.db
+      .query("room_blocks")
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect(),
   ]);
@@ -60,8 +64,21 @@ async function pickFreeRoom(
       )
       .map((r) => r.roomId)
   );
+  // Rooms blocked (OOO/OOS) on any night of the stay.
+  const blocked = new Set<string>();
+  for (let d = checkIn; d < checkOut; ) {
+    for (const b of blocks) {
+      if (!b.clearedOn && b.from <= d && (b.to === "" || d < b.to)) {
+        blocked.add(b.roomId);
+      }
+    }
+    const nd = new Date(d + "T00:00:00Z");
+    nd.setUTCDate(nd.getUTCDate() + 1);
+    d = nd.toISOString().slice(0, 10);
+  }
   const candidates = rooms.filter((rm) => {
-    if (rm.type !== roomType || taken.has(rm._id)) return false;
+    if (rm.type !== roomType || taken.has(rm._id) || blocked.has(rm._id))
+      return false;
     if (rm.status === "OOO" || rm.status === "OOS") return false;
     // A same-day arrival needs a room that is actually clean and ready; a
     // future arrival can be given one that will be cleaned before check-in.

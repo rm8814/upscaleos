@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Card, Eyebrow } from "@/components/upx/primitives";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Plus, X, Trash2 } from "lucide-react";
+import { Plus, X, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
 const money = (n: number) => `Rp ${Math.round(n).toLocaleString("en-US")}`;
 const num = (s: string) => Number(s.replace(/[^\d]/g, "")) || 0;
@@ -27,6 +27,16 @@ export default function RoomSetupTab({
 
   const upsertType = useMutation(api.roomSetup.upsertRoomType);
   const setTypeActive = useMutation(api.roomSetup.setRoomTypeActive);
+  const reorderTypes = useMutation(api.roomSetup.reorderRoomTypes);
+
+  const moveType = async (idx: number, dir: -1 | 1) => {
+    if (!setup) return;
+    const ids = setup.types.map((t) => t._id);
+    const j = idx + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    await reorderTypes({ propertyId, orderedIds: ids });
+  };
   const upsertRoom = useMutation(api.roomSetup.upsertRoom);
   const bulkAdd = useMutation(api.roomSetup.bulkAddRooms);
   const setRoomActive = useMutation(api.roomSetup.setRoomActive);
@@ -69,7 +79,8 @@ export default function RoomSetupTab({
           </button>
         </div>
         <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-[1.4fr_1fr_0.9fr_1fr_0.7fr_0.7fr_0.7fr] border-b border-line px-4 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+          <div className="grid grid-cols-[44px_1.4fr_1fr_0.9fr_1fr_0.7fr_0.7fr_0.7fr] border-b border-line px-4 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+            <div>Order</div>
             <div>Name</div>
             <div>Base rate</div>
             <div>Max occ.</div>
@@ -83,13 +94,35 @@ export default function RoomSetupTab({
               No room types yet — add one to price and sell rooms.
             </div>
           )}
-          {setup.types.map((t) => (
-            <button
+          {setup.types.map((t, idx) => (
+            <div
               key={t._id}
-              onClick={() => setTypeModal({ mode: "edit", t })}
-              className="grid w-full grid-cols-[1.4fr_1fr_0.9fr_1fr_0.7fr_0.7fr_0.7fr] items-center border-b border-line-soft px-4 py-2.5 text-left text-13 last:border-0 hover:bg-elevated"
+              className="grid grid-cols-[44px_1.4fr_1fr_0.9fr_1fr_0.7fr_0.7fr_0.7fr] items-center border-b border-line-soft px-4 py-2 text-13 last:border-0 hover:bg-elevated"
             >
-              <div className="font-semibold">{t.name}</div>
+              <div className="flex flex-col">
+                <button
+                  onClick={() => moveType(idx, -1)}
+                  disabled={idx === 0}
+                  className="text-fg-3 hover:text-ice disabled:opacity-20"
+                  aria-label="Move up"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => moveType(idx, 1)}
+                  disabled={idx === setup.types.length - 1}
+                  className="text-fg-3 hover:text-ice disabled:opacity-20"
+                  aria-label="Move down"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <button
+                onClick={() => setTypeModal({ mode: "edit", t })}
+                className="text-left font-semibold hover:text-accent-violet-hi"
+              >
+                {t.name}
+              </button>
               <div className="font-mono">{money(t.baseRate)}</div>
               <div className="font-mono text-fg-2">
                 {t.maxAdults}A / {t.maxChildren}C
@@ -107,7 +140,7 @@ export default function RoomSetupTab({
               >
                 {t.active ? "Active" : "Off"}
               </div>
-            </button>
+            </div>
           ))}
         </Card>
       </div>

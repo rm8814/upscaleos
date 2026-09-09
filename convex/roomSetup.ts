@@ -154,6 +154,29 @@ export const upsertRoomType = mutation({
   },
 });
 
+/** Rewrite room-type display order from a full ordered id list. */
+export const reorderRoomTypes = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    orderedIds: v.array(v.id("room_types")),
+  },
+  handler: async (ctx, args) => {
+    const scope = await authorize(ctx, {
+      propertyId: args.propertyId,
+      requireProperty: "gm",
+    });
+    for (let i = 0; i < args.orderedIds.length; i++) {
+      const t = await ctx.db.get(args.orderedIds[i]);
+      if (t && t.propertyId === args.propertyId && t.sortOrder !== i)
+        await ctx.db.patch(args.orderedIds[i], { sortOrder: i });
+    }
+    await writeAudit(ctx, scope, "roomtype.reorder", {
+      propertyId: args.propertyId,
+      detail: `${args.orderedIds.length} types`,
+    });
+  },
+});
+
 export const setRoomTypeActive = mutation({
   args: { id: v.id("room_types"), active: v.boolean() },
   handler: async (ctx, args) => {

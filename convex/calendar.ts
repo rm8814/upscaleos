@@ -199,7 +199,24 @@ export const getCalendarBoard = query({
     // ---- occupancy: one basis (sellable rooms; every on-the-books stay) ----
     const sellableTotal = sellableRoomCount(rooms);
     const { sellable: sellableByType } = roomCountsByType(rooms);
-    const roomTypes = [...sellableByType.keys()];
+    // Room-type display order: the Room-setup sort order, then any type that
+    // exists on a room but has no room_types row, appended.
+    const typeRows = await ctx.db
+      .query("room_types")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const orderRank = new Map(
+      [...typeRows]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((t, i) => [t.name, i] as const)
+    );
+    const present = [...sellableByType.keys()];
+    const roomTypes = [
+      ...present
+        .filter((t) => orderRank.has(t))
+        .sort((a, b) => orderRank.get(a)! - orderRank.get(b)!),
+      ...present.filter((t) => !orderRank.has(t)).sort(),
+    ];
 
     const occByDay = days.map((date) => {
       const sold = resRows.filter((r) => onBooksOn(r, date)).length;
@@ -272,6 +289,7 @@ export const getCalendarBoard = query({
       blocks,
       groupHolds,
       groupLane: groupLane.sort((a, b) => a.from.localeCompare(b.from)),
+      roomTypeOrder: roomTypes,
       occByDay,
       typeOcc,
     };

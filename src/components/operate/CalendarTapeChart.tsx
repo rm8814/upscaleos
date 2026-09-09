@@ -137,10 +137,15 @@ export default function CalendarTapeChart() {
   // Sold, not yet given a room number — surfaced in its own rail below.
   const unassignedRes = board?.unassigned ?? [];
 
-  const roomTypeNames = useMemo(
-    () => Array.from(new Set((rooms ?? []).map((r) => r.type))),
-    [rooms]
-  );
+  const roomTypeNames = useMemo(() => {
+    const present = Array.from(new Set((rooms ?? []).map((r) => r.type)));
+    const order = board?.roomTypeOrder ?? [];
+    return present.sort((a, b) => {
+      const ra = order.indexOf(a) === -1 ? 999 : order.indexOf(a);
+      const rb = order.indexOf(b) === -1 ? 999 : order.indexOf(b);
+      return ra - rb || a.localeCompare(b);
+    });
+  }, [rooms, board]);
 
   // ---- rate grid + room blocks keyed for O(1) lookup --------------------
   const rateCell = useMemo(() => {
@@ -190,7 +195,14 @@ export default function CalendarTapeChart() {
       if (!byType.has(r.type)) byType.set(r.type, []);
       byType.get(r.type)!.push(r);
     }
-    return Array.from(byType.entries()).map(([type, rs]) => {
+    const order = board.roomTypeOrder ?? [];
+    const rank = (t: string) => {
+      const i = order.indexOf(t);
+      return i === -1 ? 999 : i;
+    };
+    return Array.from(byType.entries())
+      .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+      .map(([type, rs]) => {
       const occRow = board.typeOcc[type] ?? [];
       const cells = days.map((d) => {
         const dISO = iso(d);

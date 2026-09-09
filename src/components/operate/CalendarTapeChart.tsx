@@ -72,6 +72,7 @@ export default function CalendarTapeChart() {
   const createRes = useMutation(api.reservations.create);
   const removeWaitlist = useMutation(api.waitlist.remove);
   const assignOne = useMutation(api.reservations.assignOne);
+  const clearBlock = useMutation(api.operate.clearRoomBlock);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignFailId, setAssignFailId] = useState<string | null>(null);
 
@@ -85,6 +86,13 @@ export default function CalendarTapeChart() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openResId, setOpenResId] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ resId: string; x: number; y: number } | null>(null);
+  const [blockMenu, setBlockMenu] = useState<{
+    block: BoardBlock;
+    roomNumber: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [releasing, setReleasing] = useState(false);
   const [newRes, setNewRes] = useState<Partial<NewResInit> | null>(null);
   const [assignWaitlistId, setAssignWaitlistId] = useState<string | null>(null);
 
@@ -496,10 +504,20 @@ export default function CalendarTapeChart() {
             className="h-2.5 w-3.5 rounded-[2px]"
             style={{
               background:
-                "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 3px,color-mix(in srgb, var(--room-ooo) 45%, transparent) 3px,color-mix(in srgb, var(--room-ooo) 45%, transparent) 6px)",
+                "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 3px,color-mix(in srgb, var(--room-ooo) 55%, transparent) 3px,color-mix(in srgb, var(--room-ooo) 55%, transparent) 6px)",
             }}
           />
-          Out of order / service
+          OOO
+        </div>
+        <div className="flex items-center gap-1.5 text-12 text-fg-3">
+          <span
+            className="h-2.5 w-3.5 rounded-[2px]"
+            style={{
+              background:
+                "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 3px,color-mix(in srgb, var(--room-oos) 55%, transparent) 3px,color-mix(in srgb, var(--room-oos) 55%, transparent) 6px)",
+            }}
+          />
+          OOS
         </div>
         <div className="flex items-center gap-1.5 text-12 text-fg-3">
           <span
@@ -675,18 +693,28 @@ export default function CalendarTapeChart() {
                         >
                           {days.map((d, i) => {
                             const blk = blockOnRoomDate(room._id, iso(d));
-                            if (blk)
+                            if (blk) {
+                              const c =
+                                ROOM_STATUS_COLOR[blk.kind] ?? "var(--room-ooo)";
                               return (
                                 <div
                                   key={i}
-                                  title={`${blk.kind} — ${blk.reason}`}
-                                  className="h-9 border-l border-line-soft"
+                                  title={`${blk.kind} — ${blk.reason} · click to release`}
+                                  onClick={(ev) =>
+                                    setBlockMenu({
+                                      block: blk,
+                                      roomNumber: room.roomNumber,
+                                      x: ev.clientX,
+                                      y: ev.clientY,
+                                    })
+                                  }
+                                  className="h-9 cursor-pointer border-l border-line-soft"
                                   style={{
-                                    background:
-                                      "repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 5px,color-mix(in srgb, var(--room-ooo) 22%, transparent) 5px,color-mix(in srgb, var(--room-ooo) 22%, transparent) 10px)",
+                                    background: `repeating-linear-gradient(45deg,var(--bg-elevated),var(--bg-elevated) 5px,color-mix(in srgb, ${c} 24%, transparent) 5px,color-mix(in srgb, ${c} 24%, transparent) 10px)`,
                                   }}
                                 />
                               );
+                            }
                             return (
                               <div
                                 key={i}
@@ -1027,6 +1055,86 @@ export default function CalendarTapeChart() {
               >
                 <Move className="h-3.5 w-3.5" /> Move reservation
               </button>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* Room-block popover — release an OOO / OOS room back to sell */}
+      {blockMenu &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[70]"
+              onClick={() => setBlockMenu(null)}
+            />
+            <div
+              className="fixed z-[71] w-[248px] rounded-md border border-line-strong bg-elevated p-3 shadow-3"
+              style={{
+                left: Math.min(blockMenu.x, window.innerWidth - 264),
+                top: blockMenu.y,
+              }}
+            >
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <span
+                  className="rounded-[3px] px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{
+                    color:
+                      ROOM_STATUS_COLOR[blockMenu.block.kind] ??
+                      "var(--room-ooo)",
+                    border: `1px solid ${
+                      ROOM_STATUS_COLOR[blockMenu.block.kind] ??
+                      "var(--room-ooo)"
+                    }`,
+                  }}
+                >
+                  {blockMenu.block.kind}
+                </span>
+                <span className="font-mono text-12 text-fg-2">
+                  Room {blockMenu.roomNumber}
+                </span>
+              </div>
+              <div className="text-12 text-fg-2">{blockMenu.block.reason}</div>
+              <div className="mt-1 font-mono text-[11px] text-fg-3">
+                {dmIso(blockMenu.block.from)} →{" "}
+                {blockMenu.block.to ? dmIso(blockMenu.block.to) : "open"}
+              </div>
+              {blockMenu.block.ticketId && (
+                <div className="mt-1.5 rounded-sm border border-line bg-deep px-2 py-1 text-[10.5px] text-fg-3">
+                  Linked to a work order — releasing here won&apos;t close the
+                  ticket.
+                </div>
+              )}
+              <button
+                disabled={releasing}
+                onClick={async () => {
+                  setReleasing(true);
+                  try {
+                    await clearBlock({
+                      blockId: blockMenu.block._id as Id<"room_blocks">,
+                    });
+                    toast(
+                      `Room ${blockMenu.roomNumber} released — set to Vacant Dirty for inspection.`,
+                      "success"
+                    );
+                    setBlockMenu(null);
+                  } catch (err) {
+                    toast(
+                      err instanceof Error ? err.message : "Could not release",
+                      "error"
+                    );
+                  } finally {
+                    setReleasing(false);
+                  }
+                }}
+                className="mt-2.5 w-full rounded-sm bg-accent-violet px-3 py-2 text-12 font-semibold text-ice hover:bg-accent-violet-hi disabled:opacity-40"
+              >
+                {releasing ? "Releasing…" : "Release room to sell"}
+              </button>
+              <div className="mt-1.5 text-[10px] text-fg-4">
+                Room goes to Vacant Dirty; housekeeping inspects before it&apos;s
+                sellable again.
+              </div>
             </div>
           </>,
           document.body

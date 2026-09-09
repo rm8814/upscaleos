@@ -63,6 +63,7 @@ export default function GroupsBlocksPage() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
+  const [kindFilter, setKindFilter] = useState("All");
   const [openId, setOpenId] = useState<Id<"group_blocks"> | null>(null);
   const [addName, setAddName] = useState("");
 
@@ -75,14 +76,17 @@ export default function GroupsBlocksPage() {
     () =>
       (groups ?? []).filter((g) => {
         if (status !== "All" && g.status !== status) return false;
+        if (kindFilter === "Blocks" && g.kind === "transient") return false;
+        if (kindFilter === "Parties" && g.kind !== "transient") return false;
         if (search && !g.name.toLowerCase().includes(search.toLowerCase()))
           return false;
         return true;
       }),
-    [groups, search, status]
+    [groups, search, status, kindFilter]
   );
 
   const g = detail ?? null;
+  const isParty = g?.kind === "transient";
   const trendMax = g ? Math.max(...g.trend, 1) : 1;
   const cutoffDays = g ? daysBetween(businessDate, g.cutoffDate) : 0;
   const cutoffLabel = g
@@ -112,6 +116,15 @@ export default function GroupsBlocksPage() {
           placeholder="Search group or contact…"
           className="w-[200px] rounded-sm border border-line bg-elevated px-2.5 py-2 text-12 text-ice outline-none focus:border-accent-violet"
         />
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          className="rounded-sm border border-line bg-elevated px-2.5 py-2 text-12 text-fg-2"
+        >
+          {["All", "Blocks", "Parties"].map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -160,43 +173,63 @@ export default function GroupsBlocksPage() {
           {groups && rows.length === 0 && (
             <div className="px-4 py-4 text-13 text-fg-3">No group blocks match.</div>
           )}
-          {rows.map((row) => (
-            <button
-              key={row.id}
-              onClick={() => setOpenId(row.id)}
-              className={`${TABLE_GRID} w-full items-center border-b border-line-soft py-3 text-left text-13 transition-colors last:border-0 hover:bg-elevated`}
-            >
-              <div className="font-semibold">{row.name}</div>
-              <div className="whitespace-nowrap text-12 text-fg-3">
-                {fmtRange(row.startDate, row.nights)}
-              </div>
-              <div className="font-mono">
-                {row.released ? (
-                  <span className="text-fg-3">released</span>
-                ) : (
-                  <>
-                    <span className="text-group-hold">{row.held}</span>
-                    <span className="text-fg-3"> / {row.blocked}</span>
-                  </>
-                )}
-              </div>
-              <div className="font-mono text-accent-cyan">
-                {row.picked} · {row.pickupPct}
-              </div>
-              <div>
-                <span className="rounded-pill border border-line bg-fg-1/[0.06] px-2.5 py-[3px] text-[11px] text-fg-2">
-                  {row.released ? "Released" : row.status}
-                </span>
-              </div>
-              <div
-                className="whitespace-nowrap text-12"
-                style={{ color: row.contractColor }}
+          {rows.map((row) => {
+            const party = row.kind === "transient";
+            return (
+              <button
+                key={row.id}
+                onClick={() => setOpenId(row.id)}
+                className={`${TABLE_GRID} w-full items-center border-b border-line-soft py-3 text-left text-13 transition-colors last:border-0 hover:bg-elevated`}
               >
-                {row.contractLabel}
-              </div>
-              <div className="text-12 text-fg-3">{row.salesManager}</div>
-            </button>
-          ))}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-semibold">{row.name}</span>
+                  <span
+                    className="flex-none rounded-[3px] border px-1 text-[9px] font-bold uppercase"
+                    style={{
+                      color: party ? "var(--accent-cyan)" : "var(--group-hold)",
+                      borderColor: party
+                        ? "var(--accent-cyan)"
+                        : "var(--group-hold)",
+                    }}
+                  >
+                    {party ? "Party" : "Block"}
+                  </span>
+                </div>
+                <div className="whitespace-nowrap text-12 text-fg-3">
+                  {fmtRange(row.startDate, row.nights)}
+                </div>
+                <div className="font-mono">
+                  {party ? (
+                    <span className="text-fg-3">{row.blocked} rm</span>
+                  ) : row.released ? (
+                    <span className="text-fg-3">released</span>
+                  ) : (
+                    <>
+                      <span className="text-group-hold">{row.held}</span>
+                      <span className="text-fg-3"> / {row.blocked}</span>
+                    </>
+                  )}
+                </div>
+                <div className="font-mono text-accent-cyan">
+                  {party ? `${row.picked} rooms` : `${row.picked} · ${row.pickupPct}`}
+                </div>
+                <div>
+                  <span className="rounded-pill border border-line bg-fg-1/[0.06] px-2.5 py-[3px] text-[11px] text-fg-2">
+                    {row.released ? "Released" : row.status}
+                  </span>
+                </div>
+                <div
+                  className="whitespace-nowrap text-12"
+                  style={{ color: row.contractColor }}
+                >
+                  {party ? row.billingMode : row.contractLabel}
+                </div>
+                <div className="text-12 text-fg-3">
+                  {party ? row.externalRef ?? "—" : row.salesManager}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
@@ -244,9 +277,31 @@ export default function GroupsBlocksPage() {
               <>
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="font-display text-18 font-bold text-ice">{g.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display text-18 font-bold text-ice">
+                        {g.name}
+                      </span>
+                      <span
+                        className="rounded-[3px] border px-1 text-[9px] font-bold uppercase"
+                        style={{
+                          color: isParty
+                            ? "var(--accent-cyan)"
+                            : "var(--group-hold)",
+                          borderColor: isParty
+                            ? "var(--accent-cyan)"
+                            : "var(--group-hold)",
+                        }}
+                      >
+                        {isParty ? "Party" : "Block"}
+                      </span>
+                    </div>
                     <div className="mt-1 text-[12.5px] text-fg-3">
-                      {fmtRange(g.startDate, g.nights)} · Cut-off {cutoffLabel}
+                      {fmtRange(g.startDate, g.nights)}
+                      {isParty
+                        ? ` · ${g.blocked} rooms${
+                            g.externalRef ? ` · ${g.externalRef}` : ""
+                          }`
+                        : ` · Cut-off ${cutoffLabel}`}
                     </div>
                   </div>
                   <button onClick={() => setOpenId(null)} className="text-fg-3 hover:text-ice" aria-label="Close">
@@ -257,9 +312,16 @@ export default function GroupsBlocksPage() {
                 <div className="flex flex-wrap gap-2">
                   {[
                     { label: g.status, color: "var(--line)", fg: "var(--fg-2)" },
-                    { label: g.contractLabel, color: g.contractColor, fg: g.contractColor },
+                    !isParty && {
+                      label: g.contractLabel,
+                      color: g.contractColor,
+                      fg: g.contractColor,
+                    },
                     { label: `Deposit: ${g.depositStatus}`, color: "var(--line)", fg: "var(--fg-2)" },
-                  ].map((chip) => (
+                  ]
+                    .filter(Boolean)
+                    .map((chip) => chip as { label: string; color: string; fg: string })
+                    .map((chip) => (
                     <span
                       key={chip.label}
                       className="whitespace-nowrap rounded-pill border bg-fg-1/[0.06] px-2.5 py-1 text-[11px] font-medium"
@@ -270,6 +332,7 @@ export default function GroupsBlocksPage() {
                   ))}
                 </div>
 
+                {!isParty && (
                 <Card className="p-3.5">
                   <div className="mb-2 flex items-baseline justify-between">
                     <Eyebrow>Pick-up &amp; wash forecast</Eyebrow>
@@ -343,9 +406,12 @@ export default function GroupsBlocksPage() {
                     </div>
                   )}
                 </Card>
+                )}
 
                 <Card className="p-3.5">
-                  <Eyebrow className="mb-2">Block P&amp;L</Eyebrow>
+                  <Eyebrow className="mb-2">
+                    {isParty ? "Booking value" : "Block P&L"}
+                  </Eyebrow>
                   <div className="flex flex-col gap-1 text-[12.5px]">
                     <Line
                       k={`Room revenue · ${g.pnl.roomNights} rn @ ${g.pnl.adrLabel}`}
@@ -385,28 +451,45 @@ export default function GroupsBlocksPage() {
                 </Card>
 
                 <div>
-                  <Eyebrow className="mb-2">Sub-blocks</Eyebrow>
+                  <Eyebrow className="mb-2">
+                    {isParty ? "Rooms" : "Sub-blocks"}
+                  </Eyebrow>
                   <Card className="overflow-hidden p-0">
-                    <div className="grid grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr] border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3">
+                    <div
+                      className={`grid ${
+                        isParty
+                          ? "grid-cols-[1.4fr_0.6fr_0.9fr]"
+                          : "grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr]"
+                      } border-b border-line px-3.5 py-2 text-[10.5px] uppercase tracking-[0.06em] text-fg-3`}
+                    >
                       <div>Room type</div>
-                      <div>Blocked</div>
-                      <div>Picked</div>
-                      <div>Held</div>
+                      <div>{isParty ? "Qty" : "Blocked"}</div>
+                      {!isParty && <div>Picked</div>}
+                      {!isParty && <div>Held</div>}
                       <div>Rate</div>
-                      <div />
+                      {!isParty && <div />}
                     </div>
                     {g.subBlocks.map((sb) => (
                       <div
                         key={sb.roomType}
-                        className="grid grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr] items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0"
+                        className={`grid ${
+                          isParty
+                            ? "grid-cols-[1.4fr_0.6fr_0.9fr]"
+                            : "grid-cols-[1.1fr_0.6fr_0.6fr_0.6fr_0.9fr_0.8fr]"
+                        } items-center border-b border-line-soft px-3.5 py-2.5 text-[12.5px] last:border-0`}
                       >
                         <div className="font-medium">{sb.roomType}</div>
                         <div className="font-mono">{sb.blocked}</div>
-                        <div className="font-mono text-accent-cyan">{sb.picked}</div>
-                        <div className="font-mono text-group-hold">
-                          {g.released ? "—" : sb.held}
-                        </div>
+                        {!isParty && (
+                          <div className="font-mono text-accent-cyan">{sb.picked}</div>
+                        )}
+                        {!isParty && (
+                          <div className="font-mono text-group-hold">
+                            {g.released ? "—" : sb.held}
+                          </div>
+                        )}
                         <div className="font-mono text-[11px]">{sb.rate}</div>
+                        {!isParty && (
                         <div className="text-right">
                           {!g.released && sb.held > 0 && (
                             <button
@@ -435,6 +518,7 @@ export default function GroupsBlocksPage() {
                             </button>
                           )}
                         </div>
+                        )}
                       </div>
                     ))}
                   </Card>
@@ -593,7 +677,7 @@ export default function GroupsBlocksPage() {
                       </button>
                     </span>
                   </div>
-                  {g.guaranteedPct !== null && (
+                  {!isParty && g.guaranteedPct !== null && (
                     <div className="text-[11.5px] text-fg-3">
                       Attrition guarantee: {Math.round(g.guaranteedPct * 100)}% ·
                       F&amp;B minimum{" "}
@@ -606,15 +690,21 @@ export default function GroupsBlocksPage() {
                 </Card>
 
                 <Card className="flex flex-col gap-1.5 p-3.5">
-                  <Eyebrow>Contact &amp; sales</Eyebrow>
+                  <Eyebrow>{isParty ? "Booker" : "Contact & sales"}</Eyebrow>
                   <div className="text-[12.5px]">{g.contact || "—"}</div>
-                  <div className="text-12 text-fg-3">Sales manager: {g.salesManager}</div>
+                  {!isParty && (
+                    <div className="text-12 text-fg-3">
+                      Sales manager: {g.salesManager}
+                    </div>
+                  )}
                 </Card>
 
-                <div className="flex items-start gap-2 rounded-md border border-ai-edge bg-ai-tint p-3 text-[12.5px] text-ice">
-                  <Sparkles className="mt-px h-[15px] w-[15px] flex-none text-ai-fg" />
-                  {cutoffMessage}
-                </div>
+                {!isParty && (
+                  <div className="flex items-start gap-2 rounded-md border border-ai-edge bg-ai-tint p-3 text-[12.5px] text-ice">
+                    <Sparkles className="mt-px h-[15px] w-[15px] flex-none text-ai-fg" />
+                    {cutoffMessage}
+                  </div>
+                )}
               </>
             )}
           </div>
